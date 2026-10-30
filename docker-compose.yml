@@ -1,0 +1,49 @@
+# One-machine deployment: PostgreSQL, a one-off migration job, and the API.
+# Put the secrets in a file named .env.production next to this file (see ops/README.md), then:
+#   docker compose --env-file .env.production up -d --build
+services:
+  db:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: admission_house
+      POSTGRES_USER: ah_owner
+      POSTGRES_PASSWORD: ${OWNER_DB_PASSWORD:?set OWNER_DB_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ah_owner -d admission_house']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    build: .
+    command: ['sh', '-c', 'node db/migrate.mjs && node db/seed-locations.mjs']
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      MIGRATOR_DATABASE_URL: postgres://ah_owner:${OWNER_DB_PASSWORD}@db:5432/admission_house
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD}
+    restart: 'no'
+
+  api:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    env_file: .env.production
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://ah_app:${APP_DB_PASSWORD}@db:5432/admission_house
+      STORAGE_DIR: /data/storage
+    volumes:
+      - storage:/data/storage
+    ports:
+      - '127.0.0.1:3001:3001' # put a reverse proxy with HTTPS in front; do not expose this port directly
+
+volumes:
+  pgdata:
+  storage:

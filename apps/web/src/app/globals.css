@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+/*
+  Admissions House CRM design tokens.
+  The three brand colours are sampled from the client's logo file:
+    brand  #063b39  dark teal (the A)    teal  #00dfc2  bright teal (cap, windows)    mint  #c2fdf0  the logo's own mint
+*/
+@theme {
+  --color-brand: #063b39;
+  --color-brand-700: #0a4f4c;
+  --color-brand-600: #0f625e;
+  --color-teal: #00dfc2;
+  --color-teal-600: #00b9a1;
+  --color-mint: #c2fdf0;
+  --color-mint-soft: #e6fef9;
+  --color-mint-50: #f3fffc;
+
+  --color-ink: #14262b;
+  --color-muted: #5b6b70;
+  --color-subtle: #8a979b;
+  --color-line: #e1e7e9;
+  --color-line-strong: #cfd8db;
+  --color-surface: #ffffff;
+  --color-canvas: #f5f7f8;
+  --color-head: #eef3f4;
+
+  --color-ok: #12a150;
+  --color-ok-50: #eaf9f0;
+  --color-warn: #a35a00;
+  --color-warn-50: #fef3c7;
+  --color-bad: #d6393f;
+  --color-bad-50: #fdecec;
+  --color-info: #1d6fb8;
+  --color-info-50: #e8f2fb;
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  --radius-card: 8px;
+  --shadow-card: 0 1px 2px rgb(20 38 43 / 0.04);
+}
+
+@layer base {
+  html, body { height: 100%; }
+  html { font-size: 16px; }
+  body {
+    background: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-feature-settings: 'cv11', 'ss01';
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  h1, h2, h3 { letter-spacing: -0.011em; }
+  .tabular { font-variant-numeric: tabular-nums; }
+  :focus-visible { outline: 2px solid var(--color-teal-600); outline-offset: 2px; }
+}
+
+@keyframes kenburns {
+  from { transform: scale(1.02); }
+  to { transform: scale(1.09); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
