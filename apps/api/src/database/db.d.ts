@@ -738,6 +738,15 @@ export interface UserDevices {
   user_id: string;
 }
 
+export interface UserMfa {
+  created_at: Generated<Timestamp>;
+  enabled_at: Timestamp | null;
+  last_step: Int8 | null;
+  secret_sealed: string;
+  tenant_id: string;
+  user_id: string;
+}
+
 export interface UserProfiles {
   address: string | null;
   bank_account_no_enc: string | null;
@@ -749,6 +758,15 @@ export interface UserProfiles {
   emergency_contact_phone: string | null;
   tenant_id: string;
   updated_at: Generated<Timestamp>;
+  user_id: string;
+}
+
+export interface UserRecoveryCodes {
+  code_hash: string;
+  created_at: Generated<Timestamp>;
+  id: Generated<string>;
+  tenant_id: string;
+  used_at: Timestamp | null;
   user_id: string;
 }
 
@@ -853,7 +871,9 @@ export interface DB {
   tenant_counters: TenantCounters;
   tenants: Tenants;
   user_devices: UserDevices;
+  user_mfa: UserMfa;
   user_profiles: UserProfiles;
+  user_recovery_codes: UserRecoveryCodes;
   user_sessions: UserSessions;
   users: Users;
 }

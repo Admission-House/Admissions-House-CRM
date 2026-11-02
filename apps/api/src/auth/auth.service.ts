@@ -11,6 +11,7 @@ import { NotificationsService } from '../notifications/notifications.service.js'
 import type { AuthContext, RoleKey } from './auth-context.js';
 import { AuthRepository, LoginUser } from './auth.repository.js';
 import type { LoginInput } from './dto/auth.dto.js';
+import { MfaService } from './mfa.service.js';
 import { evaluateOffice, normalizeIp, OfficeFailure } from './office-rules.js';
 import { passwordProblem, PasswordService } from './password.service.js';
 import { hashToken, safeEqualHex, TokenService } from './token.service.js';
@@ -78,6 +79,7 @@ export class AuthService {
     private readonly audit: AuditService,
     private readonly attendance: AttendanceRepository,
     private readonly notifications: NotificationsService,
+    private readonly mfa: MfaService,
   ) {
     this.addressLimiter = new SlidingWindowLimiter(env.LOGIN_IP_MAX_ATTEMPTS * 2, 10 * 60_000);
   }
@@ -142,6 +144,24 @@ export class AuthService {
     if (user.status !== 'active') {
       await attempt(user.id, 'inactive');
       return fail(new AppError('ACCOUNT_INACTIVE', 'This account is not active. Please contact your administrator.', 403));
+    }
+
+    // Two-step sign-in, for people who turned it on. Asked after the password is right, so nobody
+    // learns that an account has it without knowing the password.
+    if (await this.mfa.isEnabled(trx, user.id)) {
+      if (!input.mfaCode) {
+        return fail(new AppError('MFA_REQUIRED', 'Enter the 6-digit code from your authenticator app.', 401));
+      }
+      const checked = await this.mfa.verifyLoginCode(trx, user.id, input.mfaCode);
+      if (checked === 'bad') {
+        // A guessed code counts like a guessed password, so it locks the account after a few tries.
+        await this.repo.registerFailure(trx, user.id, this.env.LOGIN_MAX_FAILURES, this.env.LOGIN_LOCK_MINUTES);
+        await attempt(user.id, 'bad_code');
+        return fail(new AppError('MFA_CODE_WRONG', 'The code is not correct. Use the newest code in your app.', 401));
+      }
+      if (checked === 'recovery') {
+        await this.audit.write(trx, { tenantId: tenant.id, actorId: user.id, action: 'auth.mfa_recovery_used', entity: 'user', entityId: user.id, ip });
+      }
     }
 
     let deviceId: string | null = null;

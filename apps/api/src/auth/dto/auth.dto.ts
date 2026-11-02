@@ -32,6 +32,8 @@ export const loginSchema = z.object({
   clientType: z.enum(['web', 'mobile']).default('web'),
   device: deviceSchema.optional(),
   location: locationSchema.optional(),
+  /** The code from the authenticator app (or a recovery code), for a person who has two-step sign-in on. */
+  mfaCode: z.string().trim().min(6).max(16).optional(),
   /** A WiFi identifier the mobile app can read where the operating system allows it. */
   wifiId: z.string().trim().min(1).max(64).optional(),
 });

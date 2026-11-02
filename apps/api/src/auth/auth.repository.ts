@@ -6,6 +6,7 @@ import type { DataScope, RoleKey } from './auth-context.js';
 export type AttemptResult =
   | 'success'
   | 'bad_password'
+  | 'bad_code'
   | 'outside_office'
   | 'device_blocked'
   | 'locked'

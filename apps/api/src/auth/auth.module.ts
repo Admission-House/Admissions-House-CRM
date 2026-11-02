@@ -5,15 +5,18 @@ import { AuthController } from './auth.controller.js';
 import { AuthGuard } from './auth.guard.js';
 import { AuthRepository } from './auth.repository.js';
 import { AuthService } from './auth.service.js';
+import { MfaController } from './mfa.controller.js';
+import { MfaService } from './mfa.service.js';
 import { PasswordResetService } from './password-reset.service.js';
 import { PasswordService } from './password.service.js';
 import { TokenService } from './token.service.js';
 
 @Module({
   imports: [AttendanceModule],
-  controllers: [AuthController],
+  controllers: [AuthController, MfaController],
   providers: [
     AuthService,
+    MfaService,
     AuthRepository,
     PasswordService,
     PasswordResetService,

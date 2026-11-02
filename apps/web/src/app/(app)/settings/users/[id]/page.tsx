@@ -4,6 +4,7 @@ import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { EmployeeProfile } from '@/components/account/employee-profile';
+import { MfaReset } from '@/components/account/mfa-reset';
 import { SessionsList } from '@/components/account/sessions-list';
 import { LeadAutomation } from '@/components/team/lead-automation';
 import { Panel } from '@/components/ui';
@@ -18,6 +19,7 @@ export default function UserProfilePage() {
       <Link href="/settings/users" className="inline-flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:underline"><ArrowLeft className="h-4 w-4" aria-hidden /> Back to users</Link>
       <LeadAutomation userId={id} />
       <EmployeeProfile path={`/users/${id}/profile`} canEditHr={can('user.manage')} title="Sign-in details" />
+      {can('user.manage') && <MfaReset userId={id} />}
       {can('user.manage') && <Panel title="Where they are signed in" flush><div className="p-4"><SessionsList all userId={id} /></div></Panel>}
     </div>
   );

@@ -39,6 +39,8 @@ function friendly(err: unknown): string {
   switch (err.code) {
     case 'INVALID_CREDENTIALS': return 'The email or password is not right. Please try again.';
     case 'VALIDATION_FAILED': return err.fieldErrors.some((f) => f.field === 'tenant') ? 'This company address was not found. Please check the link you were given.' : 'Please check your email and password and try again.';
+    case 'MFA_REQUIRED': return 'Enter the 6-digit code from your authenticator app to finish signing in.';
+    case 'MFA_CODE_WRONG': return 'That code is not right. Use the newest code in your app, or a recovery code.';
     case 'NETWORK': return 'We could not reach the server. Check your internet connection and try again.';
     default: return err.message;
   }
@@ -54,6 +56,8 @@ function SignIn() {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [needsCode, setNeedsCode] = useState(false);
+  const [mfaCode, setMfaCode] = useState('');
   const [fields, setFields] = useState<{ email?: string; password?: string }>({});
   const email = emailTyped ?? savedEmail;
 
@@ -81,10 +85,14 @@ function SignIn() {
     }
     setBusy(true);
     try {
-      const res = await login({ tenant: company, email: email.trim(), password });
+      const res = await login({ tenant: company, email: email.trim(), password, ...(needsCode && mfaCode.trim() && { mfaCode: mfaCode.trim() }) });
       writeEmail(remember ? email.trim() : null);
       router.replace(res.mustChangePassword ? '/change-password' : '/dashboard');
     } catch (err) {
+      if (err instanceof ApiError && (err.code === 'MFA_REQUIRED' || err.code === 'MFA_CODE_WRONG')) {
+        setNeedsCode(true);
+        document.getElementById('mfa-code')?.focus();
+      }
       setError(friendly(err));
       setBusy(false);
     }
@@ -115,6 +123,12 @@ function SignIn() {
         >
           <AuthPassword id="password" value={password} aria-invalid={!!fields.password} onChange={(e) => { setPassword(e.target.value); setFields((f) => ({ ...f, password: undefined })); setError(null); }} placeholder="Enter password" autoComplete="current-password" autoFocus={!!email} />
         </AuthField>
+
+        {needsCode && (
+          <AuthField label="Code from your authenticator app" htmlFor="mfa-code">
+            <AuthInput id="mfa-code" inputMode="numeric" autoComplete="one-time-code" value={mfaCode} onChange={(e) => { setMfaCode(e.target.value); setError(null); }} placeholder="6-digit code, or a recovery code" autoFocus />
+          </AuthField>
+        )}
 
         <label className="flex cursor-pointer items-center gap-3 text-[15px] text-brand">
           <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="h-5 w-5 rounded border-2 border-brand accent-[#063b39]" />

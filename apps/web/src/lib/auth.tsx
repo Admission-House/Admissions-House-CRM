@@ -16,7 +16,7 @@ interface AuthState {
   me: Me | null;
   can: (...permissions: string[]) => boolean;
   canAny: (...permissions: string[]) => boolean;
-  login: (input: { tenant: string; email: string; password: string }) => Promise<{ mustChangePassword: boolean }>;
+  login: (input: { tenant: string; email: string; password: string; mfaCode?: string }) => Promise<{ mustChangePassword: boolean }>;
   logout: () => Promise<void>;
   reload: () => Promise<void>;
 }
