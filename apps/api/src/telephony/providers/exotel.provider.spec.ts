@@ -94,6 +94,59 @@ describe('Exotel settings and dialing', () => {
   });
 });
 
+describe('Exotel circuit breaker', () => {
+  const req = { callId: 'c', agentNumber: '919876543210', customerNumber: '919123456789' };
+  afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
+
+  it('stops calling Exotel after repeated failures, answers at once, and tries again after the pause', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-02T10:00:00Z'));
+    const provider = new ExotelProvider();
+    const down = vi.fn().mockRejectedValue(new Error('timed out'));
+    vi.stubGlobal('fetch', down);
+
+    for (let i = 0; i < 5; i++) await expect(provider.placeCall(config, req)).rejects.toMatchObject({ code: 'PROVIDER_UNREACHABLE' });
+    expect(down).toHaveBeenCalledTimes(5);
+
+    // Now it is open: no more calls go out, and the answer says when to try again.
+    const refused = await provider.placeCall(config, req).catch((e: unknown) => e);
+    expect(refused).toMatchObject({ code: 'PROVIDER_PAUSED', status: 503, headers: { 'retry-after': '30' } });
+    expect(down).toHaveBeenCalledTimes(5);
+
+    // After the pause one trial goes out; when it works, calls flow again.
+    vi.setSystemTime(new Date('2026-11-02T10:00:31Z'));
+    const up = vi.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify({ Call: { Sid: 'abc' } }), { status: 200 })));
+    vi.stubGlobal('fetch', up);
+    await expect(provider.placeCall(config, req)).resolves.toEqual({ providerCallId: 'abc' });
+    await expect(provider.placeCall(config, req)).resolves.toEqual({ providerCallId: 'abc' });
+    expect(up).toHaveBeenCalledTimes(2);
+  });
+
+  it('counts a 5xx as a failure, but not a refusal such as a wrong key or too many calls', async () => {
+    const provider = new ExotelProvider();
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(new Response('{}', { status: 401 }))));
+    for (let i = 0; i < 10; i++) await expect(provider.placeCall(config, req)).rejects.toMatchObject({ code: 'PROVIDER_AUTH' });
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(new Response('{}', { status: 429 }))));
+    for (let i = 0; i < 10; i++) await expect(provider.placeCall(config, req)).rejects.toMatchObject({ code: 'PROVIDER_BUSY' });
+
+    const broken = vi.fn().mockImplementation(() => Promise.resolve(new Response('oops', { status: 503 })));
+    vi.stubGlobal('fetch', broken);
+    for (let i = 0; i < 5; i++) await expect(provider.placeCall(config, req)).rejects.toMatchObject({ code: 'PROVIDER_ERROR' });
+    await expect(provider.placeCall(config, req)).rejects.toMatchObject({ code: 'PROVIDER_PAUSED' });
+    expect(broken).toHaveBeenCalledTimes(5);
+  });
+
+  it('keeps a separate breaker for each Exotel address', async () => {
+    const provider = new ExotelProvider();
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('down')));
+    for (let i = 0; i < 5; i++) await provider.placeCall(config, req).catch(() => undefined);
+    await expect(provider.placeCall(config, req)).rejects.toMatchObject({ code: 'PROVIDER_PAUSED' });
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ Call: { Sid: 'z' } }), { status: 200 })));
+    await expect(provider.placeCall({ ...config, host: 'api.in.exotel.com' }, req)).resolves.toEqual({ providerCallId: 'z' });
+  });
+});
+
 describe('helpers', () => {
   it('reads Exotel times and hides keys from logged addresses', () => {
     expect(exotelTime('2024-01-15 14:30:45', '+05:30')?.toISOString()).toBe('2024-01-15T09:00:45.000Z');

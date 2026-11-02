@@ -1,6 +1,6 @@
 'use client';
 
-import { AlertTriangle, CalendarClock, CalendarDays, Inbox, LayoutDashboard, PhoneCall, PhoneMissed, Users, type LucideIcon } from 'lucide-react';
+import { AlertTriangle, CalendarClock, CalendarDays, Inbox, PhoneCall, PhoneMissed, Users, type LucideIcon } from 'lucide-react';
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { ChartCard, DonutChart, colorAt } from '@/components/charts';
@@ -93,7 +93,7 @@ export default function DashboardPage() {
     <>
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="flex items-center gap-3 text-[32px] font-bold leading-tight tracking-tight text-brand"><LayoutDashboard className="h-7 w-7" aria-hidden />Dashboard</h1>
+          <h1 className="text-xl font-semibold tracking-tight text-ink">Dashboard</h1>
           <p className="mt-1.5 text-[15px] text-muted">Central overview of leads, calls and team performance</p>
         </div>
         {reports && (

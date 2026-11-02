@@ -39,6 +39,11 @@ export class DatabaseService implements OnModuleDestroy {
     this.db = new Kysely<DB>({ dialect: new PostgresDialect({ pool: this.pool }) });
   }
 
+  /** How busy the connection pool is, for monitoring. */
+  poolStats(): { total: number; idle: number; waiting: number } {
+    return { total: this.pool.totalCount, idle: this.pool.idleCount, waiting: this.pool.waitingCount };
+  }
+
   /**
    * Runs `work` in one transaction that is limited to a single company. The company is set with
    * set_config(..., true), which lasts only until the transaction ends, so a pooled connection can

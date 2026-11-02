@@ -138,6 +138,8 @@ const schema = z.object({
   COLLEGE_API_MAX_BYTES: z.coerce.number().int().min(1024).max(52_428_800).default(10_485_760),
 
   ENABLE_API_DOCS: bool,
+  /** Lets a monitoring tool read /api/v1/metrics, with this as a bearer token. Leave it out to switch the metrics off. */
+  METRICS_TOKEN: z.string().min(16).max(200).optional(),
 });
 
 export type Env = z.infer<typeof schema>;

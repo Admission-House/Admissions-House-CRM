@@ -30,6 +30,7 @@ import { LeadConfigModule } from './lead-config/lead-config.module.js';
 import { LeaveModule } from './leave/leave.module.js';
 import { MastersModule } from './masters/masters.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
+import { MetricsModule } from './metrics/metrics.module.js';
 import { PushModule } from './push/push.module.js';
 import { RolesModule } from './roles/roles.module.js';
 import { StorageModule } from './storage/storage.module.js';
@@ -72,6 +73,7 @@ export const safeUrl = (url: string): string => url.replace(/(\/telephony\/hooks
     AttendanceModule,
     NotificationsModule,
     PushModule,
+    MetricsModule,
     LeaveModule,
     IntakeModule,
     IntegrationsModule,

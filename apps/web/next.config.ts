@@ -21,6 +21,8 @@ const SECURITY_HEADERS = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // `next dev` otherwise writes an AGENTS.md of instructions for AI tools into the project.
+  agentRules: false,
   async headers() {
     return [{ source: '/:path*', headers: SECURITY_HEADERS }];
   },

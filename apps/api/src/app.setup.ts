@@ -8,6 +8,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { Logger } from 'nestjs-pino';
 import { cleanupOpenApiDoc } from 'nestjs-zod';
 import type { Env } from './config/env.js';
+import { MetricsService } from './metrics/metrics.service.js';
 
 const REQUEST_ID = /^[\w-]{8,64}$/;
 
@@ -49,6 +50,13 @@ export async function configureApp(app: NestFastifyApplication, env: Env): Promi
     // Nothing from the API may be kept by a browser cache, proxy or CDN unless the endpoint says so
     // itself (the company logo does). Otherwise one person's lead list could be served to another.
     if (request.url.startsWith('/api/v1/') && !reply.hasHeader('cache-control')) void reply.header('cache-control', 'private, no-store');
+  });
+
+  // Time every request for the monitoring numbers. The route is the pattern, not the real address.
+  const metrics = app.get(MetricsService);
+  app.getHttpAdapter().getInstance().addHook('onResponse', async (request, reply) => {
+    const route = request.routeOptions?.url ?? 'unmatched';
+    if (route !== '/api/v1/metrics') metrics.observe(request.method, route, reply.statusCode, reply.elapsedTime / 1000);
   });
 
   await app.register(cookie);

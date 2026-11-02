@@ -20,3 +20,6 @@ apps/api/.tmp-storage
 out
 *.tsbuildinfo
 .expo
+
+# Written by `next dev` when an AI tool starts it; not part of the product.
+apps/web/AGENTS.md

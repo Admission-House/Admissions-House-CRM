@@ -47,7 +47,6 @@
     background: var(--color-canvas);
     color: var(--color-ink);
     font-family: var(--font-sans);
-    font-feature-settings: 'cv11', 'ss01';
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }

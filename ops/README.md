@@ -76,6 +76,32 @@ Then run the migration job once (it recreates the restricted role and its rights
   same id, so a complaint can be traced to a log line.
 * Failed lead deliveries and call events are kept in `inbound_events` with status `failed` and the
   reason; Integrations in the admin area lists them and can retry.
+* **Metrics.** Set `METRICS_TOKEN` (16 or more random characters) and a monitoring tool (Prometheus,
+  Grafana Cloud, Datadog, and so on) can read `GET /api/v1/metrics` with `Authorization: Bearer <token>`.
+  Without the token the address does not exist. Requests are counted by route pattern
+  (`/api/v1/leads/:id`), never by the real address, so no lead id or phone number is in a metric.
+  Prometheus example:
+
+  ```
+  scrape_configs:
+    - job_name: ah-api
+      metrics_path: /api/v1/metrics
+      authorization: { credentials: <METRICS_TOKEN> }
+      static_configs: [{ targets: ['crm.example.com'] }]
+  ```
+
+  Alerts worth setting (tune after a week of real traffic):
+
+  | Alert | Expression |
+  | --- | --- |
+  | Slow | `histogram_quantile(0.95, sum by (le) (rate(ah_http_request_duration_seconds_bucket[5m]))) > 0.5` for 10 minutes (the agreed target is 0.5 s) |
+  | Errors | `sum(rate(ah_http_requests_total{status=~"5.."}[5m])) / sum(rate(ah_http_requests_total[5m])) > 0.02` for 5 minutes |
+  | Database pool full | `ah_db_pool_waiting > 0` for 2 minutes (raise `DB_POOL_MAX` or look for slow queries) |
+  | Down | the monitor cannot reach `/api/v1/health/ready` for 2 minutes (use an outside uptime check as well) |
+
+  The metrics are numbers only. They do not send a message to anyone: connect the alerts to email,
+  WhatsApp or a phone call in the monitoring tool, and decide who is on call (question H6 in the
+  client questions).
 
 ## 6. Known limits (be honest with the client)
 

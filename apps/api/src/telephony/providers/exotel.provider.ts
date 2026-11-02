@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { z } from 'zod';
 import { AppError } from '../../common/app-error.js';
+import { CircuitBreaker } from '../../common/circuit-breaker.js';
 import { normalizePhone } from '../../common/phone.js';
 import { CallEvent, ProviderPayloadError } from '../call-events.js';
 import type { PlaceCallRequest, TelephonyProvider } from './provider.js';
@@ -89,6 +90,22 @@ export class ExotelProvider implements TelephonyProvider {
   /** Exotel does not say which time zone its "YYYY-MM-DD HH:mm:ss" stamps use; India's is assumed (to be checked on the first real call). */
   private readonly utcOffset = '+05:30';
 
+  /**
+   * One breaker per Exotel address. After a few failures in a row (no answer, a timeout, a 5xx) calls
+   * are refused at once for a short while instead of each one waiting for its timeout. An answer such as
+   * 401 or 429 means Exotel is up, so it does not count as a failure.
+   */
+  private readonly breakers = new Map<string, CircuitBreaker>();
+
+  private breakerFor(host: string): CircuitBreaker {
+    let breaker = this.breakers.get(host);
+    if (!breaker) {
+      breaker = new CircuitBreaker(5, 30_000);
+      this.breakers.set(host, breaker);
+    }
+    return breaker;
+  }
+
   validateConfig(config: Record<string, unknown>): Record<string, unknown> {
     const parsed = exotelConfigSchema.safeParse(config);
     if (!parsed.success) {
@@ -115,6 +132,11 @@ export class ExotelProvider implements TelephonyProvider {
     body.append('StatusCallbackEvents[0]', 'terminal');
     body.append('StatusCallbackEvents[1]', 'answered');
 
+    const breaker = this.breakerFor(c.host);
+    if (!breaker.tryAcquire()) {
+      throw new AppError('PROVIDER_PAUSED', 'Calling is paused for a moment because the calling service is not answering. Try again in a minute.', 503, undefined, { 'retry-after': String(Math.max(1, breaker.retryAfterSec)) });
+    }
+
     let res: Response;
     try {
       res = await fetch(`https://${c.host}/v1/Accounts/${encodeURIComponent(c.accountSid)}/Calls/connect`, {
@@ -129,8 +151,11 @@ export class ExotelProvider implements TelephonyProvider {
         signal: AbortSignal.timeout(10_000),
       });
     } catch {
+      breaker.failure();
       throw new AppError('PROVIDER_UNREACHABLE', 'The calling service did not answer. Try again in a moment.', 502);
     }
+    if (res.status >= 500) breaker.failure();
+    else breaker.success();
     if (res.status === 401 || res.status === 403) throw new AppError('PROVIDER_AUTH', 'Exotel rejected the saved login details. Ask an admin to check them.', 502);
     if (res.status === 429) throw new AppError('PROVIDER_BUSY', 'Too many calls are being placed at once. Try again in a few seconds.', 429);
     if (!res.ok) throw new AppError('PROVIDER_ERROR', 'The calling service did not accept the call. Try again in a moment.', 502);
