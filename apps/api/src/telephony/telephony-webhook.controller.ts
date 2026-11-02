@@ -1,4 +1,4 @@
-import { Body, Controller, HttpCode, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { ApiSecurity, ApiTags } from '@nestjs/swagger';
 import type { FastifyRequest } from 'fastify';
 import { Public } from '../auth/decorators.js';
@@ -19,5 +19,19 @@ export class TelephonyWebhookController {
   @HttpCode(200)
   receive(@Req() req: FastifyRequest, @Body() body: unknown) {
     return this.webhook.receive(req.telephony!, body);
+  }
+
+  /** For providers that cannot send headers: the key is the last part of the address. The provider named there must be the company's own. */
+  @Post('hooks/:provider/:key')
+  @HttpCode(200)
+  receiveByAddress(@Req() req: FastifyRequest, @Param('provider') provider: string, @Body() body: unknown) {
+    return this.webhook.receive(req.telephony!, body, provider);
+  }
+
+  /** The same, for providers that report with a GET request and put the call details in the query string. */
+  @Get('hooks/:provider/:key')
+  @HttpCode(200)
+  receiveByQuery(@Req() req: FastifyRequest, @Param('provider') provider: string, @Query() query: unknown) {
+    return this.webhook.receive(req.telephony!, query, provider);
   }
 }

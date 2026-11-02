@@ -32,6 +32,8 @@ export interface UserView {
   role: { id: string; name: string; key: string | null };
   branch: { id: string; name: string } | null;
   manager: { id: string; name: string } | null;
+  /** False when an Admin has stopped automatic hand-out of new leads to this person. */
+  receivesAutoLeads: boolean;
 }
 
 interface RoleInfo {
@@ -206,6 +208,55 @@ export class UsersService {
     });
   }
 
+  /**
+   * Removes a person who was added by mistake: someone who has never signed in and has no records
+   * under their name. Anyone else keeps their history, so they are deactivated instead (the database
+   * refuses the delete when anything refers to them, and that is reported as such).
+   */
+  async remove(auth: AuthContext, id: string): Promise<void> {
+    if (id === auth.userId) throw new AppError('SELF_CHANGE_NOT_ALLOWED', 'You cannot delete your own account', 403);
+    await this.db.withTenant(auth.tenantId, async (trx) => {
+      const target = await this.loadScoped(trx, auth, id);
+      const role = await this.requireRole(trx, target.role_id);
+      assertCanManage(auth.permissions, role.permissions);
+
+      const history = AppError.conflict('USER_HAS_HISTORY', 'This person has signed in or has records, so they cannot be deleted. Deactivate them instead; their history stays.');
+      if (target.last_login_at) throw history;
+      if (target.status === 'active' && role.system_key === 'super_admin') {
+        assertNotLastSuperAdmin(await this.countOtherActiveSuperAdmins(trx, id));
+      }
+      const { rows: team } = await sql<{ n: string }>`SELECT count(*) AS n FROM users WHERE manager_id = ${id}::uuid`.execute(trx);
+      if (Number(team[0]!.n) > 0) throw AppError.conflict('HAS_TEAM', 'People still report to this person. Move them to another manager first.');
+
+      // The database function deletes only an account with no history, and undoes itself otherwise.
+      const { rows } = await sql<{ done: boolean }>`SELECT delete_unused_user(${id}::uuid) AS done`.execute(trx);
+      if (!rows[0]?.done) throw history;
+      await this.audit.write(trx, {
+        tenantId: auth.tenantId, actorId: auth.userId, action: 'user.delete', entity: 'user', entityId: id,
+        before: auditShape(target), ip: auth.ip, requestId: auth.requestId,
+      });
+    });
+  }
+
+  /**
+   * Turns automatic hand-out of new leads on or off for one person. Leads can still be given to them
+   * by hand, and the leads they already hold stay with them (use the transfer to move those).
+   * Whoever hands out leads for the person's team may do it.
+   */
+  async setLeadAutomation(auth: AuthContext, id: string, enabled: boolean): Promise<UserView> {
+    return this.db.withTenant(auth.tenantId, async (trx) => {
+      const before = await this.loadScoped(trx, auth, id);
+      if (before.receives_auto_leads !== enabled) {
+        await sql`UPDATE users SET receives_auto_leads = ${enabled} WHERE id = ${id}::uuid`.execute(trx);
+        await this.audit.write(trx, {
+          tenantId: auth.tenantId, actorId: auth.userId, action: 'user.lead_automation', entity: 'user', entityId: id,
+          before: { receivesAutoLeads: before.receives_auto_leads }, after: { receivesAutoLeads: enabled }, ip: auth.ip, requestId: auth.requestId,
+        });
+      }
+      return toView(await this.loadScoped(trx, auth, id));
+    });
+  }
+
   /** Gives the person a new one-time password and signs them out everywhere. */
   async resetPassword(auth: AuthContext, id: string): Promise<{ temporaryPassword: string }> {
     if (id === auth.userId) {
@@ -242,7 +293,7 @@ export class UsersService {
       .leftJoin('users as m', 'm.id', 'u.manager_id')
       .leftJoin('user_profiles as p', 'p.user_id', 'u.id')
       .select([
-        'u.id', 'u.name', 'u.email', 'u.phone', 'u.status', 'u.joined_on', 'u.last_login_at',
+        'u.id', 'u.name', 'u.email', 'u.phone', 'u.status', 'u.joined_on', 'u.last_login_at', 'u.receives_auto_leads',
         'u.must_change_password', 'u.created_at', 'u.role_id', 'u.branch_id', 'u.manager_id', 'p.designation',
         'r.name as role_name', 'r.system_key as role_key', 'b.name as branch_name', 'm.name as manager_name',
       ]);
@@ -329,6 +380,7 @@ interface Row {
   role_key: string | null;
   branch_name: string | null;
   manager_name: string | null;
+  receives_auto_leads: boolean;
 }
 
 function toView(r: Row): UserView {
@@ -346,6 +398,7 @@ function toView(r: Row): UserView {
     role: { id: r.role_id, name: r.role_name, key: r.role_key },
     branch: r.branch_id ? { id: r.branch_id, name: r.branch_name ?? '' } : null,
     manager: r.manager_id ? { id: r.manager_id, name: r.manager_name ?? '' } : null,
+    receivesAutoLeads: r.receives_auto_leads,
   };
 }
 

@@ -109,6 +109,21 @@ const leadIds = z.array(z.uuid()).min(1).max(200).transform((ids) => [...new Set
 export const bulkAssignSchema = z.object({ leadIds, userId: z.uuid().nullable(), allowUnavailable: z.boolean().optional() });
 export class BulkAssignDto extends createZodDto(bulkAssignSchema) {}
 
+/**
+ * Moves the leads one person holds to other people, for when someone is not performing and their
+ * work must go elsewhere. With several targets the leads are shared out evenly, in turn.
+ */
+export const transferLeadsSchema = z.object({
+  fromUserId: z.uuid(),
+  toUserIds: z.array(z.uuid()).min(1).max(20).transform((ids) => [...new Set(ids)]),
+  /** "open" moves only leads still being worked; "all" moves every lead the person holds. */
+  which: z.enum(['open', 'all']).default('open'),
+  /** Also stop automatic hand-out to the person, so new leads do not pile up on them again. */
+  pauseAutomation: z.boolean().default(false),
+  allowUnavailable: z.boolean().optional(),
+});
+export class TransferLeadsDto extends createZodDto(transferLeadsSchema) {}
+
 export const bulkStatusSchema = z.object({
   leadIds,
   statusId: z.uuid(),

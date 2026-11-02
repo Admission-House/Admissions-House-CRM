@@ -45,3 +45,29 @@ jobs:
         run: pnpm --filter @ah/api test:e2e
       - name: Audit dependencies
         run: pnpm audit --prod --audit-level high
+
+  apps:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Web CRM, lint and type check
+        run: pnpm --filter @ah/web lint && pnpm --filter @ah/web typecheck
+      - name: Mobile app, lint and type check
+        run: pnpm --filter @ah/mobile lint && pnpm --filter @ah/mobile typecheck
+
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan for committed secrets
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

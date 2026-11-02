@@ -20,11 +20,14 @@ hire that before taking other companies' data.
 | Auditing | Logins, role and user changes, salary edits, exports, recording playback, bank-detail reveals, telephony changes are written to an append-only audit log. |
 | Transport and headers | Helmet, strict CORS list, cookies httpOnly and path-limited. HTTPS must be provided by the proxy. |
 | Dependencies | `pnpm audit` runs in CI at high severity. |
+| Rate limits | Sign-in, reset, intake and webhooks; each signed-in user 600 requests/min, and 30/min for exports, imports, uploads and file downloads. Counted per process. |
+| Document access | Opening a student document is written to the audit log (`document.view`). |
+| Search | Name, email and phone search go through tenant-safe database functions (migration 025), because row-level security stops PostgreSQL using text indexes directly. |
 
 ## Not in place yet
 
 1. **No outside security test.** Do one.
-2. **No antivirus** on uploads.
+2. **Antivirus** runs on uploads only when `CLAMAV_HOST` is set (the compose file sets it). Without it there is none.
 3. **Rate limits are per process** (in memory). Fine for one container; move to Redis for several.
 4. **No two-factor sign-in** (AUTH-8 is optional in the requirements).
 5. **No automated secret rotation.** Rotating `JWT_ACCESS_SECRET` signs everyone out; rotating

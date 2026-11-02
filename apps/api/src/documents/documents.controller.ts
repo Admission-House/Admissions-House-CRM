@@ -4,7 +4,8 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { ZodValidationException } from 'nestjs-zod';
 import { z } from 'zod';
 import type { AuthContext } from '../auth/auth-context.js';
-import { CurrentAuth, Public, RequirePermissions } from '../auth/decorators.js';
+import { DownloadAlerts } from '../notifications/download-alerts.service.js';
+import { CurrentAuth, Heavy, Public, RequirePermissions } from '../auth/decorators.js';
 import { AppError } from '../common/app-error.js';
 import { ENV } from '../config/config.module.js';
 import type { Env } from '../config/env.js';
@@ -28,6 +29,7 @@ export class DocumentsController {
   constructor(
     private readonly documents: DocumentsService,
     @Inject(ENV) private readonly env: Env,
+    private readonly downloads: DownloadAlerts,
   ) {}
 
   @RequirePermissions('lead.read')
@@ -42,6 +44,7 @@ export class DocumentsController {
    */
   @RequirePermissions('document.manage')
   @ApiConsumes('multipart/form-data')
+  @Heavy()
   @Post()
   async upload(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Req() req: FastifyRequest) {
     const { fields, file } = await readForm(req, this.env.MAX_UPLOAD_BYTES);
@@ -54,6 +57,7 @@ export class DocumentsController {
 
   /** The file itself, for a signed-in client that can send its login header. */
   @RequirePermissions('lead.read')
+  @Heavy()
   @Get(':docId/file')
   async file(
     @CurrentAuth() auth: AuthContext,
@@ -62,6 +66,7 @@ export class DocumentsController {
     @Res({ passthrough: true }) reply: FastifyReply,
   ) {
     const f = await this.documents.open(auth, id, docId);
+    await this.downloads.record(auth, 'document', 'a student document', f.name);
     return sendFile(reply, f, f.type, f.name);
   }
 
@@ -69,8 +74,10 @@ export class DocumentsController {
   @RequirePermissions('lead.read')
   @Post(':docId/link')
   @HttpCode(200)
-  link(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Param('docId', ParseUUIDPipe) docId: string) {
-    return this.documents.link(auth, id, docId);
+  async link(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Param('docId', ParseUUIDPipe) docId: string) {
+    const link = await this.documents.link(auth, id, docId);
+    await this.downloads.record(auth, 'document', 'a student document');
+    return link;
   }
 
   @RequirePermissions('document.manage')

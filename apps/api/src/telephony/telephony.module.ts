@@ -7,6 +7,7 @@ import { DialerService } from './dialer.service.js';
 import { CallsController } from './calls.controller.js';
 import { CallsService } from './calls.service.js';
 import { CallEventsService } from './call-events.service.js';
+import { ExotelProvider } from './providers/exotel.provider.js';
 import { GenericProvider } from './providers/generic.provider.js';
 import { TELEPHONY_PROVIDERS } from './providers/provider.js';
 import { ProviderRegistry } from './providers/registry.js';
@@ -21,8 +22,9 @@ import { TelephonyWebhookService } from './telephony-webhook.service.js';
   controllers: [TelephonyWebhookController, TelephonySettingsController, CallsController, DialerController],
   providers: [
     GenericProvider,
+    ExotelProvider,
     // To add a provider: write its adapter and list it here.
-    { provide: TELEPHONY_PROVIDERS, useFactory: (generic: GenericProvider) => [generic], inject: [GenericProvider] },
+    { provide: TELEPHONY_PROVIDERS, useFactory: (generic: GenericProvider, exotel: ExotelProvider) => [generic, exotel], inject: [GenericProvider, ExotelProvider] },
     ProviderRegistry,
     TelephonyKeyGuard,
     TelephonySettingsService,

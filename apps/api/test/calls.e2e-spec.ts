@@ -234,7 +234,7 @@ describe('call history', () => {
     const connected = (await api.call('GET', '/calls?outcome=connected&limit=100', t.lc1!)).json().items as { outcome: string }[];
     expect(connected.length).toBeGreaterThan(0);
     expect(connected.every((c) => c.outcome === 'connected')).toBe(true);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date()); // the company's own day, not UTC
     expect((await api.call('GET', `/calls?from=${today}&to=${today}&limit=100`, t.lc1!)).json().items.length).toBeGreaterThan(0);
     expect((await api.call('GET', '/calls?from=2020-01-01&to=2020-01-02', t.lc1!)).json().items).toEqual([]);
     expect(errorCode(await api.call('GET', '/calls?outcome=exploded', t.lc1!))).toBe('VALIDATION_FAILED');

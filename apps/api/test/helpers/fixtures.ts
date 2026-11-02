@@ -76,6 +76,8 @@ export const DEFAULT_USERS: UserSpec[] = [
   { name: 'att10', role: 'counsellor', manager: 'admin' },
   { name: 'att11', role: 'counsellor', manager: 'admin' },
   { name: 'att12', role: 'counsellor', manager: 'admin' },
+  { name: 'att13', role: 'counsellor', manager: 'admin' },
+  { name: 'att14', role: 'counsellor', manager: 'admin' },
   { name: 'lc1', role: 'counsellor', manager: 'admin' },
   { name: 'lc2', role: 'counsellor', manager: 'admin' },
   { name: 'lc3', role: 'counsellor', manager: 'admin' },

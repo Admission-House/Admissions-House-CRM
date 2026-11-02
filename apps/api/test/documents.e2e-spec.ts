@@ -237,6 +237,26 @@ describe('opening a document', () => {
     expect(open.rawPayload.equals(jpeg())).toBe(true);
   });
 
+  it('writes every opening of a document to the audit log, by download and by link', async () => {
+    const { rows } = await owner.query(
+      `SELECT actor_id, after->>'via' AS via, after->>'lead' AS lead, after->>'type' AS type
+         FROM audit_logs WHERE tenant_id = $1 AND action = 'document.view' AND entity_id = $2 ORDER BY created_at`,
+      [fx.tenantId, docId],
+    );
+    expect(rows.map((r) => r.via)).toEqual(expect.arrayContaining(['download', 'link']));
+
+    // Super Admins are also told, as a notification (the downloader here is a counsellor).
+    const alerts = await owner.query(
+      `SELECT count(*)::int AS n FROM notifications WHERE tenant_id = $1 AND payload->>'event' = 'download' AND payload->>'kind' = 'document' AND payload->>'userId' = $2`,
+      [fx.tenantId, fx.user('lc1').id],
+    );
+    expect(alerts.rows[0].n).toBeGreaterThanOrEqual(2);
+    for (const r of rows) {
+      expect(r.actor_id).toBe(fx.user('lc1').id);
+      expect(r.lead).toBe(leadId);
+    }
+  });
+
   it('refuses a link that was changed, cut short, or has run out', async () => {
     const url = (await api.call('POST', `/leads/${leadId}/documents/${docId}/link`, t.lc1!)).json().url as string;
     const token = url.split('/').pop()!;

@@ -6,6 +6,7 @@ export const IS_PUBLIC = 'auth:public';
 export const PERMISSIONS = 'auth:permissions';
 export const PERMISSIONS_ANY = 'auth:permissions-any';
 export const ALLOW_PASSWORD_CHANGE = 'auth:allow-password-change';
+export const HEAVY = 'auth:heavy';
 
 /** The route needs no sign-in. Every other route requires one by default. */
 export const Public = () => SetMetadata(IS_PUBLIC, true);
@@ -15,6 +16,13 @@ export const RequirePermissions = (...codes: string[]) => SetMetadata(PERMISSION
 
 /** The caller must hold at least one of these permissions. */
 export const RequireAnyPermission = (...codes: string[]) => SetMetadata(PERMISSIONS_ANY, codes);
+
+/**
+ * An expensive operation (an export, an import, an upload, a file download). Each signed-in user
+ * gets a smaller allowance for these than for ordinary requests, so one person (or one stolen
+ * session) cannot use them to slow everyone else down or copy the data out in bulk.
+ */
+export const Heavy = () => SetMetadata(HEAVY, true);
 
 /** Usable even while the account still has to choose a new password (sign out, change password). */
 export const AllowPasswordChange = () => SetMetadata(ALLOW_PASSWORD_CHANGE, true);

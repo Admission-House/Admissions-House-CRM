@@ -24,7 +24,8 @@ export class TelephonyWebhookService {
     private readonly events: CallEventsService,
   ) {}
 
-  async receive(ctx: TelephonyContext, body: unknown): Promise<{ received: number; repeated: number }> {
+  async receive(ctx: TelephonyContext, body: unknown, namedProvider?: string): Promise<{ received: number; repeated: number }> {
+    if (namedProvider !== undefined && namedProvider !== ctx.provider) throw new AppError('INVALID_WEBHOOK_KEY', 'The webhook key is missing or not valid', 401);
     let events: CallEvent[];
     try {
       events = this.registry.get(ctx.provider).normalize(body);

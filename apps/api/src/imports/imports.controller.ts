@@ -4,7 +4,8 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { ZodValidationException } from 'nestjs-zod';
 import { z } from 'zod';
 import type { AuthContext } from '../auth/auth-context.js';
-import { CurrentAuth, RequirePermissions } from '../auth/decorators.js';
+import { DownloadAlerts } from '../notifications/download-alerts.service.js';
+import { CurrentAuth, Heavy, RequirePermissions } from '../auth/decorators.js';
 import { AppError } from '../common/app-error.js';
 import { ENV } from '../config/config.module.js';
 import type { Env } from '../config/env.js';
@@ -31,11 +32,13 @@ export class ImportsController {
   constructor(
     private readonly imports: ImportsService,
     @Inject(ENV) private readonly env: Env,
+    private readonly downloads: DownloadAlerts,
   ) {}
 
   /** Reads a CSV or Excel file and says what importing it would do. Nothing is saved. */
   @RequirePermissions('lead.import')
   @ApiConsumes('multipart/form-data')
+  @Heavy()
   @Post('preview')
   @HttpCode(200)
   async preview(@CurrentAuth() auth: AuthContext, @Req() req: FastifyRequest) {
@@ -48,6 +51,7 @@ export class ImportsController {
   /** Queues the file. The leads are filed in the background; follow the batch to see progress. */
   @RequirePermissions('lead.import')
   @ApiConsumes('multipart/form-data')
+  @Heavy()
   @Post()
   async create(@CurrentAuth() auth: AuthContext, @Req() req: FastifyRequest, @Res({ passthrough: true }) reply: FastifyReply) {
     const { fields, file } = await this.read(req);
@@ -72,9 +76,11 @@ export class ImportsController {
 
   /** The rows that were skipped and why, as a CSV. */
   @RequirePermissions('lead.import')
+  @Heavy()
   @Get(':id/problems.csv')
   async problems(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Res({ passthrough: true }) reply: FastifyReply) {
     const report = await this.imports.errorReport(auth, id);
+    await this.downloads.record(auth, 'import_problems', 'the rows skipped in a lead import', report.fileName);
     reply.header('content-type', 'text/csv; charset=utf-8').header('content-disposition', `attachment; filename="${encodeURIComponent(report.fileName)}"`).header('cache-control', 'private, no-store');
     return report.csv;
   }

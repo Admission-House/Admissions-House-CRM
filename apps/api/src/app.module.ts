@@ -30,9 +30,13 @@ import { LeadConfigModule } from './lead-config/lead-config.module.js';
 import { LeaveModule } from './leave/leave.module.js';
 import { MastersModule } from './masters/masters.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
+import { PushModule } from './push/push.module.js';
 import { RolesModule } from './roles/roles.module.js';
 import { StorageModule } from './storage/storage.module.js';
 import { UsersModule } from './users/users.module.js';
+
+/** Provider callbacks carry the company's webhook key (and customers' numbers) in the address; neither belongs in a log. */
+export const safeUrl = (url: string): string => url.replace(/(\/telephony\/hooks\/[^/?]+\/)[^/?]+/, '$1[redacted]').replace(/(\/telephony\/hooks\/[^?]*)\?.*/, '$1');
 
 @Module({
   imports: [
@@ -44,11 +48,11 @@ import { UsersModule } from './users/users.module.js';
           level: env.LOG_LEVEL,
           // The request body is never logged, and credentials are removed from headers.
           redact: {
-            paths: ['req.headers.authorization', 'req.headers.cookie', 'req.headers["x-api-key"]', 'res.headers["set-cookie"]'],
+            paths: ['req.headers.authorization', 'req.headers.cookie', 'req.headers["x-api-key"]', 'req.headers["x-webhook-key"]', 'res.headers["set-cookie"]'],
             censor: '[redacted]',
           },
           serializers: {
-            req: (req: { id: string; method: string; url: string }) => ({ id: req.id, method: req.method, url: req.url }),
+            req: (req: { id: string; method: string; url: string }) => ({ id: req.id, method: req.method, url: safeUrl(req.url) }),
           },
           autoLogging: { ignore: (req) => (req.url ?? '').includes('/health/') },
           customLogLevel: (_req, res, err) =>
@@ -67,6 +71,7 @@ import { UsersModule } from './users/users.module.js';
     AuthModule,
     AttendanceModule,
     NotificationsModule,
+    PushModule,
     LeaveModule,
     IntakeModule,
     IntegrationsModule,

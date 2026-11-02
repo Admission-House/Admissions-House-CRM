@@ -4,9 +4,10 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { createZodDto } from 'nestjs-zod';
 import { pageQuerySchema } from '../common/pagination.js';
 import type { AuthContext } from '../auth/auth-context.js';
-import { CurrentAuth, RequirePermissions } from '../auth/decorators.js';
+import { DownloadAlerts } from '../notifications/download-alerts.service.js';
+import { CurrentAuth, Heavy, RequirePermissions } from '../auth/decorators.js';
 import {
-  AssignDto, BulkAssignDto, BulkStatusDto, ChangeStatusDto, CreateLeadDto, ExportLeadsDto, ListLeadsDto, NoteDto, UpdateLeadDto,
+  AssignDto, BulkAssignDto, BulkStatusDto, ChangeStatusDto, CreateLeadDto, ExportLeadsDto, ListLeadsDto, NoteDto, TransferLeadsDto, UpdateLeadDto,
 } from './leads.dto.js';
 import { LeadsService } from './leads.service.js';
 
@@ -16,7 +17,10 @@ class ActivitiesQueryDto extends createZodDto(pageQuerySchema) {}
 @ApiBearerAuth()
 @Controller('leads')
 export class LeadsController {
-  constructor(private readonly leads: LeadsService) {}
+  constructor(
+    private readonly leads: LeadsService,
+    private readonly downloads: DownloadAlerts,
+  ) {}
 
   @RequirePermissions('lead.read')
   @Get()
@@ -26,9 +30,11 @@ export class LeadsController {
 
   /** Every lead matching the filters, as a CSV or Excel file. */
   @RequirePermissions('lead.export')
+  @Heavy()
   @Get('export')
   async export(@CurrentAuth() auth: AuthContext, @Query() query: ExportLeadsDto, @Res({ passthrough: true }) reply: FastifyReply) {
     const file = await this.leads.exportFile(auth, query);
+    await this.downloads.record(auth, 'lead_export', `the lead list (${query.format === 'xlsx' ? 'Excel' : 'CSV'})`, file.fileName);
     reply.header('content-type', file.contentType).header('content-disposition', `attachment; filename="${file.fileName}"`).header('cache-control', 'private, no-store').header('x-content-type-options', 'nosniff');
     return file.body;
   }
@@ -53,6 +59,15 @@ export class LeadsController {
   @HttpCode(200)
   bulkAssign(@CurrentAuth() auth: AuthContext, @Body() body: BulkAssignDto) {
     return this.leads.bulkAssign(auth, body);
+  }
+
+  /** Moves the leads one person holds to others. For Admins and Super Admins who hand out leads. */
+  @RequirePermissions('lead.assign')
+  @Heavy()
+  @Post('transfer')
+  @HttpCode(200)
+  transfer(@CurrentAuth() auth: AuthContext, @Body() body: TransferLeadsDto) {
+    return this.leads.transferAll(auth, body);
   }
 
   @RequirePermissions('lead.assign')

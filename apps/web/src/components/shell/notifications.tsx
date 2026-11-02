@@ -43,6 +43,7 @@ export function describeNotification(n: Notification): { title: string; detail?:
     case 'login_refused': return { title: `${String(p.userName ?? 'Someone')} was refused at sign-in`, detail: `Not at the office (${REFUSED_REASON[String(p.reason)] ?? String(p.reason ?? 'outside the office')})`, href: '/attendance' };
     case 'forced_logout': return { title: `${String(p.userName ?? 'Someone')} was signed out by an admin`, href: '/settings/sessions' };
     case 'attendance_exception': return { title: `Attendance marked by hand for ${String(p.userName ?? 'someone')}`, detail: [typeof p.date === 'string' ? p.date : '', typeof p.reason === 'string' ? p.reason : ''].filter(Boolean).join(': ') || undefined, href: '/attendance' };
+    case 'download': return { title: `${String(p.userName ?? 'Someone')} downloaded ${String(p.what ?? 'a file')}`, detail: typeof p.fileName === 'string' ? p.fileName : undefined, href: '/settings/audit' };
     default: return { title: n.type.replace(/_/g, ' ') };
   }
 }

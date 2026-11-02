@@ -17,8 +17,39 @@ it('measures the main endpoints under load', async () => {
   const owner = new pg.Client({ connectionString: process.env.MIGRATOR_DATABASE_URL });
   await owner.connect();
   const fx = await createFixture(owner);
+
+  // LOAD_SEED_LEADS=300000 fills the test company with that many leads before measuring, so the
+  // numbers show how lists, search and queues behave at volume instead of on an empty table.
+  const SEED = Number(process.env.LOAD_SEED_LEADS ?? 0);
+  if (SEED > 0) {
+    const statuses = (await owner.query(`SELECT id FROM lead_statuses WHERE tenant_id = $1 ORDER BY sort_order`, [fx.tenantId])).rows.map((r) => r.id as string);
+    const owners = [fx.user('counsellor').id, fx.user('counsellor2').id, fx.user('mobile').id];
+    const names = ['Amit', 'Priya', 'Rahul', 'Neha', 'Vikas', 'Pooja', 'Sandeep', 'Anjali'];
+    const started = Date.now();
+    await owner.query(
+      `INSERT INTO leads (tenant_id, lead_no, name, primary_phone, status_id, source_id, assigned_to, assigned_at, intent, created_at, updated_at)
+       SELECT $1::uuid, 1000000 + g,
+              ($5::text[])[1 + g % 8] || ' Seed ' || g,
+              '91' || lpad((7000000000 + g)::text, 10, '0'),
+              ($2::uuid[])[1 + g % cardinality($2::uuid[])],
+              $3::uuid,
+              ($4::uuid[])[1 + g % cardinality($4::uuid[])],
+              now() - (g % 90) * interval '1 day',
+              (ARRAY['hot','warm','cold'])[1 + g % 3],
+              now() - (g % 365) * interval '1 day',
+              now() - (g % 30) * interval '1 hour'
+         FROM generate_series(1, $6::int) g`,
+      [fx.tenantId, statuses, fx.sourceId('Website'), owners, names, SEED],
+    );
+    await owner.query('ANALYZE leads');
+    process.stdout.write(`Seeded ${SEED} leads in ${((Date.now() - started) / 1000).toFixed(1)}s\n`);
+  }
   const app = await startApp({
     LOGIN_IP_MAX_ATTEMPTS: '500',
+    // The test drives one token as hard as it can; the per-user limits would measure themselves.
+    USER_RATE_PER_MIN: '100000',
+    HEAVY_RATE_PER_MIN: '10000',
+    QUEUE_COUNT_CACHE_SEC: '5',
     LOG_LEVEL: 'silent',
     RECORDING_INTERVAL_SEC: '0',
     SWEEP_INTERVAL_SEC: '0',
@@ -90,6 +121,12 @@ it('measures the main endpoints under load', async () => {
         name: 'GET /leads?q=Load (search)',
         opts: { path: '/api/v1/leads?q=Load&limit=50', headers: read },
       },
+      {
+        name: 'GET /leads?assignedTo=<counsellor> (one person\'s list)',
+        opts: { path: `/api/v1/leads?assignedTo=${fx.user('counsellor').id}&limit=50`, headers: read },
+      },
+      { name: 'GET /leads?queue=fresh', opts: { path: '/api/v1/leads?queue=fresh&limit=50', headers: read } },
+      { name: 'GET /leads?q=<phone digits> (search)', opts: { path: '/api/v1/leads?q=7000012345&limit=50', headers: read } },
       { name: 'GET /leads/queues', opts: { path: '/api/v1/leads/queues', headers: read } },
       { name: 'GET /dashboard', opts: { path: '/api/v1/dashboard', headers: read } },
       {
@@ -150,7 +187,10 @@ it('measures the main endpoints under load', async () => {
     );
   } finally {
     await app.close();
-    await fx.cleanup();
+    // LOAD_KEEP=1 leaves the seeded company in place so its queries can be inspected with EXPLAIN.
+    if (process.env.LOAD_KEEP === '1') process.stdout.write(`Kept company ${fx.slug} (tenant ${fx.tenantId}). Remove it with: node --env-file=.env test/purge-test-tenants.mjs
+`);
+    else await fx.cleanup();
     await owner.end();
   }
 }, 600_000);

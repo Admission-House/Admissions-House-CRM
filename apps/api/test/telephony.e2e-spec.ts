@@ -67,7 +67,7 @@ describe('the telephony connection', () => {
   it('is set up once, shows the webhook key a single time, and never shows credentials', async () => {
     expect(webhookKey).toMatch(/^ahw_[\w-]{40,}$/);
     const got = await api.call('GET', '/telephony/connection', t.sa!);
-    expect(got.json()).toMatchObject({ provider: 'generic', isEnabled: true, hasCredentials: true, recordingHosts: ['recordings.example.com'], providers: ['generic'] });
+    expect(got.json()).toMatchObject({ provider: 'generic', isEnabled: true, hasCredentials: true, recordingHosts: ['recordings.example.com'], providers: ['exotel', 'generic'] });
     expect(got.json().webhookKeyPrefix).toBe(webhookKey.slice(0, 8));
     expect(got.body).not.toContain(webhookKey);
     expect(got.body).not.toContain('simulate');

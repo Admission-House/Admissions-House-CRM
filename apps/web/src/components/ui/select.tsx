@@ -34,7 +34,7 @@ function optionsOf(children: ReactNode): Opt[] {
 }
 
 /** The sizing and placement classes of a given class list, so the wrapper sits in a row or grid the way the box was asked to. */
-const layoutOf = (cls?: string) => (cls ?? '').split(/s+/).filter((c) => /^((sm|md|lg|xl):)?(w-|min-w-|max-w-|flex-|grow|shrink|basis-|col-span-|self-)/.test(c)).join(' ');
+const layoutOf = (cls?: string) => (cls ?? '').split(/\s+/).filter((c) => /^((sm|md|lg|xl):)?(w-|min-w-|max-w-|flex-|grow|shrink|basis-|col-span-|self-)/.test(c)).join(' ');
 
 /**
  * A drop-down in the product's own look: the closed box matches the text boxes, and the list that opens

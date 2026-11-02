@@ -60,6 +60,14 @@ export class NotificationsService {
     return this.notify(trx, { tenantId: n.tenantId, userIds: admins.map((a) => a.id).filter((id) => id !== n.exceptUserId), type: 'security', payload: n.payload });
   }
 
+  /** Work email addresses of active users, for the few events that are also sent by email. */
+  async emailsOf(trx: Trx, userIds: string[]): Promise<{ id: string; name: string; email: string }[]> {
+    if (userIds.length === 0) return [];
+    const { rows } = await sql<{ id: string; name: string; email: string }>`
+      SELECT id, name, email::text AS email FROM users WHERE id = ANY(${userIds}::uuid[]) AND status = 'active'`.execute(trx);
+    return rows;
+  }
+
   /** The people who may approve something for `userId`: their manager and every active Super Admin. */
   async approversOf(trx: Trx, userId: string): Promise<string[]> {
     const { rows } = await sql<{ id: string }>`

@@ -25,7 +25,7 @@ interface RuleRow {
  * Chooses who gets a new lead.
  *
  * Only people who are working right now can be chosen: checked in today and not yet checked
- * out, not on approved leave, and not on a break. The first assignment rule that matches the lead decides who is
+ * out, not on approved leave, not on a break, and whose automatic-leads switch is on. The first assignment rule that matches the lead decides who is
  * in the pool and how to choose; with no matching rule the pool is every active counsellor and the
  * choice is round robin. Nobody present means the lead stays unassigned for an Admin to hand out.
  */
@@ -70,6 +70,7 @@ export class AssignmentService {
       JOIN roles r ON r.id = u.role_id
       WHERE u.status = 'active'
         AND r.system_key = 'counsellor'
+        AND u.receives_auto_leads
         AND (${pool}::uuid[] IS NULL OR u.id = ANY(${pool}::uuid[]))
         AND EXISTS (
           SELECT 1 FROM attendance_records a, tenants t

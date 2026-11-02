@@ -4,7 +4,8 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { createZodDto, ZodValidationException } from 'nestjs-zod';
 import { z } from 'zod';
 import type { AuthContext } from '../auth/auth-context.js';
-import { CurrentAuth, RequireAnyPermission, RequirePermissions } from '../auth/decorators.js';
+import { DownloadAlerts } from '../notifications/download-alerts.service.js';
+import { CurrentAuth, Heavy, RequireAnyPermission, RequirePermissions } from '../auth/decorators.js';
 import { AppError } from '../common/app-error.js';
 import { pageQuerySchema } from '../common/pagination.js';
 import { ENV } from '../config/config.module.js';
@@ -35,6 +36,7 @@ export class PayrollController {
   constructor(
     private readonly payroll: PayrollService,
     @Inject(ENV) private readonly env: Env,
+    private readonly downloads: DownloadAlerts,
   ) {}
 
   /** Adds or changes one employee's salary for a month. */
@@ -55,6 +57,7 @@ export class PayrollController {
   /** What importing a salary sheet would do. Nothing is saved. */
   @RequirePermissions('salary.import')
   @ApiConsumes('multipart/form-data')
+  @Heavy()
   @Post('import/preview')
   @HttpCode(200)
   async preview(@CurrentAuth() auth: AuthContext, @Req() req: FastifyRequest) {
@@ -63,6 +66,7 @@ export class PayrollController {
 
   @RequirePermissions('salary.import')
   @ApiConsumes('multipart/form-data')
+  @Heavy()
   @Post('import')
   @HttpCode(200)
   async import(@CurrentAuth() auth: AuthContext, @Req() req: FastifyRequest) {
@@ -80,6 +84,7 @@ export class PayrollController {
   @Get('report')
   async report(@CurrentAuth() auth: AuthContext, @Query() query: ReportDto, @Res({ passthrough: true }) reply: FastifyReply) {
     const file = await this.payroll.report(auth, query);
+    await this.downloads.record(auth, 'salary_export', 'the monthly salary report', file.fileName);
     reply.header('content-type', file.contentType).header('content-disposition', `attachment; filename="${file.fileName}"`).header('cache-control', 'private, no-store').header('x-content-type-options', 'nosniff');
     return file.body;
   }
@@ -98,9 +103,11 @@ export class PayrollController {
   }
 
   @RequireAnyPermission('salary.read', 'salary.read_own')
+  @Heavy()
   @Get(':id/payslip.pdf')
   async payslip(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Res({ passthrough: true }) reply: FastifyReply) {
     const file = await this.payroll.payslip(auth, id);
+    await this.downloads.record(auth, 'payslip', 'a payslip', file.fileName);
     reply.header('content-type', 'application/pdf').header('content-disposition', `attachment; filename="${file.fileName}"`).header('cache-control', 'private, no-store').header('x-content-type-options', 'nosniff');
     return file.pdf;
   }

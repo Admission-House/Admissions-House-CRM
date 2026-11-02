@@ -52,3 +52,6 @@ export const listUsersSchema = pageQuerySchema.extend({
   status: z.enum(['active', 'inactive']).optional(),
 });
 export class ListUsersDto extends createZodDto(listUsersSchema) {}
+
+export const leadAutomationSchema = z.object({ enabled: z.boolean() });
+export class LeadAutomationDto extends createZodDto(leadAutomationSchema) {}

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { sql, SqlBool } from 'kysely';
 import { z } from 'zod';
 import { scopeCondition } from '../access/scope.js';
@@ -8,6 +8,9 @@ import type { AuthContext } from '../auth/auth-context.js';
 import { AppError } from '../common/app-error.js';
 import { decodeCursor, Page, toPage } from '../common/pagination.js';
 import { DatabaseService, Trx } from '../database/database.service.js';
+import { ENV } from '../config/config.module.js';
+import type { Env } from '../config/env.js';
+import { MailerService, type Mail } from '../mail/mailer.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import type {
   CreateLeaveRequestDto,
@@ -71,7 +74,18 @@ export class LeaveService {
     private readonly audit: AuditService,
     private readonly attendance: AttendanceRepository,
     private readonly notifications: NotificationsService,
+    private readonly mailer: MailerService,
+    @Inject(ENV) private readonly env: Env,
   ) {}
+
+  /** Sent after the change is saved, never before: a request that rolls back must not send mail. */
+  private sendAll(mails: Mail[]): void {
+    for (const mail of mails) setImmediate(() => void this.mailer.send(mail));
+  }
+
+  private leaveLink(): string {
+    return `${this.env.WEB_URL}/leave`;
+  }
 
   // ------------------------------------------------------------------ types
 
@@ -154,7 +168,14 @@ export class LeaveService {
 
   // --------------------------------------------------------------- requests
 
-  create(auth: AuthContext, dto: CreateLeaveRequestDto): Promise<LeaveRequestView> {
+  async create(auth: AuthContext, dto: CreateLeaveRequestDto): Promise<LeaveRequestView> {
+    const mails: Mail[] = [];
+    const view = await this.createInner(auth, dto, mails);
+    this.sendAll(mails);
+    return view;
+  }
+
+  private createInner(auth: AuthContext, dto: CreateLeaveRequestDto, mails: Mail[]): Promise<LeaveRequestView> {
     return this.db.withTenant(auth.tenantId, async (trx) => {
       const type = await trx.selectFrom('leave_types').select(['id', 'name', 'is_paid', 'is_active']).where('id', '=', dto.leaveTypeId).executeTakeFirst();
       if (!type || !type.is_active) {
@@ -207,9 +228,24 @@ export class LeaveService {
         throw err;
       }
 
+      const approvers = await this.notifications.approversOf(trx, auth.userId);
+      for (const a of await this.notifications.emailsOf(trx, approvers)) {
+        mails.push({
+          to: a.email,
+          subject: `Leave request from ${auth.name}`,
+          text: `Hello ${a.name},
+
+${auth.name} has asked for ${type.name} from ${dto.fromDate} to ${dto.toDate} (${days} day${days === 1 ? '' : 's'}).${dto.reason ? `
+Reason: ${dto.reason}` : ''}
+
+Open the request to approve or reject it:
+${this.leaveLink()}
+`,
+        });
+      }
       await this.notifications.notify(trx, {
         tenantId: auth.tenantId,
-        userIds: await this.notifications.approversOf(trx, auth.userId),
+        userIds: approvers,
         type: 'approval',
         payload: { event: 'leave_requested', requestId: id, userId: auth.userId, userName: auth.name, leaveType: type.name, fromDate: dto.fromDate, toDate: dto.toDate, days },
       });
@@ -227,7 +263,14 @@ export class LeaveService {
     return this.list(auth, query, true);
   }
 
-  decide(auth: AuthContext, id: string, dto: DecisionDto): Promise<LeaveRequestView> {
+  async decide(auth: AuthContext, id: string, dto: DecisionDto): Promise<LeaveRequestView> {
+    const mails: Mail[] = [];
+    const view = await this.decideInner(auth, id, dto, mails);
+    this.sendAll(mails);
+    return view;
+  }
+
+  private decideInner(auth: AuthContext, id: string, dto: DecisionDto, mails: Mail[]): Promise<LeaveRequestView> {
     return this.db.withTenant(auth.tenantId, async (trx) => {
       const request = await this.lockForUpdate(trx, id, scopeCondition(auth, 'lr.user_id'));
       if (request.user_id === auth.userId) throw new AppError('SELF_APPROVAL', 'Another person must decide on your leave', 403);
@@ -242,6 +285,20 @@ export class LeaveService {
         .where('id', '=', id)
         .execute();
 
+      for (const u of await this.notifications.emailsOf(trx, [request.user_id])) {
+        mails.push({
+          to: u.email,
+          subject: `Your leave was ${dto.decision}`,
+          text: `Hello ${u.name},
+
+Your leave from ${request.from_date} to ${request.to_date} was ${dto.decision} by ${auth.name}.${dto.note ? `
+Note: ${dto.note}` : ''}
+
+Details:
+${this.leaveLink()}
+`,
+        });
+      }
       await this.notifications.notify(trx, {
         tenantId: auth.tenantId,
         userIds: [request.user_id],

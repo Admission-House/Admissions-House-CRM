@@ -58,6 +58,11 @@ describe('mapError', () => {
     });
   });
 
+  it('a full database pool is a 503 with a retry hint, not a 500', () => {
+    expect(mapError(new Error('timeout exceeded when trying to connect'))).toMatchObject({ status: 503, code: 'BUSY', headers: { 'retry-after': '2' } });
+    expect(mapError(new Error('Connection terminated due to connection timeout')).status).toBe(503);
+  });
+
   it('hides the details of an unexpected error', () => {
     const mapped = mapError(new TypeError("Cannot read properties of undefined (reading 'password_hash')"));
     expect(mapped).toMatchObject({ status: 500, code: 'INTERNAL', unexpected: true });

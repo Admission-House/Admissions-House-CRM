@@ -1,5 +1,6 @@
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import pg from 'pg';
+import { MailerService } from '../src/mail/mailer.service.js';
 import { startApp } from './helpers/app.js';
 import { Client, makeClient } from './helpers/client.js';
 import { createFixture, Fixture, OFFICE_IP } from './helpers/fixtures.js';
@@ -166,6 +167,12 @@ describe('asking for leave', () => {
       `SELECT count(*) FROM users u JOIN roles r ON r.id = u.role_id WHERE u.tenant_id = $1 AND r.system_key = 'super_admin' AND u.status = 'active'`,
       [fx.tenantId],
     )).rows[0].count);
+    // The approvers are also told by email (NOT-4): the manager and every Super Admin, not the requester.
+    await new Promise((r) => setTimeout(r, 50));
+    const sent = app.get(MailerService).outbox.filter((m) => m.subject === 'Leave request from lv1');
+    expect(sent.map((m) => m.to.toLowerCase())).toContain(fx.user('admin').email.toLowerCase());
+    expect(sent.map((m) => m.to.toLowerCase())).not.toContain(fx.user('lv1').email.toLowerCase());
+    expect(sent.length).toBe(activeSuperAdmins + 1);
     const toManager = await notificationsFor('admin', 'leave_requested');
     expect(toManager.some((n) => n.payload.userName === 'lv1' && n.payload.days === 2)).toBe(true);
     const toSuper = await notificationsFor('super', 'leave_requested');
@@ -268,6 +275,11 @@ describe('deciding on leave', () => {
 
     const told = await notificationsFor('lv7', 'leave_decided');
     expect(told[0].payload).toMatchObject({ decision: 'approved', decidedBy: 'admin' });
+
+    // The decision is also sent by email to the person (NOT-4).
+    await new Promise((r) => setTimeout(r, 50));
+    const mail = app.get(MailerService).outbox.find((m) => m.to.toLowerCase() === fx.user('lv7').email.toLowerCase() && m.subject === 'Your leave was approved');
+    expect(mail?.text).toContain('approved by admin');
     expect(errorCode(await decide(admin, id, { decision: 'approved' }))).toBe('ALREADY_DECIDED');
     expect(await balanceOf(token, 'Casual Leave')).toMatchObject({ remaining: 11 });
   });

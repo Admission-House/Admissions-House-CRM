@@ -46,6 +46,9 @@ export async function configureApp(app: NestFastifyApplication, env: Env): Promi
 
   app.getHttpAdapter().getInstance().addHook('onSend', async (request, reply) => {
     void reply.header('x-request-id', request.id);
+    // Nothing from the API may be kept by a browser cache, proxy or CDN unless the endpoint says so
+    // itself (the company logo does). Otherwise one person's lead list could be served to another.
+    if (request.url.startsWith('/api/v1/') && !reply.hasHeader('cache-control')) void reply.header('cache-control', 'private, no-store');
   });
 
   await app.register(cookie);

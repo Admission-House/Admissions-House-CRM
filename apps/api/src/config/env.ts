@@ -49,6 +49,14 @@ const schema = z.object({
   LOGIN_LOCK_MINUTES: z.coerce.number().int().min(1).max(1440).default(15),
   /** Sign-in attempts allowed from one address in ten minutes. */
   LOGIN_IP_MAX_ATTEMPTS: z.coerce.number().int().min(5).max(500).default(30),
+  /**
+   * What one signed-in user may do per minute: all requests together, and the expensive ones
+   * (exports, imports, uploads, file downloads) among them. Counted in this process.
+   */
+  USER_RATE_PER_MIN: z.coerce.number().int().min(30).max(100_000).default(600),
+  /** How long Admin and Super Admin queue counts may be reused, in seconds. 0 turns it off. Counsellors always get fresh counts. */
+  QUEUE_COUNT_CACHE_SEC: z.coerce.number().int().min(0).max(60).default(5),
+  HEAVY_RATE_PER_MIN: z.coerce.number().int().min(2).max(10_000).default(30),
   /** A GPS reading less precise than this (in metres) is not accepted for the office check. */
   GPS_MAX_ACCURACY_M: z.coerce.number().int().min(10).max(1000).default(150),
 
@@ -62,6 +70,13 @@ const schema = z.object({
   FOLLOWUP_REMINDER_INTERVAL_SEC: z.coerce.number().int().min(0).max(3600).default(60),
   IMPORT_INTERVAL_SEC: z.coerce.number().int().min(0).max(3600).default(30),
 
+  /** How often new notifications are sent to phones as alerts, in seconds. 0 turns phone alerts off. */
+  PUSH_INTERVAL_SEC: z.coerce.number().int().min(0).max(3600).default(10),
+  /** Who delivers the alerts. "expo" uses Expo's push service; "off" sends nothing. */
+  PUSH_PROVIDER: z.enum(['expo', 'off']).default('expo'),
+  /** Only if "enhanced push security" is switched on for the project in the Expo dashboard. */
+  EXPO_ACCESS_TOKEN: z.string().optional(),
+
   /** Where uploaded files are kept. "local" is a folder on the server; a cloud store is added behind the same interface. */
   STORAGE_DRIVER: z.enum(['local', 's3']).default('local'),
   /** For STORAGE_DRIVER=s3: any S3-compatible store (AWS, MinIO, Cloudflare R2, DigitalOcean Spaces). */
@@ -73,6 +88,10 @@ const schema = z.object({
   S3_SECRET_ACCESS_KEY: z.string().optional(),
   S3_FORCE_PATH_STYLE: bool,
   STORAGE_DIR: z.string().min(1).default('./storage'),
+  /** Address of a ClamAV daemon (clamd). When set, every uploaded document is scanned before it is kept. */
+  CLAMAV_HOST: z.string().min(1).optional(),
+  CLAMAV_PORT: z.coerce.number().int().min(1).max(65535).default(3310),
+  CLAMAV_TIMEOUT_MS: z.coerce.number().int().min(1000).max(120_000).default(15_000),
   /** Largest upload, in bytes. 2 MB, as agreed for documents. */
   MAX_UPLOAD_BYTES: z.coerce.number().int().min(1024).max(26_214_400).default(2_097_152),
   /** Largest call recording that will be downloaded from the provider, in bytes. */

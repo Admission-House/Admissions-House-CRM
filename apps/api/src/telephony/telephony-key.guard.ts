@@ -23,8 +23,8 @@ export const hashWebhookKey = (key: string): string => createHash('sha256').upda
 
 /**
  * Lets a telephony provider in with the company's webhook key, sent as "Authorization: Bearer ahw_..."
- * or "X-Webhook-Key". Only a hash is stored. The key goes in a header, never in the URL, because URLs
- * end up in logs.
+ * or "X-Webhook-Key". Only a hash is stored. Headers are preferred; the address form is only for
+ * providers that cannot send headers, and the logger removes it from the address it records.
  */
 @Injectable()
 export class TelephonyKeyGuard implements CanActivate {
@@ -37,7 +37,9 @@ export class TelephonyKeyGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<FastifyRequest>();
     const bearer = /^Bearer (\S+)$/.exec(request.headers.authorization ?? '')?.[1];
     const header = request.headers['x-webhook-key'];
-    const key = bearer ?? (typeof header === 'string' ? header : undefined);
+    // Some providers (Exotel) cannot send headers, so their route carries the key as the last part of the address.
+    const fromPath = (request.params as { key?: unknown } | undefined)?.key;
+    const key = bearer ?? (typeof header === 'string' ? header : undefined) ?? (typeof fromPath === 'string' ? fromPath : undefined);
 
     const found =
       key && KEY_FORMAT.test(key)

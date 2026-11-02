@@ -49,10 +49,11 @@ export class TelephonySettingsService {
 
   /** Creates or changes the connection. The webhook key is returned only when a new one is made. */
   save(auth: AuthContext, input: ConnectionInput): Promise<{ connection: ConnectionView; webhookKey?: string }> {
-    this.registry.get(input.provider);
+    const provider = this.registry.get(input.provider);
+    const config = input.config && provider.validateConfig ? provider.validateConfig(input.config) : input.config;
     return this.db.withTenant(auth.tenantId, async (trx) => {
       const existing = await this.view(trx);
-      const sealed = input.config ? this.box.seal(JSON.stringify(input.config), configContext(auth.tenantId)) : null;
+      const sealed = config ? this.box.seal(JSON.stringify(config), configContext(auth.tenantId)) : null;
       let webhookKey: string | undefined;
 
       if (!existing) {

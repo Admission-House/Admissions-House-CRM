@@ -290,6 +290,50 @@ describe('users', () => {
     expect(errorCode(await api.call('PATCH', `/users/${id}`, sa, { managerId: id }))).toBe('MANAGER_INVALID');
   });
 
+  describe('deleting a person (USR-1)', () => {
+    const create = async (over: Record<string, unknown> = {}) => (await api.call('POST', '/users', sa, newCounsellor(over))).json() as { user: { id: string; email: string }; temporaryPassword: string };
+
+    it('removes someone added by mistake, and records it', async () => {
+      const { user } = await create();
+      const res = await api.call('DELETE', `/users/${user.id}`, sa);
+      expect(res.statusCode, res.body).toBe(204);
+      expect(errorCode(await api.call('GET', `/users/${user.id}`, sa))).toBe('NOT_FOUND');
+      expect(await auditCount('user.delete')).toBeGreaterThanOrEqual(1);
+    });
+
+    it('refuses someone who has signed in, so their history stays', async () => {
+      const { user, temporaryPassword } = await create();
+      const login = await api.login({ tenant: fx.slug, email: user.email, password: temporaryPassword, location: inOffice }, OFFICE_IP);
+      expect(login.statusCode).toBe(200);
+      const res = await api.call('DELETE', `/users/${user.id}`, sa);
+      expect(res.statusCode).toBe(409);
+      expect(errorCode(res)).toBe('USER_HAS_HISTORY');
+      expect((await api.call('GET', `/users/${user.id}`, sa)).statusCode).toBe(200);
+    });
+
+    it('refuses someone who has records under their name even if they never signed in', async () => {
+      const { user } = await create();
+      await owner.query(`INSERT INTO login_attempts (tenant_id, user_id, ip, result) VALUES ($1, $2, '203.0.113.9', 'bad_password')`, [fx.tenantId, user.id]);
+      expect(errorCode(await api.call('DELETE', `/users/${user.id}`, sa))).toBe('USER_HAS_HISTORY');
+    });
+
+    it('refuses to delete a manager while people still report to them', async () => {
+      const { user: boss } = await create({ roleId: fx.roleId('admin'), managerId: null });
+      await create({ managerId: boss.id });
+      expect(errorCode(await api.call('DELETE', `/users/${boss.id}`, sa))).toBe('HAS_TEAM');
+    });
+
+    it('does not let anyone delete themselves', async () => {
+      expect(errorCode(await api.call('DELETE', `/users/${fx.user('super').id}`, sa))).toBe('SELF_CHANGE_NOT_ALLOWED');
+    });
+
+    it('needs the permission to manage users and stays inside the reach of the caller', async () => {
+      const { user } = await create();
+      expect((await api.call('DELETE', `/users/${user.id}`, admin, undefined, OFFICE_IP)).statusCode).toBe(403);
+      await api.call('DELETE', `/users/${user.id}`, sa);
+    });
+  });
+
   it('signs a person out everywhere when they are deactivated, and lets them back in when reactivated', async () => {
     const token = await api.signIn('victim', { office: true });
     expect((await api.call('GET', '/auth/me', token, undefined, OFFICE_IP)).statusCode).toBe(200);

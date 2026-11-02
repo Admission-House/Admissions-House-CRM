@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { sql } from 'kysely';
+import { AuditService } from '../audit/audit.service.js';
 import type { AuthContext } from '../auth/auth-context.js';
 import { AppError } from '../common/app-error.js';
 import { ENV } from '../config/config.module.js';
@@ -10,6 +11,7 @@ import { LeadAccess } from '../leads/lead-access.js';
 import { LeadWriter } from '../leads/lead-writer.js';
 import { FileLinks } from '../storage/file-links.service.js';
 import { StorageService } from '../storage/storage.service.js';
+import { VirusScanner } from '../storage/virus-scanner.service.js';
 import { tooLarge } from '../storage/multipart.js';
 import { assertDocumentRules, displayName, DocType, pdfProblem, sniffFile } from './file-rules.js';
 
@@ -43,6 +45,8 @@ export class DocumentsService {
     private readonly writer: LeadWriter,
     private readonly storage: StorageService,
     private readonly links: FileLinks,
+    private readonly scanner: VirusScanner,
+    private readonly audit: AuditService,
     @Inject(ENV) private readonly env: Env,
   ) {}
 
@@ -72,6 +76,8 @@ export class DocumentsService {
       const problem = pdfProblem(input.data);
       if (problem) throw new AppError('UNSAFE_FILE', `${problem}, so it cannot be accepted`, 415);
     }
+
+    await this.scanner.assertClean(input.data);
 
     let written: string | undefined;
     try {
@@ -108,7 +114,9 @@ export class DocumentsService {
   async open(auth: AuthContext, leadId: string, docId: string) {
     const doc = await this.db.withTenant(auth.tenantId, async (trx) => {
       await this.access.get(trx, auth, leadId);
-      return this.one(trx, leadId, docId);
+      const found = await this.one(trx, leadId, docId);
+      await this.recordAccess(trx, auth, leadId, found, 'download');
+      return found;
     });
     const file = await this.storage.get(doc.file_key);
     if (!file) throw AppError.notFound('File');
@@ -120,6 +128,7 @@ export class DocumentsService {
     return this.db.withTenant(auth.tenantId, async (trx) => {
       await this.access.get(trx, auth, leadId);
       const doc = await this.one(trx, leadId, docId);
+      await this.recordAccess(trx, auth, leadId, doc, 'link');
       const { token, expiresAt } = this.links.sign({ key: doc.file_key, type: doc.mime_type, name: doc.original_name });
       return { url: `/api/v1/files/${token}`, expiresAt };
     });
@@ -138,6 +147,18 @@ export class DocumentsService {
   }
 
   // ---------------------------------------------------------------- helpers
+
+  /**
+   * Who opened which student document, and when. A student's Aadhaar and mark sheets are the most
+   * sensitive files in the system, so opening one is written to the audit log in the same
+   * transaction as the access check. Uploads and removals are already in the lead's timeline.
+   */
+  private async recordAccess(trx: Trx, auth: AuthContext, leadId: string, doc: Row, how: 'download' | 'link'): Promise<void> {
+    await this.audit.write(trx, {
+      tenantId: auth.tenantId, actorId: auth.userId, action: 'document.view', entity: 'lead_document', entityId: doc.id,
+      after: { lead: leadId, type: doc.doc_type, via: how }, ip: auth.ip, requestId: auth.requestId,
+    });
+  }
 
   private async rows(trx: Trx, leadId: string, docId?: string): Promise<Row[]> {
     const { rows } = await sql<Row>`

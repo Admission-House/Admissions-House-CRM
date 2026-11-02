@@ -1,10 +1,14 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { sql, SqlBool } from 'kysely';
 import { z } from 'zod';
 import { leadVisibility } from '../access/lead-scope.js';
+import { scopeCondition } from '../access/scope.js';
 import type { AuthContext } from '../auth/auth-context.js';
 import { AppError } from '../common/app-error.js';
 import { decodeCursor, Page, toPage } from '../common/pagination.js';
+import { TtlCache } from '../common/ttl-cache.js';
+import { ENV } from '../config/config.module.js';
+import type { Env } from '../config/env.js';
 import { DatabaseService, Trx } from '../database/database.service.js';
 import { AssignmentService } from '../intake/assignment.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
@@ -24,6 +28,7 @@ import type {
   AssignDto,
   BulkAssignDto,
   BulkStatusDto,
+  TransferLeadsDto,
   ChangeStatusDto,
   CreateLeadDto,
   ExportLeadsDto,
@@ -108,6 +113,9 @@ interface LockedLead {
   assignee_name: string | null;
 }
 
+/** The most leads one transfer moves, so a single request cannot hold locks for long. */
+export const MAX_TRANSFER = 2000;
+
 const cursorShape = z.object({ t: z.string(), i: z.string() });
 const activityCursor = z.object({ t: z.string(), i: z.string() });
 
@@ -121,7 +129,12 @@ export class LeadsService {
     private readonly notifications: NotificationsService,
     private readonly assignees: Assignees,
     private readonly audit: AuditService,
-  ) {}
+    @Inject(ENV) env: Env,
+  ) {
+    this.queueCache = env.QUEUE_COUNT_CACHE_SEC > 0 ? new TtlCache<Awaited<ReturnType<LeadsService['countQueues']>>>(env.QUEUE_COUNT_CACHE_SEC * 1000) : undefined;
+  }
+
+  private readonly queueCache: TtlCache<Awaited<ReturnType<LeadsService['countQueues']>>> | undefined;
 
   // ------------------------------------------------------------------- list
 
@@ -218,6 +231,19 @@ export class LeadsService {
 
   /** How many leads are in each queue, for the tabs of the lead screen. */
   async queues(auth: AuthContext) {
+    // Counting every lead of a company is the heaviest thing the dashboard does. For people who see
+    // many leads (Admins, Super Admins) the answer is reused for a few seconds, and requests that
+    // arrive together share one count. A counsellor's own count is cheap and is always fresh.
+    // The key holds everything that changes the answer: company, scope, who asks, and whether they
+    // also see unassigned leads.
+    if (this.queueCache && auth.dataScope !== 'own') {
+      const key = [auth.tenantId, auth.dataScope, auth.dataScope === 'team' ? auth.userId : '-', auth.permissions.has('lead.assign') ? 'a' : '-'].join('|');
+      return this.queueCache.get(key, () => this.countQueues(auth));
+    }
+    return this.countQueues(auth);
+  }
+
+  private countQueues(auth: AuthContext) {
     return this.db.withTenant(auth.tenantId, async (trx) => {
       const visible = leadVisibility(auth);
       const { rows } = await sql<{
@@ -622,6 +648,68 @@ export class LeadsService {
     });
   }
 
+  /**
+   * Takes the leads one person holds and gives them to others, shared out evenly in turn. It is for
+   * the day someone is not doing well and their work has to go elsewhere. Only leads the caller may
+   * see are moved, the person's open follow-ups go with them, and every move is in the lead's history.
+   * At most MAX_TRANSFER leads move in one go; the answer says how many are left so it can be run again.
+   * With `pauseAutomation` the person is also taken out of the automatic hand-out.
+   */
+  transferAll(auth: AuthContext, dto: TransferLeadsDto) {
+    return this.db.withTenant(auth.tenantId, async (trx) => {
+      if (dto.toUserIds.includes(dto.fromUserId)) {
+        throw AppError.badRequest('TRANSFER_TO_SELF', 'Choose other people to give the leads to', [{ field: 'toUserIds', message: 'Choose other people to give the leads to' }]);
+      }
+      // The person the leads come from must be inside the caller's reach (404 otherwise).
+      const reach = scopeCondition(auth, 'u.id');
+      const { rows: from } = await sql<{ id: string; name: string }>`
+        SELECT u.id, u.name FROM users u WHERE u.id = ${dto.fromUserId}::uuid ${reach ? sql`AND ${reach}` : sql``}`.execute(trx);
+      if (!from[0]) throw AppError.notFound('Person');
+
+      const targets: { id: string; name: string }[] = [];
+      for (const id of dto.toUserIds) targets.push(await this.assignable(trx, auth, id, dto.allowUnavailable));
+
+      const visible = leadVisibility(auth);
+      const { rows: due } = await sql<{ id: string }>`
+        SELECT l.id FROM leads l JOIN lead_statuses s ON s.id = l.status_id
+        WHERE l.assigned_to = ${dto.fromUserId}::uuid AND l.deleted_at IS NULL
+          ${dto.which === 'open' ? sql`AND s.is_open` : sql``}
+          ${visible ? sql`AND ${visible}` : sql``}
+        ORDER BY l.created_at, l.id
+        LIMIT ${MAX_TRANSFER + 1}`.execute(trx);
+      const ids = due.slice(0, MAX_TRANSFER).map((r) => r.id);
+      const remaining = due.length > MAX_TRANSFER ? due.length - MAX_TRANSFER : 0;
+
+      // The leads are dealt out one by one so every target gets the same number, give or take one.
+      const given = new Map<string, number>(targets.map((t) => [t.id, 0]));
+      for (let from_ = 0; from_ < ids.length; from_ += 200) {
+        const batch = await this.lockMany(trx, auth, ids.slice(from_, from_ + 200));
+        const byTarget = new Map<string, LockedLead[]>();
+        batch.forEach((lead, i) => {
+          const target = targets[(from_ + i) % targets.length]!;
+          byTarget.set(target.id, [...(byTarget.get(target.id) ?? []), lead]);
+        });
+        for (const [targetId, leads] of byTarget) {
+          await this.reassign(trx, auth, leads, targets.find((t) => t.id === targetId)!);
+          given.set(targetId, (given.get(targetId) ?? 0) + leads.length);
+        }
+      }
+
+      if (dto.pauseAutomation) await sql`UPDATE users SET receives_auto_leads = false WHERE id = ${dto.fromUserId}::uuid`.execute(trx);
+      await this.audit.write(trx, {
+        tenantId: auth.tenantId, actorId: auth.userId, action: 'lead.transfer', entity: 'user', entityId: dto.fromUserId,
+        after: { from: from[0].name, moved: ids.length, remaining, which: dto.which, pausedAutomation: dto.pauseAutomation, to: targets.map((t) => ({ name: t.name, leads: given.get(t.id) ?? 0 })) },
+        ip: auth.ip, requestId: auth.requestId,
+      });
+      return {
+        moved: ids.length,
+        remaining,
+        pausedAutomation: dto.pauseAutomation,
+        to: targets.map((t) => ({ id: t.id, name: t.name, leads: given.get(t.id) ?? 0 })),
+      };
+    });
+  }
+
   // ----------------------------------------------------------------- delete
 
   remove(auth: AuthContext, id: string): Promise<void> {
@@ -653,14 +741,17 @@ export class LeadsService {
 
     const term = q.q ? classifySearch(q.q) : null;
     if (term?.kind === 'lead_no') c.push(sql<SqlBool>`l.lead_no = ${term.value}::bigint`);
+    // Name, email and phone searches go through two database functions (migration 025). Under
+    // row-level security PostgreSQL cannot use a trigram index for LIKE directly, so a plain
+    // "name ILIKE ..." read every lead of the company (170 to 300 ms at 300,000 leads). The functions
+    // find the matching ids through the indexes, for the current company only; the lead must be in
+    // that set and is still subject to the caller's row-level security and data scope.
+    // "= ANY (ARRAY(...))" makes the database fetch the ids first. With "IN (SELECT ...)" it walked all
+    // leads in date order and checked each one (383 ms against 3 ms for a specific name at 300,000 leads).
     else if (term?.kind === 'phone') {
-      c.push(
-        sql<SqlBool>`(l.primary_phone LIKE ${likePattern(term.value)} OR EXISTS (SELECT 1 FROM lead_phones x WHERE x.lead_id = l.id AND x.phone LIKE ${likePattern(term.value)}))`,
-      );
+      c.push(sql<SqlBool>`l.id = ANY (ARRAY(SELECT lead_ids_matching_phone(${likePattern(term.value)})))`);
     } else if (term?.kind === 'text') {
-      c.push(
-        sql<SqlBool>`(l.name ILIKE ${likePattern(term.value)} OR l.email ILIKE ${likePattern(term.value)})`,
-      );
+      c.push(sql<SqlBool>`l.id = ANY (ARRAY(SELECT lead_ids_matching_text(${likePattern(term.value)})))`);
     }
 
     if (q.queue) c.push(sql<SqlBool>`${EFFECTIVE_QUEUE} = ${q.queue}`);

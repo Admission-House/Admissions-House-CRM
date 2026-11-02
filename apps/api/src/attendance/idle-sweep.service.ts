@@ -6,6 +6,8 @@ import { DatabaseService, Trx } from '../database/database.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 
 export interface SweepResult {
+  /** Days closed because the shift ended. */
+  shiftEndClosed?: number;
   idleEnded: number;
   expiredEnded: number;
   notified: number;
@@ -46,8 +48,8 @@ export class IdleSweepService implements OnModuleInit, OnModuleDestroy {
     this.running = true;
     try {
       const total = await this.sweepOnce();
-      if (total.idleEnded + total.expiredEnded > 0) {
-        this.logger.log(`sweep ended ${total.idleEnded} idle and ${total.expiredEnded} expired sessions, ${total.notified} alerts`);
+      if (total.idleEnded + total.expiredEnded + (total.shiftEndClosed ?? 0) > 0) {
+        this.logger.log(`sweep ended ${total.idleEnded} idle and ${total.expiredEnded} expired sessions, closed ${total.shiftEndClosed ?? 0} days at shift end, ${total.notified} alerts`);
       }
     } catch (err) {
       this.logger.error(`sweep failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -59,12 +61,13 @@ export class IdleSweepService implements OnModuleInit, OnModuleDestroy {
   /** One pass over every active company. Safe to run on several servers at once. */
   async sweepOnce(): Promise<SweepResult> {
     const { rows } = await sql<{ id: string }>`SELECT list_active_tenant_ids() AS id`.execute(this.db.unscoped());
-    const total: SweepResult = { idleEnded: 0, expiredEnded: 0, notified: 0 };
+    const total: SweepResult = { idleEnded: 0, expiredEnded: 0, notified: 0, shiftEndClosed: 0 };
     for (const { id } of rows) {
       const result = await this.db.withTenant(id, (trx) => this.sweepTenant(trx, id));
       total.idleEnded += result.idleEnded;
       total.expiredEnded += result.expiredEnded;
       total.notified += result.notified;
+      total.shiftEndClosed = (total.shiftEndClosed ?? 0) + (result.shiftEndClosed ?? 0);
     }
     return total;
   }
@@ -73,7 +76,7 @@ export class IdleSweepService implements OnModuleInit, OnModuleDestroy {
     // If another server holds the lock for this company, it is already doing the work.
     const { rows: lock } = await sql<{ ok: boolean }>`
       SELECT pg_try_advisory_xact_lock(hashtext('idle-sweep'), hashtext(${tenantId})) AS ok`.execute(trx);
-    if (!lock[0]!.ok) return { idleEnded: 0, expiredEnded: 0, notified: 0 };
+    if (!lock[0]!.ok) return { idleEnded: 0, expiredEnded: 0, notified: 0, shiftEndClosed: 0 };
 
     const { rows: limits } = await sql<{ idle_min: number }>`
       SELECT COALESCE((SELECT a.idle_timeout_min FROM attendance_settings a, tenants t
@@ -91,6 +94,8 @@ export class IdleSweepService implements OnModuleInit, OnModuleDestroy {
       WHERE ended_at IS NULL AND expires_at <= now()
       RETURNING id`.execute(trx);
 
+    const shiftEndClosed = await this.closeDaysAtShiftEnd(trx);
+
     let notified = 0;
     if (idle.length > 0) {
       // One alert per person who works from the office, however many sessions of theirs ended.
@@ -104,7 +109,42 @@ export class IdleSweepService implements OnModuleInit, OnModuleDestroy {
         notified += rowCount;
       }
     }
-    return { idleEnded: idle.length, expiredEnded: expired.length, notified };
+    return { idleEnded: idle.length, expiredEnded: expired.length, notified, shiftEndClosed };
+  }
+
+  /**
+   * Checks out, at the moment the shift ended, everyone whose day is still open after it (requirement
+   * ATT-6: check-out is recorded manually, at the end of the shift, or at a forced sign-out). The shift
+   * is the one in force on that work date. A person who only checked in after the shift ended is left
+   * alone; their day closes when their session does. Open breaks end at the same moment. The person's
+   * session is not touched: they may keep working, but the day's attendance is closed.
+   */
+  private async closeDaysAtShiftEnd(trx: Trx): Promise<number> {
+    const { rows } = await sql<{ id: string }>`
+      WITH due AS (
+        SELECT r.id, ((r.work_date + st.shift_end) AT TIME ZONE t.timezone) AS end_at
+        FROM attendance_records r
+        CROSS JOIN tenants t
+        CROSS JOIN LATERAL (
+          SELECT a.shift_end FROM attendance_settings a
+          WHERE a.effective_from <= r.work_date ORDER BY a.effective_from DESC LIMIT 1
+        ) st
+        WHERE r.check_out_at IS NULL
+      ),
+      ended AS (
+        SELECT id, end_at FROM due
+        JOIN attendance_records r USING (id)
+        WHERE due.end_at <= now() AND r.check_in_at < due.end_at
+      ),
+      closed_breaks AS (
+        UPDATE break_logs b SET ended_at = GREATEST(e.end_at, b.started_at)
+        FROM ended e WHERE b.attendance_id = e.id AND b.ended_at IS NULL
+        RETURNING b.id
+      )
+      UPDATE attendance_records r SET check_out_at = e.end_at, check_out_reason = 'shift_end'
+      FROM ended e WHERE r.id = e.id
+      RETURNING r.id`.execute(trx);
+    return rows.length;
   }
 
   /** Tells every active Super Admin that a person in the office was signed out for inactivity. */

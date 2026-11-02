@@ -81,13 +81,23 @@ Then run the migration job once (it recreates the restricted role and its rights
 
 * Rate limiting is in memory, per API process. With several containers each has its own counters.
   Move it to Redis when running more than one container behind a load balancer.
-* Uploaded files are scanned only for type (by their bytes) and active content in PDFs. There is no
-  antivirus. Add ClamAV if students will upload files from anywhere.
+* Uploaded files are checked for type (by their bytes) and active content in PDFs, and, when
+  `CLAMAV_HOST` is set (the compose file starts a `clamav` container and sets it), scanned by ClamAV
+  before they are kept. If the scanner is down, uploads are refused (503) rather than let through.
+  Without `CLAMAV_HOST` there is no antivirus.
 * Uploads live on the local disk by default. Set `STORAGE_DRIVER=s3` (see below) to use an S3
   compatible bucket instead.
 * No automatic database failover. Use a managed PostgreSQL with point-in-time recovery if you need it.
 * Recordings are downloaded from the provider's address into private storage; how the provider
   authorises that download is not yet known.
+
+## 6b. Telephony with Exotel
+
+Settings → Telephony → provider `exotel`. Exotel cannot send headers or sign its callbacks, so the
+company's webhook key is the last part of the callback address
+(`/api/v1/telephony/hooks/exotel/<key>`); the API removes it from its logs. For incoming and missed
+calls, add a Passthru applet (method GET) to the incoming-call flow pointing at the same address.
+Exotel's `YYYY-MM-DD HH:mm:ss` stamps are read as India time (+05:30); confirm on the first real call.
 
 ## 7. Load test
 

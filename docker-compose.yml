@@ -28,6 +28,19 @@ services:
       APP_DB_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD}
     restart: 'no'
 
+  # Scans every uploaded document. The first start downloads the virus definitions, which takes a few minutes.
+  clamav:
+    image: clamav/clamav:stable
+    restart: unless-stopped
+    volumes:
+      - clamdb:/var/lib/clamav
+    healthcheck:
+      test: ['CMD', '/usr/local/bin/clamdcheck.sh']
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 300s
+
   api:
     build: .
     restart: unless-stopped
@@ -39,11 +52,13 @@ services:
       NODE_ENV: production
       DATABASE_URL: postgres://ah_app:${APP_DB_PASSWORD}@db:5432/admission_house
       STORAGE_DIR: /data/storage
+      CLAMAV_HOST: clamav
     volumes:
       - storage:/data/storage
     ports:
       - '127.0.0.1:3001:3001' # put a reverse proxy with HTTPS in front; do not expose this port directly
 
 volumes:
+  clamdb:
   pgdata:
   storage:

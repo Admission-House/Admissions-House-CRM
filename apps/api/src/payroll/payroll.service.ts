@@ -76,7 +76,7 @@ export class PayrollService {
 
   save(auth: AuthContext, input: SalaryInput): Promise<SalaryView> {
     return this.db.withTenant(auth.tenantId, async (trx) => {
-      const id = await this.upsert(trx, auth, this.checked(input), null);
+      const id = await this.upsert(trx, auth, this.checked(input, await this.companyMonth(trx, auth)), null);
       return this.view(trx, id);
     });
   }
@@ -84,6 +84,7 @@ export class PayrollService {
   /** Several employees for one month, all together or none. */
   saveMany(auth: AuthContext, month: string, rows: Omit<SalaryInput, 'month'>[]): Promise<{ saved: SalaryView[] }> {
     return this.db.withTenant(auth.tenantId, async (trx) => {
+      const thisMonth = await this.companyMonth(trx, auth);
       const problems: { index: number; problem: string }[] = [];
       const ids: string[] = [];
       const seen = new Set<string>();
@@ -91,7 +92,7 @@ export class PayrollService {
         try {
           if (seen.has(r.userId)) throw AppError.badRequest('DUPLICATE_ROW', 'This employee appears more than once');
           seen.add(r.userId);
-          ids.push(await this.upsert(trx, auth, this.checked({ ...r, month }), null));
+          ids.push(await this.upsert(trx, auth, this.checked({ ...r, month }, thisMonth), null));
         } catch (err) {
           if (!(err instanceof AppError)) throw err;
           problems.push({ index, problem: err.message });
@@ -102,10 +103,16 @@ export class PayrollService {
     });
   }
 
-  private checked(input: SalaryInput): SalaryInput & { monthDate: string } {
+  /** The current month on the company's own calendar (YYYY-MM), not the server's UTC one. */
+  private async companyMonth(trx: Trx, auth: AuthContext): Promise<string> {
+    const { rows } = await sql<{ m: string }>`SELECT to_char(now() AT TIME ZONE timezone, 'YYYY-MM') AS m FROM tenants WHERE id = ${auth.tenantId}`.execute(trx);
+    return rows[0]!.m;
+  }
+
+  private checked(input: SalaryInput, thisMonth: string): SalaryInput & { monthDate: string } {
     const monthDate = monthStart(input.month);
     if (!monthDate) throw AppError.badRequest('MONTH_INVALID', 'Give the month as YYYY-MM', [{ field: 'month', message: 'Give the month as YYYY-MM' }]);
-    if (monthDate > new Date().toISOString().slice(0, 7) + '-01') {
+    if (monthDate > thisMonth + '-01') {
       throw AppError.badRequest('MONTH_IN_FUTURE', 'A salary cannot be entered for a month that has not begun', [{ field: 'month', message: 'Choose this month or an earlier one' }]);
     }
     const bad = amountProblem(input);
@@ -152,7 +159,7 @@ export class PayrollService {
   async importSheet(auth: AuthContext, input: { month: string; fileName: string; data: Buffer }, apply: boolean): Promise<ImportResult> {
     const monthDate = monthStart(input.month);
     if (!monthDate) throw AppError.badRequest('MONTH_INVALID', 'Give the month as YYYY-MM', [{ field: 'month', message: 'Give the month as YYYY-MM' }]);
-    this.checked({ userId: auth.userId, month: input.month, basePay: 0, allowances: 0, deductions: 0 });
+    this.checked({ userId: auth.userId, month: input.month, basePay: 0, allowances: 0, deductions: 0 }, await this.db.withTenant(auth.tenantId, (trx) => this.companyMonth(trx, auth)));
     const table = await readTable(input.data);
     const parsed = parseSalarySheet(table);
     if (parsed.missing.length > 0) {

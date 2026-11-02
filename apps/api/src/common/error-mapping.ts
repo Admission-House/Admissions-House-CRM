@@ -138,5 +138,12 @@ export function mapError(err: unknown): MappedError {
     return { status: 503, code: 'UNAVAILABLE', message: 'The service is temporarily unavailable', headers: { 'retry-after': '5' }, unexpected: true };
   }
 
+  // Every database connection was busy for the whole wait (pg's own message). The server is
+  // saturated, not broken: say so and ask the caller to retry, instead of a 500 that looks like a bug.
+  // Found in a load test with 100 users hitting a company of 300,000 leads.
+  if (err instanceof Error && /timeout exceeded when trying to connect|connection terminated due to connection timeout/i.test(err.message)) {
+    return { status: 503, code: 'BUSY', message: 'The system is busy. Please try again in a moment.', headers: { 'retry-after': '2' }, unexpected: true };
+  }
+
   return INTERNAL;
 }

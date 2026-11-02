@@ -12,7 +12,7 @@ let fx: Fixture;
 let api: Client;
 const t: Record<string, string> = {};
 let tatLead = '';
-const MONTH = new Date().toISOString().slice(0, 7);
+const MONTH = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit' }).format(new Date()).slice(0, 7); // the company's own month, not UTC
 
 beforeAll(async () => {
   owner = new pg.Client({ connectionString: process.env.MIGRATOR_DATABASE_URL });

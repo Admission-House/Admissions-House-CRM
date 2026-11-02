@@ -15,6 +15,8 @@ export interface PlaceCallRequest {
 export interface TelephonyProvider {
   /** The name stored in a company's connection, for example "generic". */
   readonly name: string;
+  /** Checks and tidies the settings a company saves for this provider. Throws AppError(422) with what is wrong. */
+  validateConfig?(config: Record<string, unknown>): Record<string, unknown>;
   /** Asks the provider to start a call. Returns the id the provider will use for it. */
   placeCall(config: Record<string, unknown>, request: PlaceCallRequest): Promise<{ providerCallId: string }>;
   /** Reads the provider's webhook body. Throws ProviderPayloadError when it cannot be understood. */

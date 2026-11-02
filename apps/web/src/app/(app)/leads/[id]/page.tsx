@@ -105,8 +105,8 @@ function Workspace() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {/* Opened on the person's own phone or computer, so no calling provider is needed. */}
-            <a href={`https://wa.me/${l.phone.replace(/D/g, '')}`} target="_blank" rel="noopener noreferrer" className="inline-flex h-10 items-center gap-2 rounded-lg border border-line-strong bg-surface px-3.5 text-sm font-medium text-ink hover:bg-head"><MessageCircle className="h-4 w-4 text-ok" aria-hidden /> WhatsApp</a>
-            <a href={`sms:+${l.phone.replace(/D/g, '')}`} className="inline-flex h-10 items-center gap-2 rounded-lg border border-line-strong bg-surface px-3.5 text-sm font-medium text-ink hover:bg-head"><MessageSquareText className="h-4 w-4 text-info" aria-hidden /> SMS</a>
+            <a href={`https://wa.me/${l.phone.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer" className="inline-flex h-10 items-center gap-2 rounded-lg border border-line-strong bg-surface px-3.5 text-sm font-medium text-ink hover:bg-head"><MessageCircle className="h-4 w-4 text-ok" aria-hidden /> WhatsApp</a>
+            <a href={`sms:+${l.phone.replace(/\D/g, '')}`} className="inline-flex h-10 items-center gap-2 rounded-lg border border-line-strong bg-surface px-3.5 text-sm font-medium text-ink hover:bg-head"><MessageSquareText className="h-4 w-4 text-info" aria-hidden /> SMS</a>
             {l.email && <a href={`mailto:${l.email}`} className="inline-flex h-10 items-center gap-2 rounded-lg border border-line-strong bg-surface px-3.5 text-sm font-medium text-ink hover:bg-head"><Mail className="h-4 w-4 text-muted" aria-hidden /> Email</a>}
             {can('call.place') && l.status.isOpen && <Button variant="accent" onClick={() => void call()} loading={calling}><PhoneCall className="h-4 w-4" aria-hidden /> Call</Button>}
           </div>

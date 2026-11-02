@@ -4,6 +4,7 @@ import type { FastifyReply } from 'fastify';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import type { AuthContext } from '../auth/auth-context.js';
+import { DownloadAlerts } from '../notifications/download-alerts.service.js';
 import { CurrentAuth, RequirePermissions } from '../auth/decorators.js';
 import { AppError } from '../common/app-error.js';
 import { calendarDate } from '../common/dates.js';
@@ -22,7 +23,10 @@ class FormatDto extends createZodDto(z.object({ format: z.enum(['json', 'csv', '
 @ApiBearerAuth()
 @Controller()
 export class ReportsController {
-  constructor(private readonly reports: ReportsService) {}
+  constructor(
+    private readonly reports: ReportsService,
+    private readonly downloads: DownloadAlerts,
+  ) {}
 
   /** Lead counts, follow-ups due, today's calls and, for those who manage people, the team. */
   @RequirePermissions('dashboard.read')
@@ -84,6 +88,7 @@ export class ReportsController {
     if (format !== 'json' && !auth.permissions.has('report.export')) throw AppError.forbidden();
     const report = await pending;
     if (format === 'json') return report;
+    await this.downloads.record(auth, 'report_export', `a report (${format === 'csv' ? 'CSV' : 'Excel'})`, fileName(report, format));
     const csv = format === 'csv';
     reply
       .header('content-type', csv ? 'text/csv; charset=utf-8' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')

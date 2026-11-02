@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { sql } from 'kysely';
 import pg from 'pg';
 import { mapError } from '../src/common/error-mapping.js';
 import { loadEnv } from '../src/config/env.js';
@@ -100,6 +101,50 @@ describe('tenant isolation', () => {
       )
       .catch((e: unknown) => e);
     expect(error).toMatchObject({ code: '23503' });
+  });
+
+  // The search functions run with the owner's rights so they can use the trigram indexes. They must
+  // still never return another company's leads, nor anything when no company is set.
+  describe('lead search functions', () => {
+    const phoneA = '919777000111';
+    const phoneB = '919777000222';
+    beforeAll(async () => {
+      const src = async (tenant: string) => (await owner.query('SELECT id FROM lead_sources WHERE tenant_id = $1', [tenant])).rows[0].id as string;
+      const statusB = (await owner.query('SELECT id FROM lead_statuses WHERE tenant_id = $1', [tenantB])).rows[0].id as string;
+      await owner.query(
+        `INSERT INTO leads (tenant_id, lead_no, name, email, primary_phone, status_id, source_id) VALUES ($1, 1, $2, $3, $4, $5, $6)`,
+        [tenantA, `Zebra Searchable ${run}`, `zebra-${run}@example.com`, phoneA, statusA, await src(tenantA)],
+      );
+      await owner.query(
+        `INSERT INTO leads (tenant_id, lead_no, name, email, primary_phone, status_id, source_id) VALUES ($1, 1, $2, $3, $4, $5, $6)`,
+        [tenantB, `Zebra Other ${run}`, `zebra-b-${run}@example.com`, phoneB, statusB, await src(tenantB)],
+      );
+    });
+
+    const text = (tenant: string | null, pattern: string) => {
+      const query = sql<{ id: string }>`SELECT lead_ids_matching_text(${pattern}) AS id`;
+      return (tenant ? db.withTenant(tenant, (trx) => query.execute(trx)) : query.execute(db.unscoped())).then((r) => r.rows.length);
+    };
+    const phone = (tenant: string, pattern: string) =>
+      db.withTenant(tenant, (trx) => sql<{ id: string }>`SELECT lead_ids_matching_phone(${pattern}) AS id`.execute(trx)).then((r) => r.rows.length);
+
+    it('finds a lead of the current company by name and by email', async () => {
+      expect(await text(tenantA, `%Zebra Searchable ${run}%`)).toBe(1);
+      expect(await text(tenantA, `%zebra-${run}@%`)).toBe(1);
+    });
+
+    it('never returns the other company\'s leads for the same search', async () => {
+      // "Zebra" matches one lead in each company; each company sees only its own.
+      expect(await text(tenantA, `%${run}%`)).toBe(1);
+      expect(await text(tenantB, `%${run}%`)).toBe(1);
+      expect(await text(tenantA, `%Zebra Other ${run}%`)).toBe(0);
+      expect(await phone(tenantA, `%${phoneB}%`)).toBe(0);
+      expect(await phone(tenantB, `%${phoneB}%`)).toBe(1);
+    });
+
+    it('returns nothing when no company is set', async () => {
+      expect(await text(null, `%${run}%`)).toBe(0);
+    });
   });
 
   it('rejects a tenant id that is not a uuid before touching the database', async () => {

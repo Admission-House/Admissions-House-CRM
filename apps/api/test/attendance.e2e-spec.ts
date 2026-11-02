@@ -162,7 +162,8 @@ describe('checking out follows the last session', () => {
 // ------------------------------------------------------------- idle sweep
 
 describe('the idle sweep', () => {
-  beforeEach(() => useSettings());
+  // A shift that ends late in the day, so these tests do not depend on the time they are run.
+  beforeEach(() => useSettings({ end: '23:59' }));
 
   const notificationsAbout = async (name: string) =>
     (
@@ -539,5 +540,49 @@ describe('location log', () => {
     expect((await api.call('GET', '/attendance/location-log?from=2026-01-01&to=2026-12-31', admin)).json().error.code).toBe('RANGE_TOO_LONG');
     const lc = await checkIn('att12');
     expect((await api.call('GET', '/attendance/location-log', lc, undefined, OFFICE_IP)).statusCode).toBe(403);
+  });
+});
+
+// ------------------------------------------------------------ end of shift (ATT-6)
+
+describe('the end of the shift', () => {
+  const sessionEnded = async (name: string) =>
+    (await owner.query(`SELECT ended_at FROM user_sessions WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1`, [fx.user(name).id])).rows[0].ended_at;
+
+  it('checks out a day that is still open when the shift ends, at the moment it ended, and closes its breaks', async () => {
+    const token = await checkIn('att13');
+    const lunch = (await owner.query(`SELECT id FROM break_types WHERE tenant_id = $1 AND name = 'Lunch'`, [fx.tenantId])).rows[0].id as string;
+    expect((await api.call('POST', '/attendance/breaks/start', token, { breakTypeId: lunch }, OFFICE_IP)).statusCode).toBe(200);
+
+    // The shift ended at 00:01 today; the person arrived at midnight.
+    await useSettings({ start: '00:00', end: '00:01' });
+    await owner.query(`UPDATE attendance_records SET check_in_at = (work_date::timestamp AT TIME ZONE 'Asia/Kolkata') WHERE user_id = $1`, [fx.user('att13').id]);
+    await owner.query(`UPDATE break_logs SET started_at = (SELECT check_in_at FROM attendance_records WHERE user_id = $1) + interval '10 seconds' WHERE attendance_id IN (SELECT id FROM attendance_records WHERE user_id = $1)`, [fx.user('att13').id]);
+
+    const result = await sweep.sweepOnce();
+    expect(result.shiftEndClosed).toBeGreaterThanOrEqual(1);
+
+    const [day] = await records('att13');
+    expect(day.check_out_reason).toBe('shift_end');
+    const closedAt = (await owner.query(`SELECT to_char(check_out_at AT TIME ZONE 'Asia/Kolkata', 'HH24:MI') AS t FROM attendance_records WHERE user_id = $1`, [fx.user('att13').id])).rows[0].t;
+    expect(closedAt).toBe('00:01');
+    const open = (await owner.query(`SELECT count(*) FROM break_logs b JOIN attendance_records a ON a.id = b.attendance_id WHERE a.user_id = $1 AND b.ended_at IS NULL`, [fx.user('att13').id])).rows[0].count;
+    expect(Number(open)).toBe(0);
+    // Their session is not ended: they can keep working.
+    expect(await sessionEnded('att13')).toBeNull();
+  });
+
+  it('leaves alone someone who only arrived after the shift had ended', async () => {
+    await checkIn('att14');
+    await useSettings({ start: '00:00', end: '00:01' });
+    await sweep.sweepOnce();
+    expect((await records('att14'))[0].check_out_at).toBeNull();
+  });
+
+  it('does nothing before the shift ends', async () => {
+    await useSettings({ start: '00:00', end: '23:59' });
+    const before = (await records('att14'))[0];
+    await sweep.sweepOnce();
+    expect((await records('att14'))[0].check_out_at).toBe(before.check_out_at);
   });
 });

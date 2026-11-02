@@ -4,7 +4,7 @@ import type { FastifyRequest } from 'fastify';
 import { ZodValidationException } from 'nestjs-zod';
 import { z } from 'zod';
 import type { AuthContext } from '../auth/auth-context.js';
-import { CurrentAuth, RequirePermissions } from '../auth/decorators.js';
+import { CurrentAuth, Heavy, RequirePermissions } from '../auth/decorators.js';
 import { AppError } from '../common/app-error.js';
 import { ENV } from '../config/config.module.js';
 import type { Env } from '../config/env.js';
@@ -27,6 +27,7 @@ export class MasterImportController {
   /** What importing this file of colleges, courses and fees would add or change. Nothing is saved. */
   @RequirePermissions('master.manage')
   @ApiConsumes('multipart/form-data')
+  @Heavy()
   @Post('preview')
   @HttpCode(200)
   async preview(@CurrentAuth() auth: AuthContext, @Req() req: FastifyRequest) {
@@ -37,6 +38,7 @@ export class MasterImportController {
   /** Adds and updates colleges, courses and fees from the file, all together or not at all. */
   @RequirePermissions('master.manage')
   @ApiConsumes('multipart/form-data')
+  @Heavy()
   @Post()
   @HttpCode(200)
   async apply(@CurrentAuth() auth: AuthContext, @Req() req: FastifyRequest) {

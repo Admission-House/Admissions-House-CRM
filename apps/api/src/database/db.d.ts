@@ -600,6 +600,7 @@ export interface Notifications {
   created_at: Generated<Timestamp>;
   id: Generated<Int8>;
   payload: Generated<Json>;
+  pushed_at: Timestamp | null;
   read_at: Timestamp | null;
   tenant_id: string;
   type: string;
@@ -622,6 +623,17 @@ export interface Permissions {
   description: string;
   id: Generated<string>;
   module: string;
+}
+
+export interface PushTokens {
+  created_at: Generated<Timestamp>;
+  id: Generated<string>;
+  last_seen_at: Generated<Timestamp>;
+  platform: string;
+  session_id: string;
+  tenant_id: string;
+  token: string;
+  user_id: string;
 }
 
 export interface RolePermissions {
@@ -755,6 +767,7 @@ export interface Users {
   password_changed_at: Timestamp | null;
   password_hash: string;
   phone: string | null;
+  receives_auto_leads: Generated<boolean>;
   role_id: string;
   status: Generated<string>;
   tenant_id: string;
@@ -829,6 +842,7 @@ export interface DB {
   notifications: Notifications;
   password_reset_tokens: PasswordResetTokens;
   permissions: Permissions;
+  push_tokens: PushTokens;
   role_permissions: RolePermissions;
   roles: Roles;
   salary_import_batches: SalaryImportBatches;
