@@ -47,13 +47,13 @@ const shortDay = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString
 const talk = (s: number) => (s >= 3600 ? `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m` : `${Math.floor(s / 60)}m`);
 
 function Kpi({ icon: Icon, label, value, hint, href, tone = 'brand' }: { icon: LucideIcon; label: string; value: number | string; hint?: string; href?: string; tone?: 'brand' | 'bad' | 'warn' | 'info' }) {
-  const tones = { brand: 'bg-mint text-brand', bad: 'bg-bad-50 text-bad', warn: 'bg-warn-50 text-warn', info: 'bg-info-50 text-info' };
+  // A thin coloured edge marks what needs attention; nothing else is decoration.
+  const edge = { brand: 'border-l-brand-600', bad: 'border-l-bad', warn: 'border-l-warn', info: 'border-l-info' };
   const body = (
-    <div className="h-full rounded-[var(--radius-card)] border border-line bg-surface p-5 shadow-card transition hover:border-line-strong hover:shadow-md">
-      <span className={cx('grid h-11 w-11 place-items-center rounded-full', tones[tone])}><Icon className="h-5 w-5" aria-hidden /></span>
-      <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-muted">{label}</p>
-      <p className="tabular mt-1 text-[32px] font-bold leading-none text-ink">{value}</p>
-      {hint && <p className="mt-2 text-xs text-subtle">{hint}</p>}
+    <div className={cx('h-full rounded-[var(--radius-card)] border border-line border-l-[3px] bg-surface px-4 py-3.5 shadow-card transition-colors hover:border-line-strong', edge[tone])}>
+      <p className="flex items-center gap-1.5 text-[13px] font-medium text-muted"><Icon className="h-3.5 w-3.5 text-subtle" aria-hidden />{label}</p>
+      <p className="tabular mt-1.5 text-[26px] font-semibold leading-none text-ink">{value}</p>
+      {hint && <p className="mt-1.5 text-xs text-subtle">{hint}</p>}
     </div>
   );
   return href ? <Link href={href} className="block h-full">{body}</Link> : body;
@@ -94,7 +94,7 @@ export default function DashboardPage() {
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold tracking-tight text-ink">Dashboard</h1>
-          <p className="mt-1.5 text-[15px] text-muted">Central overview of leads, calls and team performance</p>
+          <p className="mt-1 text-sm text-muted">Central overview of leads, calls and team performance</p>
         </div>
         {reports && (
           <div className="flex flex-wrap items-center gap-2.5">
@@ -131,7 +131,7 @@ export default function DashboardPage() {
         {reports && (
           <ChartCard title="Leads received" caption="New leads per day in the chosen period" rows={trend} xKey="day" series={[{ key: 'leads', label: 'Leads' }]} initial="area" height={270} />
         )}
-        <Panel title="LEADS BY STATUS" className="[&>div:first-child>h2]:text-sm [&>div:first-child>h2]:font-bold [&>div:first-child>h2]:uppercase [&>div:first-child>h2]:tracking-wide">
+        <Panel title="Leads by status">
           <DonutChart data={d.byStatus.map((s, i) => ({ name: s.status, value: s.leads, color: colorAt(i) }))} centerLabel="leads" height={200} />
         </Panel>
 
@@ -151,7 +151,7 @@ export default function DashboardPage() {
           />
         )}
         {team && (
-          <Panel title="TEAM RIGHT NOW" className="[&>div:first-child>h2]:text-sm [&>div:first-child>h2]:font-bold [&>div:first-child>h2]:uppercase [&>div:first-child>h2]:tracking-wide">
+          <Panel title="Team right now">
             <DonutChart data={team} centerLabel="people" height={200} />
           </Panel>
         )}

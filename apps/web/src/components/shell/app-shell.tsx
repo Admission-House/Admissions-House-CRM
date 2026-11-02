@@ -45,10 +45,10 @@ function NavLink({ item, active, narrow, nested, onNavigate }: { item: NavItem; 
       title={narrow ? item.label : undefined}
       aria-current={active ? 'page' : undefined}
       className={cx(
-        'group flex items-center rounded-lg text-[15px] font-medium transition-colors',
-        nested ? 'h-10 gap-3 pl-[2.625rem] pr-3' : 'h-10 gap-3 px-3',
+        'group flex items-center rounded-md text-sm font-medium transition-colors',
+        nested ? 'h-9 gap-3 pl-[2.625rem] pr-3' : 'h-9 gap-3 px-3',
         narrow && 'justify-center px-0',
-        active ? 'bg-white/14 text-white shadow-[inset_3px_0_0_var(--color-teal)]' : 'text-mint/80 hover:bg-white/8 hover:text-white',
+        active ? 'bg-white/12 text-white shadow-[inset_2px_0_0_var(--color-teal)]' : 'text-mint/75 hover:bg-white/8 hover:text-white',
       )}
     >
       {!nested && <item.icon className={cx('h-[18px] w-[18px] shrink-0', active ? 'text-teal' : 'text-mint/65 group-hover:text-mint')} aria-hidden />}
@@ -69,8 +69,13 @@ function Sidebar({ narrow, onNavigate, onToggle }: { narrow: boolean; onNavigate
 
   return (
     <nav aria-label="Main" className="flex h-full flex-col bg-brand text-white">
-      <div className={cx('flex h-16 shrink-0 items-center border-b border-white/10', narrow ? 'justify-center' : 'justify-between pl-5 pr-3')}>
-        {!narrow && <p className="truncate text-[17px] font-bold tracking-tight">{me?.company.name}</p>}
+      <div className={cx('flex h-14 shrink-0 items-center border-b border-white/10', narrow ? 'justify-center' : 'justify-between pl-5 pr-3')}>
+        {!narrow && (
+          <div className="flex min-w-0 items-center gap-2.5">
+            <CompanyLogo size={28} />
+            <p className="truncate text-[15px] font-semibold tracking-tight">{me?.company.name}</p>
+          </div>
+        )}
         {onToggle && (
           <button onClick={onToggle} aria-label={narrow ? 'Expand menu' : 'Collapse menu'} className="grid h-8 w-8 place-items-center rounded-md text-mint/70 hover:bg-white/10 hover:text-white">
             {narrow ? <ChevronsRight className="h-4 w-4" /> : <ChevronsLeft className="h-4 w-4" />}
@@ -83,8 +88,7 @@ function Sidebar({ narrow, onNavigate, onToggle }: { narrow: boolean; onNavigate
       </div>
 
       <div className={cx('flex-1 overflow-y-auto py-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden', narrow ? 'px-2.5' : 'px-3')}>
-        {!narrow && <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-[0.1em] text-mint/50">Navigation</p>}
-        <ul className="space-y-1">
+        <ul className="space-y-0.5">
           {NAV.filter((i) => canAny(...i.any)).map((item) => {
             if (!item.children) return <li key={item.label}><NavLink item={item} active={isActive(item.href!)} narrow={narrow} onNavigate={onNavigate} /></li>;
 
@@ -96,7 +100,7 @@ function Sidebar({ narrow, onNavigate, onToggle }: { narrow: boolean; onNavigate
             if (narrow) {
               return (
                 <li key={item.label}>
-                  <Link href={kids[0]!.href!} onClick={onNavigate} title={item.label} className={cx('grid h-10 place-items-center rounded-lg transition-colors', holdsCurrent ? 'bg-white/14 shadow-[inset_3px_0_0_var(--color-teal)]' : 'hover:bg-white/8')}>
+                  <Link href={kids[0]!.href!} onClick={onNavigate} title={item.label} className={cx('grid h-9 place-items-center rounded-md transition-colors', holdsCurrent ? 'bg-white/12 shadow-[inset_2px_0_0_var(--color-teal)]' : 'hover:bg-white/8')}>
                     <item.icon className={cx('h-[18px] w-[18px]', holdsCurrent ? 'text-teal' : 'text-mint/65')} aria-hidden />
                   </Link>
                 </li>
@@ -108,14 +112,14 @@ function Sidebar({ narrow, onNavigate, onToggle }: { narrow: boolean; onNavigate
                   type="button"
                   onClick={() => setPick({ at: current, label: open ? null : item.label })}
                   aria-expanded={open}
-                  className={cx('group flex h-10 w-full items-center gap-3 rounded-lg px-3 text-[15px] font-medium transition-colors', holdsCurrent && !open ? 'bg-white/10 text-white' : 'text-mint/80 hover:bg-white/8 hover:text-white')}
+                  className={cx('group flex h-9 w-full items-center gap-3 rounded-md px-3 text-sm font-medium transition-colors', holdsCurrent && !open ? 'bg-white/10 text-white' : 'text-mint/75 hover:bg-white/8 hover:text-white')}
                 >
                   <item.icon className={cx('h-[18px] w-[18px] shrink-0', holdsCurrent ? 'text-teal' : 'text-mint/65 group-hover:text-mint')} aria-hidden />
                   <span className="flex-1 truncate text-left">{item.label}</span>
                   <ChevronDown className={cx('h-4 w-4 shrink-0 text-mint/60 transition-transform', open && 'rotate-180')} aria-hidden />
                 </button>
                 {open && (
-                  <ul className="mt-1 space-y-1">
+                  <ul className="mt-0.5 space-y-0.5">
                     {kids.map((c) => <li key={c.href}><NavLink item={c} nested active={isActive(c.href!)} narrow={false} onNavigate={onNavigate} /></li>)}
                   </ul>
                 )}
@@ -165,9 +169,9 @@ function UserMenu() {
   return (
     <div ref={ref} className="relative">
       <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-haspopup="menu" className="flex items-center gap-2.5 rounded-lg py-1 pl-1 pr-2 hover:bg-head">
-        <Avatar name={me.user.name} size={34} />
+        <Avatar name={me.user.name} size={32} />
         <span className="hidden text-left leading-tight sm:block">
-          <span className="block text-[15px] font-semibold text-ink">{me.user.name}</span>
+          <span className="block text-sm font-semibold text-ink">{me.user.name}</span>
           <span className="block text-xs capitalize text-muted">{me.user.role.key?.replace(/_/g, ' ')}</span>
         </span>
         <ChevronDown className="h-4 w-4 text-subtle" aria-hidden />
@@ -226,14 +230,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       )}
 
       <div className="flex min-w-0 flex-col">
-        <header className="sticky top-0 z-20 grid h-16 grid-cols-[1fr_auto_1fr] items-center gap-3 border-b border-line bg-surface px-3 sm:px-6">
+        <header className="sticky top-0 z-20 flex h-14 items-center justify-between gap-3 border-b border-line bg-surface px-3 sm:px-6">
           <div className="flex items-center gap-2">
             <button type="button" aria-label="Open menu" onClick={() => setDrawer(true)} className="grid h-9 w-9 place-items-center rounded-md text-muted hover:bg-head lg:hidden"><Menu className="h-5 w-5" /></button>
             <Clock />
-          </div>
-          <div className="flex items-center gap-3">
-            <CompanyLogo size={36} />
-            <span className="hidden max-w-[40vw] truncate text-[18px] font-semibold tracking-tight text-brand sm:block">{me.company.productName}</span>
           </div>
           <div className="flex items-center justify-end gap-1.5">
             <WorkStatus />

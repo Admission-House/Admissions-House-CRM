@@ -104,7 +104,7 @@ export function Panel({ title, actions, children, className, flush }: { title?: 
 
 /** The tinted band that starts a section of a long form. */
 export function SectionBand({ children }: { children: ReactNode }) {
-  return <h3 className="border-y border-teal-600/15 bg-mint-soft px-4 py-1.5 text-xs font-semibold uppercase tracking-wider text-brand-600">{children}</h3>;
+  return <h3 className="border-y border-line bg-head px-4 py-2 text-[13px] font-semibold text-ink">{children}</h3>;
 }
 
 type Tone = 'neutral' | 'ok' | 'warn' | 'bad' | 'info' | 'brand';

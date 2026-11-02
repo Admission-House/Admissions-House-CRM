@@ -78,7 +78,7 @@ export function BarsChart({
     <div style={{ height: h }} role="img" aria-label={`Bar chart of ${series.map((s) => s.label).join(', ')} by ${xKey}`}>
       <ResponsiveContainer>
         <BarChart data={data} layout={horizontal ? 'vertical' : 'horizontal'} margin={{ top: 8, right: 12, left: horizontal ? 8 : -8, bottom: 0 }} barCategoryGap={horizontal ? 8 : '24%'}>
-          <CartesianGrid stroke={GRID} vertical={horizontal} horizontal={!horizontal} />
+          <CartesianGrid stroke={GRID} vertical={!!horizontal} horizontal={!horizontal} />
           {horizontal ? (
             <>
               <XAxis type="number" tick={AXIS} axisLine={false} tickLine={false} allowDecimals={false} />
@@ -157,20 +157,20 @@ export function ChartCard({
 }) {
   const [kind, setKind] = useState<Kind>(initial);
   return (
-    <section className={cx('rounded-[var(--radius-card)] border border-line bg-surface p-5 shadow-card', className)}>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <h2 className="text-sm font-bold uppercase tracking-wide text-ink">{title}</h2>
+    <section className={cx('rounded-[var(--radius-card)] border border-line bg-surface shadow-card', className)}>
+      <div className="flex min-h-11 flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-2">
+        <h2 className="text-sm font-semibold text-ink">{title}</h2>
         <div className="flex items-center gap-2">
           {actions}
           {kinds.length > 1 && (
-            <div role="group" aria-label={`${title} view`} className="flex rounded-lg border border-line bg-head p-0.5">
+            <div role="group" aria-label={`${title} view`} className="flex rounded-md border border-line bg-head p-0.5">
               {kinds.map((k) => (
                 <button
                   key={k}
                   type="button"
                   aria-pressed={kind === k}
                   onClick={() => setKind(k)}
-                  className={cx('rounded-md px-3 py-1 text-xs font-semibold uppercase tracking-wide transition-colors', kind === k ? 'bg-brand text-white' : 'text-muted hover:text-ink')}
+                  className={cx('rounded px-2.5 py-1 text-xs font-medium capitalize transition-colors', kind === k ? 'bg-surface text-ink shadow-[0_1px_2px_rgb(20_38_43/0.12)]' : 'text-muted hover:text-ink')}
                 >
                   {KIND_LABEL[k]}
                 </button>
@@ -179,11 +179,12 @@ export function ChartCard({
           )}
         </div>
       </div>
-      {caption && <p className="mt-1.5 text-sm text-muted">{caption}</p>}
+      <div className="p-4">
+      {caption && <p className="text-[13px] text-muted">{caption}</p>}
       {series.length > 1 && (
-        <ul className="mt-4 flex flex-wrap justify-end gap-x-5 gap-y-1">
+        <ul className="mt-3 flex flex-wrap justify-end gap-x-5 gap-y-1">
           {series.map((s, i) => (
-            <li key={s.key} className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted">
+            <li key={s.key} className="flex items-center gap-1.5 text-xs font-medium text-muted">
               <span className="h-2 w-2 rounded-full" style={{ background: s.color ?? colorAt(i) }} aria-hidden />
               {s.label}
             </li>
@@ -209,6 +210,7 @@ export function ChartCard({
             </div>
           )
         )}
+      </div>
       </div>
     </section>
   );
