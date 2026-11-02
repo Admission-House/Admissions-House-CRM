@@ -13,6 +13,7 @@
 export class TtlCache<T> {
   private readonly entries = new Map<string, { value: T; expires: number }>();
   private readonly pending = new Map<string, Promise<T>>();
+  private generation = 0;
 
   constructor(
     private readonly ttlMs: number,
@@ -26,21 +27,32 @@ export class TtlCache<T> {
     const running = this.pending.get(key);
     if (running) return running;
 
+    const generation = this.generation;
     const started = compute().then(
       (value) => {
-        this.pending.delete(key);
-        // Spread the expiry a little so entries made together do not all expire together.
-        this.entries.set(key, { value, expires: now + this.ttlMs + Math.floor(Math.random() * this.ttlMs * 0.2) });
-        if (this.entries.size > this.maxKeys) this.prune(now);
+        if (this.pending.get(key) === started) this.pending.delete(key);
+        // An answer worked out before a change was reported is already out of date: use it once, do not keep it.
+        if (generation === this.generation) {
+          // Spread the expiry a little so entries made together do not all expire together.
+          this.entries.set(key, { value, expires: now + this.ttlMs + Math.floor(Math.random() * this.ttlMs * 0.2) });
+          if (this.entries.size > this.maxKeys) this.prune(now);
+        }
         return value;
       },
       (err: unknown) => {
-        this.pending.delete(key);
+        if (this.pending.get(key) === started) this.pending.delete(key);
         throw err;
       },
     );
     this.pending.set(key, started);
     return started;
+  }
+
+  /** Forgets every answer whose key starts with `prefix` (an empty prefix forgets all of them). */
+  invalidate(prefix: string): void {
+    this.generation += 1;
+    for (const key of [...this.entries.keys()]) if (key.startsWith(prefix)) this.entries.delete(key);
+    for (const key of [...this.pending.keys()]) if (key.startsWith(prefix)) this.pending.delete(key);
   }
 
   private prune(now: number): void {

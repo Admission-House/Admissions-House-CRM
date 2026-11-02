@@ -17,6 +17,7 @@ import { Assignees } from './assignees.js';
 import { ExportRow, MAX_EXPORT_ROWS, toCsv, toXlsx } from './lead-export.js';
 import { FollowUpWriter } from './followup-writer.js';
 import { LeadWriter } from './lead-writer.js';
+import { LiveBus } from '../realtime/live-bus.js';
 import {
   assertFollowUpForStatus,
   assertFollowUpTime,
@@ -130,8 +131,14 @@ export class LeadsService {
     private readonly assignees: Assignees,
     private readonly audit: AuditService,
     @Inject(ENV) env: Env,
+    live: LiveBus,
   ) {
     this.queueCache = env.QUEUE_COUNT_CACHE_SEC > 0 ? new TtlCache<Awaited<ReturnType<LeadsService['countQueues']>>>(env.QUEUE_COUNT_CACHE_SEC * 1000) : undefined;
+    // A lead changed (on this server or another): the counts are out of date now, not in a few seconds.
+    live.on((e) => {
+      if (e.topic === 'lead') this.queueCache?.invalidate(`${e.t}|`);
+      else if (e.topic === 'resync') this.queueCache?.invalidate('');
+    });
   }
 
   private readonly queueCache: TtlCache<Awaited<ReturnType<LeadsService['countQueues']>>> | undefined;

@@ -338,7 +338,11 @@ export class AuthService {
   // ---------------------------------------------------- every authenticated request
 
   /** Checks the access token and the session behind it. Called by the AuthGuard on every request. */
-  async authenticate(accessToken: string, meta: RequestMeta): Promise<AuthContext> {
+  /**
+   * Checks a token and its session. `touch: false` does not count the call as activity, for a live
+   * connection that must not keep an idle session open.
+   */
+  async authenticate(accessToken: string, meta: RequestMeta, options: { touch?: boolean } = {}): Promise<AuthContext> {
     const claims = await this.tokens.verifyAccess(accessToken);
     return unwrap(
       await this.db.withTenant(claims.tenantId, async (trx): Promise<Outcome<AuthContext>> => {
@@ -348,7 +352,7 @@ export class AuthService {
         const stopped = await this.sessionProblem(trx, { ...row, id: row.session_id });
         if (stopped) return fail(stopped);
 
-        await this.repo.touchSession(trx, row.session_id);
+        if (options.touch !== false) await this.repo.touchSession(trx, row.session_id);
         return ok({
           userId: row.user_id,
           tenantId: claims.tenantId,

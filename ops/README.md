@@ -76,6 +76,17 @@ Then run the migration job once (it recreates the restricted role and its rights
   same id, so a complaint can be traced to a log line.
 * Failed lead deliveries and call events are kept in `inbound_events` with status `failed` and the
   reason; Integrations in the admin area lists them and can retry.
+* **Live updates (WebSocket).** Screens (the bell, the team view, the dashboard, the queue counts) change at
+  once instead of waiting for their timer. The browser connects to `wss://<web address>/api/v1/ws`, so
+  **the reverse proxy must pass WebSocket upgrades** for `/api/v1/*` to the API (Caddy and most cloud load
+  balancers do this by default; nginx needs `proxy_http_version 1.1; proxy_set_header Upgrade $http_upgrade;
+  proxy_set_header Connection "upgrade";` and a read timeout above 60 s). If the proxy does not, nothing
+  breaks: screens simply keep refreshing on their timers. The database tells the API servers what changed
+  through `LISTEN/NOTIFY` (migration 030), so several API containers need no broker. What is sent is only
+  a hint ("a notification came", "the team changed"); the browser then asks the normal API for the numbers,
+  so no data travels on the socket. `REALTIME_ENABLED=false` switches it off; `REALTIME_RECHECK_SEC`
+  (default 60) is how soon a signed-out person's connection is closed. On a developer machine the page
+  (port 3000) connects straight to the API (port 3001); set `NEXT_PUBLIC_WS_URL` to override.
 * **Metrics.** Set `METRICS_TOKEN` (16 or more random characters) and a monitoring tool (Prometheus,
   Grafana Cloud, Datadog, and so on) can read `GET /api/v1/metrics` with `Authorization: Bearer <token>`.
   Without the token the address does not exist. Requests are counted by route pattern

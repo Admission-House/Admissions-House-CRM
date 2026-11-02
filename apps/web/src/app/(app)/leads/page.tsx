@@ -9,6 +9,7 @@ import { Avatar, Badge, Button, Card, Empty, Input, Notice, PageHeader, Select, 
 import { api, ApiError, download } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { fmtDate, fmtPhone, fromNow } from '@/lib/format';
+import { useRealtime } from '@/lib/realtime';
 import type { LeadListItem, Page, Queues, SourceOption, StatusOption, UserOption } from '@/lib/types';
 import { useApi } from '@/lib/use-api';
 
@@ -105,6 +106,7 @@ function Leads() {
   const [showFilters, setShowFilters] = useState(false);
 
   const queues = useApi<Queues>('/leads/queues');
+  useRealtime(['lead'], queues.reload, 5_000);
   const statuses = useApi<StatusOption[]>('/lead-statuses');
   const sources = useApi<SourceOption[]>('/lead-sources');
   const people = useApi<Page<UserOption>>(can('user.read') ? '/users' : null, { limit: 100, status: 'active' });

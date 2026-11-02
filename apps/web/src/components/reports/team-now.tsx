@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { Badge, Card, Empty, Notice, Spinner } from '@/components/ui';
 import { fromNow } from '@/lib/format';
+import { useRealtime, useRealtimeStatus } from '@/lib/realtime';
 import { useApi } from '@/lib/use-api';
 
 interface Member { userId: string; name: string; role: string; status: string; lastActive: string | null }
@@ -22,10 +23,13 @@ export function TeamNow() {
   const team = useApi<Report>('/reports/team-status');
   const reload = team.reload;
 
+  // Changes show at once while the live connection is up. The timer also catches people turning idle, which is a matter of time, not an event.
+  const live = useRealtimeStatus();
+  useRealtime(['team'], reload);
   useEffect(() => {
-    const t = setInterval(reload, 30_000);
+    const t = setInterval(reload, live ? 60_000 : 30_000);
     return () => clearInterval(t);
-  }, [reload]);
+  }, [reload, live]);
 
   if (team.error) return <Notice tone="bad">{team.error.message}</Notice>;
   if (!team.data) return <Spinner />;

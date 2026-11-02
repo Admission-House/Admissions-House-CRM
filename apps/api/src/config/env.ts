@@ -77,6 +77,11 @@ const schema = z.object({
    */
   BLOCK_ROOTED_DEVICES: z.enum(['true', 'false']).default('true').transform((v) => v === 'true'),
 
+  /** Live updates over a WebSocket (/api/v1/ws). Without them screens still refresh by themselves, a little later. */
+  REALTIME_ENABLED: z.enum(['true', 'false']).default('true').transform((v) => v === 'true'),
+  /** How often connections of sessions that have ended are closed, in seconds. */
+  REALTIME_RECHECK_SEC: z.coerce.number().int().min(1).max(600).default(60),
+
   /** How often new notifications are sent to phones as alerts, in seconds. 0 turns phone alerts off. */
   PUSH_INTERVAL_SEC: z.coerce.number().int().min(0).max(3600).default(10),
   /** Who delivers the alerts. "expo" uses Expo's push service; "off" sends nothing. */

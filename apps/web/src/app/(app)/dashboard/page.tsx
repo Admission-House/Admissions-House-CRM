@@ -6,6 +6,7 @@ import { useMemo, useState } from 'react';
 import { ChartCard, DonutChart, colorAt } from '@/components/charts';
 import { Button, Input, Notice, Panel, Select, Spinner, cx } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
+import { useRealtime } from '@/lib/realtime';
 import { useApi } from '@/lib/use-api';
 
 interface Dashboard {
@@ -73,6 +74,8 @@ export default function DashboardPage() {
   }, [period, from, to]);
 
   const dash = useApi<Dashboard>('/dashboard');
+  // The figures follow the team and the leads as they change, at most every few seconds.
+  useRealtime(['team', 'lead'], dash.reload, 5_000);
   const reports = can('report.read');
   const range = reports && dates ? dates : undefined;
   const perDay = useApi<Report<{ name: string; leads: number }>>(range ? '/reports/leads' : null, { groupBy: 'day', ...range });

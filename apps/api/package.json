@@ -46,6 +46,7 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
     "write-excel-file": "^4.1.1",
+    "ws": "^8.22.1",
     "zod": "^4.6.7"
   },
   "devDependencies": {
@@ -58,6 +59,7 @@
     "@types/pdfkit": "^0.17.7",
     "@types/pg": "^8.23.1",
     "@types/supertest": "^7.2.1",
+    "@types/ws": "^8.18.2",
     "@vitest/coverage-v8": "^5.0.5",
     "autocannon": "^8.0.0",
     "eslint": "^10.13.0",

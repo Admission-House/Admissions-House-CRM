@@ -32,6 +32,7 @@ import { MastersModule } from './masters/masters.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
 import { MetricsModule } from './metrics/metrics.module.js';
 import { PushModule } from './push/push.module.js';
+import { RealtimeModule } from './realtime/realtime.module.js';
 import { RolesModule } from './roles/roles.module.js';
 import { StorageModule } from './storage/storage.module.js';
 import { UsersModule } from './users/users.module.js';
@@ -74,6 +75,7 @@ export const safeUrl = (url: string): string => url.replace(/(\/telephony\/hooks
     NotificationsModule,
     PushModule,
     MetricsModule,
+    RealtimeModule,
     LeaveModule,
     IntakeModule,
     IntegrationsModule,

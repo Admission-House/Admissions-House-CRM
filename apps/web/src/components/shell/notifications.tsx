@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Spinner, cx } from '@/components/ui';
 import { api } from '@/lib/api';
 import { fromNow } from '@/lib/format';
+import { useRealtime, useRealtimeStatus } from '@/lib/realtime';
 import type { Page } from '@/lib/types';
 import { useApi } from '@/lib/use-api';
 
@@ -56,11 +57,13 @@ export function NotificationBell() {
   const box = useRef<HTMLDivElement>(null);
   const unread = count.data?.unread ?? 0;
 
-  // A new notification is noticed within a minute without the person doing anything.
+  // A new notification shows at once while the live connection is up; the timer is the fallback when it is not.
+  const live = useRealtimeStatus();
+  useRealtime(['notification'], () => { count.reload(); list.reload(); }, 1_000);
   useEffect(() => {
-    const id = setInterval(count.reload, 60_000);
+    const id = setInterval(count.reload, live ? 300_000 : 60_000);
     return () => clearInterval(id);
-  }, [count.reload]);
+  }, [count.reload, live]);
 
   useEffect(() => {
     if (!open) return;

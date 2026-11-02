@@ -32,7 +32,7 @@ class TestRoutesController {
 
 export async function startApp(overrides: Partial<NodeJS.ProcessEnv> = {}): Promise<NestFastifyApplication> {
   // Tests drive one user hard; the per-user limits are exercised on purpose in rate-limit.e2e-spec.ts.
-  const env: Env = loadEnv({ ...process.env, USER_RATE_PER_MIN: '100000', HEAVY_RATE_PER_MIN: '10000', QUEUE_COUNT_CACHE_SEC: '0', ...overrides });
+  const env: Env = loadEnv({ ...process.env, REALTIME_ENABLED: 'false', USER_RATE_PER_MIN: '100000', HEAVY_RATE_PER_MIN: '10000', QUEUE_COUNT_CACHE_SEC: '0', ...overrides });
   const moduleRef = await Test.createTestingModule({
     imports: [AppModule],
     controllers: [TestRoutesController],

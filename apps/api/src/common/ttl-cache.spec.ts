@@ -44,3 +44,39 @@ describe('TtlCache', () => {
     expect(compute.mock.calls.length).toBeLessThanOrEqual(1);
   });
 });
+
+describe('TtlCache.invalidate', () => {
+  it('forgets only the answers of one company, so the next ask is worked out again', async () => {
+    const cache = new TtlCache<number>(60_000);
+    let n = 0;
+    const next = async () => ++n;
+    expect(await cache.get('c1|a', next, 0)).toBe(1);
+    expect(await cache.get('c2|a', next, 0)).toBe(2);
+    cache.invalidate('c1|');
+    expect(await cache.get('c1|a', next, 1)).toBe(3);
+    expect(await cache.get('c2|a', next, 1)).toBe(2);
+  });
+
+  it('forgets everything for an empty prefix', async () => {
+    const cache = new TtlCache<number>(60_000);
+    let n = 0;
+    const next = async () => ++n;
+    await cache.get('a', next, 0);
+    await cache.get('b', next, 0);
+    cache.invalidate('');
+    expect(await cache.get('a', next, 1)).toBe(3);
+    expect(await cache.get('b', next, 1)).toBe(4);
+  });
+
+  it('does not keep an answer that was being worked out when the change was reported', async () => {
+    const cache = new TtlCache<number>(60_000);
+    let release: () => void = () => undefined;
+    const stale = new Promise<number>((resolve) => { release = () => resolve(1); });
+    const first = cache.get('c1|a', () => stale, 0);
+    cache.invalidate('c1|');
+    release();
+    expect(await first).toBe(1); // the one who asked still gets it
+    // ...but it was not kept, so the next ask is worked out fresh.
+    expect(await cache.get('c1|a', async () => 2, 1)).toBe(2);
+  });
+});

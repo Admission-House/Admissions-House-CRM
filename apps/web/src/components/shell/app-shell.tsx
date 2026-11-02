@@ -6,6 +6,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Avatar, Spinner, cx } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
+import { RealtimeProvider } from '@/lib/realtime';
 import { NAV, type NavItem } from '@/lib/nav';
 import { themeStyle } from '@/lib/brand-theme';
 import { CompanyLogo } from '@/components/company-logo';
@@ -214,6 +215,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
+    <RealtimeProvider>
     <div style={themeStyle(me.company)} className={cx('min-h-dvh lg:grid', narrow ? 'lg:grid-cols-[4.5rem_minmax(0,1fr)]' : 'lg:grid-cols-[16rem_minmax(0,1fr)]')}>
       <aside className="sticky top-0 z-30 hidden h-dvh lg:block">
         <Suspense><Sidebar narrow={narrow} onToggle={() => setCollapsed(!narrow)} /></Suspense>
@@ -249,5 +251,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </div>
 
     </div>
+    </RealtimeProvider>
   );
 }
