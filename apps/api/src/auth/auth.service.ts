@@ -160,6 +160,12 @@ export class AuthService {
         const device = await this.checkDevice(trx, tenant.id, user.id, input);
         if (!device.ok) {
           await attempt(user.id, 'device_blocked');
+          if (device.error.code === 'DEVICE_ROOTED') {
+            await this.notifications.notifySuperAdmins(trx, {
+              tenantId: tenant.id, quietMinutes: 10,
+              payload: { event: 'login_refused', userId: user.id, userName: user.name, reason: 'device_rooted', ip },
+            });
+          }
           return fail(device.error);
         }
         deviceId = device.value;
@@ -236,6 +242,12 @@ export class AuthService {
   ): Promise<Outcome<string>> {
     if (!input.device) {
       return fail(AppError.badRequest('DEVICE_REQUIRED', 'The app must identify this phone to sign in'));
+    }
+    // A rooted or jailbroken phone can hide a fake location, so it is refused before it is even registered.
+    if (input.device.rooted && this.env.BLOCK_ROOTED_DEVICES) {
+      return fail(
+        new AppError('DEVICE_ROOTED', 'This phone has been modified (rooted or jailbroken), so it cannot be used to sign in. Use another phone or ask your Admin.', 403),
+      );
     }
     const device = await this.repo.findOrCreateDevice(trx, {
       tenantId,

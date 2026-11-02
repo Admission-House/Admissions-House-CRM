@@ -1,4 +1,5 @@
 import * as Application from 'expo-application';
+import * as Device from 'expo-device';
 import * as Location from 'expo-location';
 import * as SecureStore from 'expo-secure-store';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
@@ -29,6 +30,18 @@ export const lastTenant = async (): Promise<string> => config.companySlug || (aw
 async function deviceFingerprint(): Promise<string> {
   const id = Platform.OS === 'android' ? Application.getAndroidId() : await Application.getIosIdForVendorAsync();
   return (id && id.length >= 8 ? id : `unknown-${Application.applicationId ?? 'app'}-device`).slice(0, 128);
+}
+
+/**
+ * Whether the phone looks rooted (Android) or jailbroken (iOS). The check is the phone library's own
+ * and is not fully reliable. If it cannot run, the phone is treated as normal rather than blocked.
+ */
+async function isRooted(): Promise<boolean> {
+  try {
+    return await Device.isRootedExperimentalAsync();
+  } catch {
+    return false;
+  }
 }
 
 /** The phone's position for the office check. Resolves to nothing if the person says no. */
@@ -63,7 +76,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, [load]);
 
   const login: Session['login'] = useCallback(async (input) => {
-    const device = { fingerprint: await deviceFingerprint(), platform: Platform.OS === 'ios' ? ('ios' as const) : ('android' as const), label: Application.applicationName ?? undefined };
+    const device = { fingerprint: await deviceFingerprint(), platform: Platform.OS === 'ios' ? ('ios' as const) : ('android' as const), label: Application.applicationName ?? undefined, rooted: await isRooted() };
     const attempt = (location?: Awaited<ReturnType<typeof position>>) =>
       api<{ accessToken: string; refreshToken: string; mustChangePassword: boolean }>('/auth/login', {
         method: 'POST', anonymous: true, body: { ...input, clientType: 'mobile', device, ...(location && { location }) },

@@ -15,6 +15,8 @@ const deviceSchema = z.object({
   fingerprint: z.string().min(8).max(128),
   platform: z.enum(['android', 'ios']),
   label: z.string().trim().max(80).optional(),
+  /** Set by the mobile app when the phone looks rooted (Android) or jailbroken (iOS). The phone's own check is not fully reliable. */
+  rooted: z.boolean().optional(),
 });
 
 export const loginSchema = z.object({

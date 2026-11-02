@@ -56,7 +56,7 @@ export function pushText(payload: Record<string, unknown>): PushText | null {
         data: { screen: 'leave' },
       };
     case 'login_refused':
-      return { title: `${who} was refused at sign-in`, body: `Not at the office (${REFUSED_REASON[String(payload.reason)] ?? text(payload.reason, 'outside the office')})`, data: {} };
+      return { title: `${who} was refused at sign-in`, body: payload.reason === 'device_rooted' ? 'This phone is rooted or jailbroken' : `Not at the office (${REFUSED_REASON[String(payload.reason)] ?? text(payload.reason, 'outside the office')})`, data: {} };
     case 'forced_logout':
       return { title: `${who} was signed out by an admin`, data: {} };
     case 'attendance_exception':

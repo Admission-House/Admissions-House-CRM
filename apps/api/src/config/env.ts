@@ -70,6 +70,13 @@ const schema = z.object({
   FOLLOWUP_REMINDER_INTERVAL_SEC: z.coerce.number().int().min(0).max(3600).default(60),
   IMPORT_INTERVAL_SEC: z.coerce.number().int().min(0).max(3600).default(30),
 
+  /**
+   * Refuse mobile sign-in by an Admin or Counsellor on a rooted (Android) or jailbroken (iOS) phone.
+   * The phone's own check is not fully reliable and can wrongly flag a normal phone, so a company can
+   * switch this off with BLOCK_ROOTED_DEVICES=false if that happens.
+   */
+  BLOCK_ROOTED_DEVICES: z.enum(['true', 'false']).default('true').transform((v) => v === 'true'),
+
   /** How often new notifications are sent to phones as alerts, in seconds. 0 turns phone alerts off. */
   PUSH_INTERVAL_SEC: z.coerce.number().int().min(0).max(3600).default(10),
   /** Who delivers the alerts. "expo" uses Expo's push service; "off" sends nothing. */

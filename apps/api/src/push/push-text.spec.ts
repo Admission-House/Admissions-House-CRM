@@ -32,6 +32,7 @@ describe('pushText', () => {
 
   it('words security alerts, naming the reason a sign-in was refused', () => {
     expect(pushText({ event: 'login_refused', userName: 'Ravi', reason: 'gps_far' })).toEqual({ title: 'Ravi was refused at sign-in', body: 'Not at the office (too far from the office)', data: {} });
+    expect(pushText({ event: 'login_refused', userName: 'Ravi', reason: 'device_rooted' })).toEqual({ title: 'Ravi was refused at sign-in', body: 'This phone is rooted or jailbroken', data: {} });
     expect(pushText({ event: 'forced_logout', userName: 'Ravi' })!.title).toBe('Ravi was signed out by an admin');
   });
 

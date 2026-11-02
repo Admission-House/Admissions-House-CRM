@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import pg from 'pg';
 import { TokenService } from '../src/auth/token.service.js';
+import { ENV } from '../src/config/config.module.js';
 import { loadEnv } from '../src/config/env.js';
 import { startApp } from './helpers/app.js';
 import { createFixture, Fixture, OFFICE, OFFICE_IP, OUTSIDE_IP, PASSWORD } from './helpers/fixtures.js';
@@ -214,6 +215,49 @@ describe('mobile app sign-in', () => {
     expect(rotated.statusCode).toBe(200);
     expect(rotated.json().refreshToken).toMatch(/^v1\./);
     expect(rotated.json().refreshToken).not.toBe(res.json().refreshToken);
+  });
+
+  describe('a rooted or jailbroken phone', () => {
+    const rootedPhone = { fingerprint: 'rooted-phone-fingerprint-1', platform: 'android', label: 'Rooted phone', rooted: true };
+    const approve = (fingerprint: string) =>
+      owner.query(`UPDATE user_devices SET approved_by = $2, approved_at = now() WHERE user_id = $1 AND device_fingerprint = $3`, [fx.user('mobile').id, fx.user('admin').id, fingerprint]);
+
+    it('is refused for an office person, is not registered, is logged and the Super Admins are told', async () => {
+      const res = await mobile({ device: rootedPhone });
+      expect(res.statusCode).toBe(403);
+      expect(res.json().error.code).toBe('DEVICE_ROOTED');
+
+      const registered = await owner.query(`SELECT 1 FROM user_devices WHERE user_id = $1 AND device_fingerprint = $2`, [fx.user('mobile').id, rootedPhone.fingerprint]);
+      expect(registered.rowCount).toBe(0);
+      const attempts = await owner.query(`SELECT result FROM login_attempts WHERE user_id = $1 ORDER BY id DESC LIMIT 1`, [fx.user('mobile').id]);
+      expect(attempts.rows[0].result).toBe('device_blocked');
+      const told = await owner.query(
+        `SELECT 1 FROM notifications WHERE tenant_id = $1 AND payload->>'event' = 'login_refused' AND payload->>'reason' = 'device_rooted' AND payload->>'userId' = $2`,
+        [fx.tenantId, fx.user('mobile').id],
+      );
+      expect(told.rowCount).toBeGreaterThan(0);
+    });
+
+    it('is let in when the switch is off, and a phone that is not rooted is never affected', async () => {
+      const env = app.get<{ BLOCK_ROOTED_DEVICES: boolean }>(ENV);
+      env.BLOCK_ROOTED_DEVICES = false;
+      try {
+        await mobile({ device: rootedPhone }); // registers it, waiting for approval
+        await approve(rootedPhone.fingerprint);
+        expect((await mobile({ device: rootedPhone })).statusCode).toBe(200);
+      } finally {
+        env.BLOCK_ROOTED_DEVICES = true;
+      }
+      const plain = { ...rootedPhone, fingerprint: 'plain-phone-fingerprint-1', rooted: false };
+      await mobile({ device: plain });
+      await approve(plain.fingerprint);
+      expect((await mobile({ device: plain })).statusCode).toBe(200);
+    });
+
+    it('does not stop a Super Admin, who is not tied to the office', async () => {
+      const res = await login({ ...credentials('super'), clientType: 'mobile', device: rootedPhone });
+      expect(res.statusCode, res.body).toBe(200);
+    });
   });
 });
 
