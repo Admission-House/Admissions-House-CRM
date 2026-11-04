@@ -58,6 +58,26 @@ services:
     ports:
       - '127.0.0.1:3001:3001' # put a reverse proxy with HTTPS in front; do not expose this port directly
 
+  # The web CRM. The browser talks to this container; it passes /api/v1 on to the API.
+  # Put the reverse proxy in front of both: send /api/v1/ws (WebSocket) and /api/v1 to the API
+  # (port 3001) and everything else to the web app (port 3000), under one HTTPS address.
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      args:
+        API_URL: http://api:3001
+        NEXT_PUBLIC_PRODUCT_NAME: ${NEXT_PUBLIC_PRODUCT_NAME:-Admissions House CRM}
+        NEXT_PUBLIC_LOGIN_EYEBROW: ${NEXT_PUBLIC_LOGIN_EYEBROW:-}
+        NEXT_PUBLIC_LOGIN_TITLE: ${NEXT_PUBLIC_LOGIN_TITLE:-}
+        NEXT_PUBLIC_LOGIN_TAGLINE: ${NEXT_PUBLIC_LOGIN_TAGLINE:-}
+        NEXT_PUBLIC_SUPPORT_EMAIL: ${NEXT_PUBLIC_SUPPORT_EMAIL:-}
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - '127.0.0.1:3000:3000'
+
 volumes:
   clamdb:
   pgdata:

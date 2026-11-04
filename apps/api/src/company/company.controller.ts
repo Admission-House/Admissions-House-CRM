@@ -3,14 +3,15 @@ import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { createZodDto } from 'nestjs-zod';
 import type { AuthContext } from '../auth/auth-context.js';
-import { CurrentAuth, RequirePermissions } from '../auth/decorators.js';
+import { AllowMfaSetup, CurrentAuth, RequirePermissions } from '../auth/decorators.js';
 import { AppError } from '../common/app-error.js';
 import { ENV } from '../config/config.module.js';
 import type { Env } from '../config/env.js';
 import { readForm } from '../storage/multipart.js';
-import { companySchema, CompanyService, MAX_LOGO_BYTES } from './company.service.js';
+import { companySchema, CompanyService, MAX_LOGO_BYTES, securitySchema } from './company.service.js';
 
 class CompanyDto extends createZodDto(companySchema) {}
+class SecurityDto extends createZodDto(securitySchema) {}
 
 @ApiTags('company')
 @ApiBearerAuth()
@@ -33,6 +34,20 @@ export class CompanyController {
     return this.company.update(auth, body);
   }
 
+  /** Who the company requires to use two-step sign-in. */
+  @RequirePermissions('settings.manage')
+  @Get('security')
+  security(@CurrentAuth() auth: AuthContext) {
+    return this.company.getSecurity(auth);
+  }
+
+  @RequirePermissions('settings.manage')
+  @Put('security')
+  setSecurity(@CurrentAuth() auth: AuthContext, @Body() body: SecurityDto) {
+    return this.company.setSecurity(auth, body.requireTwoStep);
+  }
+
+  @AllowMfaSetup()
   @Get('logo')
   async logo(@CurrentAuth() auth: AuthContext, @Res({ passthrough: true }) reply: FastifyReply): Promise<StreamableFile> {
     const file = await this.company.logo(auth);

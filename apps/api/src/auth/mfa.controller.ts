@@ -3,7 +3,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import type { AuthContext } from './auth-context.js';
-import { CurrentAuth, RequirePermissions } from './decorators.js';
+import { AllowMfaSetup, CurrentAuth, RequirePermissions } from './decorators.js';
 import { MfaService } from './mfa.service.js';
 
 const password = z.string().min(1).max(128);
@@ -21,12 +21,14 @@ class DisableDto extends createZodDto(z.object({ password, code })) {}
 export class MfaController {
   constructor(private readonly mfa: MfaService) {}
 
+  @AllowMfaSetup()
   @Get('auth/mfa')
   status(@CurrentAuth() auth: AuthContext) {
     return this.mfa.status(auth);
   }
 
   /** Step 1. Needs the password. Returns the secret and the address for the QR code. */
+  @AllowMfaSetup()
   @Post('auth/mfa/setup')
   @HttpCode(200)
   setup(@CurrentAuth() auth: AuthContext, @Body() body: SetupDto) {
@@ -34,6 +36,7 @@ export class MfaController {
   }
 
   /** Step 2. The first code from the app. Returns the recovery codes, once. */
+  @AllowMfaSetup()
   @Post('auth/mfa/enable')
   @HttpCode(200)
   enable(@CurrentAuth() auth: AuthContext, @Body() body: EnableDto) {

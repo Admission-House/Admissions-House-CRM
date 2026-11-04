@@ -46,6 +46,9 @@ export interface SessionRow {
   data_scope: DataScope;
   requires_office: boolean;
   permissions: string[];
+  /** The company's rule on two-step sign-in (see two-step-policy.ts), and whether this person has it on. */
+  require_two_step: string | null;
+  two_step_on: boolean;
 }
 
 export interface RefreshRow {
@@ -246,6 +249,8 @@ export class AuthRepository {
                        ORDER BY a.effective_from DESC LIMIT 1), ${DEFAULT_IDLE_MIN}) AS idle_limit_min,
              u.status AS user_status, t.status AS tenant_status,
              u.name, u.email, u.must_change_password, u.role_id,
+             t.settings->>'require_two_step' AS require_two_step,
+             EXISTS (SELECT 1 FROM user_mfa m WHERE m.user_id = u.id AND m.enabled_at IS NOT NULL) AS two_step_on,
              r.system_key AS role_key, r.data_scope, r.requires_office,
              COALESCE((SELECT array_agg(p.code ORDER BY p.code)
                        FROM role_permissions rp JOIN permissions p ON p.id = rp.permission_id

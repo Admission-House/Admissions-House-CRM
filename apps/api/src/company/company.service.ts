@@ -8,6 +8,7 @@ import { AppError } from '../common/app-error.js';
 import { DatabaseService, Trx } from '../database/database.service.js';
 import { sniffFile } from '../documents/file-rules.js';
 import { StorageService } from '../storage/storage.service.js';
+import { parseTwoStepPolicy, TWO_STEP_POLICIES, twoStepRequired, type TwoStepPolicy } from '../auth/two-step-policy.js';
 
 const hex = z.string().trim().regex(/^#[0-9a-fA-F]{6}$/, 'Use a colour such as #063b39');
 
@@ -22,6 +23,8 @@ export const companySchema = z
   .partial()
   .refine((v) => Object.keys(v).length > 0, 'Send at least one field to change');
 export type CompanyInput = z.infer<typeof companySchema>;
+
+export const securitySchema = z.object({ requireTwoStep: z.enum(TWO_STEP_POLICIES) });
 
 export interface CompanyView {
   name: string;
@@ -39,6 +42,7 @@ interface Settings {
   accent_color?: string | null;
   logo_key?: string | null;
   logo_mime?: string | null;
+  require_two_step?: string;
 }
 
 /** A logo is small on purpose: it is loaded on every screen. */
@@ -89,6 +93,29 @@ export class CompanyService {
         before: view(before), after: view(after), ip: auth.ip, requestId: auth.requestId,
       });
       return view(after);
+    });
+  }
+
+  /** Who the company requires to use two-step sign-in. */
+  getSecurity(auth: AuthContext): Promise<{ requireTwoStep: TwoStepPolicy }> {
+    return this.db.withTenant(auth.tenantId, async (trx) => ({ requireTwoStep: parseTwoStepPolicy((await this.load(trx)).settings.require_two_step) }));
+  }
+
+  /** Changes who is required. People it now covers are asked to set it up on their next request. */
+  setSecurity(auth: AuthContext, requireTwoStep: TwoStepPolicy): Promise<{ requireTwoStep: TwoStepPolicy }> {
+    return this.db.withTenant(auth.tenantId, async (trx) => {
+      // A setting that covers you would hold you at once, in the middle of changing it. Set yours up first.
+      if (twoStepRequired(requireTwoStep, auth.roleKey)) {
+        const { rows } = await sql<{ one: number }>`SELECT 1 AS one FROM user_mfa WHERE user_id = ${auth.userId} AND enabled_at IS NOT NULL`.execute(trx);
+        if (rows.length === 0) throw new AppError('SET_UP_YOUR_OWN_FIRST', 'This setting would cover you. Set up your own two-step sign-in first (My account), then change it.', 409);
+      }
+      const before = await this.load(trx);
+      const was = parseTwoStepPolicy(before.settings.require_two_step);
+      await sql`UPDATE tenants SET settings = ${JSON.stringify({ ...before.settings, require_two_step: requireTwoStep })}::jsonb WHERE id = ${auth.tenantId}`.execute(trx);
+      if (was !== requireTwoStep) {
+        await this.audit.write(trx, { tenantId: auth.tenantId, actorId: auth.userId, action: 'company.security_change', entity: 'company', entityId: auth.tenantId, before: { requireTwoStep: was }, after: { requireTwoStep }, ip: auth.ip, requestId: auth.requestId });
+      }
+      return { requireTwoStep };
     });
   }
 

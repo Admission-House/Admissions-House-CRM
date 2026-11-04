@@ -78,7 +78,7 @@ const ALL: NavItem[] = [
 ];
 
 /** Screens that exist so far (the part of the address before "?"). */
-const BUILT = new Set(['/dashboard', '/imports', '/settings/integrations', '/settings/telephony', '/settings/sessions', '/settings/audit', '/settings/company', '/account', '/notifications', '/settings/devices', '/salary', '/leave', '/attendance', '/reports', '/calls', '/dialer', '/followups', '/leads', '/settings/users', '/settings/roles', '/settings/branches', '/settings/leads']);
+const BUILT = new Set(['/dashboard', '/settings/security', '/imports', '/settings/integrations', '/settings/telephony', '/settings/sessions', '/settings/audit', '/settings/company', '/account', '/notifications', '/settings/devices', '/salary', '/leave', '/attendance', '/reports', '/calls', '/dialer', '/followups', '/leads', '/settings/users', '/settings/roles', '/settings/branches', '/settings/leads']);
 
 const built = (href?: string) => !!href && BUILT.has(href.split('?')[0]!);
 

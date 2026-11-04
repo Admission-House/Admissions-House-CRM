@@ -6,6 +6,7 @@ export const IS_PUBLIC = 'auth:public';
 export const PERMISSIONS = 'auth:permissions';
 export const PERMISSIONS_ANY = 'auth:permissions-any';
 export const ALLOW_PASSWORD_CHANGE = 'auth:allow-password-change';
+export const ALLOW_MFA_SETUP = 'auth:allow-mfa-setup';
 export const HEAVY = 'auth:heavy';
 
 /** The route needs no sign-in. Every other route requires one by default. */
@@ -26,6 +27,8 @@ export const Heavy = () => SetMetadata(HEAVY, true);
 
 /** Usable even while the account still has to choose a new password (sign out, change password). */
 export const AllowPasswordChange = () => SetMetadata(ALLOW_PASSWORD_CHANGE, true);
+/** A route a person may use before two-step sign-in is set up, when their company requires it. */
+export const AllowMfaSetup = () => SetMetadata(ALLOW_MFA_SETUP, true);
 
 /** The signed-in user. Only available on routes that are not @Public(). */
 export const CurrentAuth = createParamDecorator((_data: unknown, ctx: ExecutionContext): AuthContext => {

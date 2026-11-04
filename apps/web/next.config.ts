@@ -1,3 +1,4 @@
+import path from 'node:path';
 import type { NextConfig } from 'next';
 
 // The browser talks to this app only; /api/v1 is passed on to the API, so the sign-in cookie is
@@ -21,6 +22,10 @@ const SECURITY_HEADERS = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // A small self-contained server for the Docker image. The root is the monorepo, so the files the
+  // web app needs from node_modules are found.
+  output: 'standalone',
+  outputFileTracingRoot: path.join(import.meta.dirname, '../..'),
   // `next dev` otherwise writes an AGENTS.md of instructions for AI tools into the project.
   agentRules: false,
   async headers() {

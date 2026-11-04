@@ -39,6 +39,12 @@ async function parseError(res: Response): Promise<ApiError> {
   try {
     const body = (await res.json()) as { error?: { code?: string; message?: string; fieldErrors?: FieldError[]; details?: Record<string, unknown>; requestId?: string } };
     const e = body.error;
+    // The company began requiring two-step sign-in while this page was open: go and set it up. This is not a
+    // component, so there is no router here; a full page load also starts the screens afresh.
+    if (e?.code === 'MFA_SETUP_REQUIRED' && typeof window !== 'undefined' && !window.location.pathname.startsWith('/two-step-setup')) {
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+      window.location.assign('/two-step-setup');
+    }
     return new ApiError(res.status, e?.code ?? 'ERROR', e?.message ?? 'Something went wrong', e?.fieldErrors, e?.details, e?.requestId);
   } catch {
     return new ApiError(res.status, 'ERROR', 'Something went wrong. Please try again.');

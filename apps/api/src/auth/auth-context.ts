@@ -14,6 +14,8 @@ export interface AuthContext {
   dataScope: DataScope;
   permissions: ReadonlySet<string>;
   mustChangePassword: boolean;
+  /** The company requires two-step sign-in for this role and this person has not set it up yet. */
+  mfaSetupRequired: boolean;
   /** True for people who sign in from the office; their attendance is recorded at sign-in. */
   tracksAttendance: boolean;
   ip: string;

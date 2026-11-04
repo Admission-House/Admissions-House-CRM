@@ -12,6 +12,7 @@ import type { AuthContext, RoleKey } from './auth-context.js';
 import { AuthRepository, LoginUser } from './auth.repository.js';
 import type { LoginInput } from './dto/auth.dto.js';
 import { MfaService } from './mfa.service.js';
+import { parseTwoStepPolicy, twoStepRequired } from './two-step-policy.js';
 import { evaluateOffice, normalizeIp, OfficeFailure } from './office-rules.js';
 import { passwordProblem, PasswordService } from './password.service.js';
 import { hashToken, safeEqualHex, TokenService } from './token.service.js';
@@ -364,6 +365,7 @@ export class AuthService {
           dataScope: row.data_scope,
           permissions: new Set(row.permissions),
           mustChangePassword: row.must_change_password,
+          mfaSetupRequired: twoStepRequired(parseTwoStepPolicy(row.require_two_step), row.role_key) && !row.two_step_on,
           tracksAttendance: row.requires_office,
           ip: normalizeIp(meta.ip),
           requestId: meta.requestId,
@@ -456,6 +458,7 @@ export class AuthService {
         email: auth.email,
         role: { key: auth.roleKey, dataScope: auth.dataScope },
         mustChangePassword: auth.mustChangePassword,
+        mfaSetupRequired: auth.mfaSetupRequired,
       },
       permissions: [...auth.permissions].sort(),
       company: {

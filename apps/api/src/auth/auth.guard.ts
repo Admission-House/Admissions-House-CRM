@@ -6,7 +6,7 @@ import { SlidingWindowLimiter } from '../common/rate-limiter.js';
 import { ENV } from '../config/config.module.js';
 import type { Env } from '../config/env.js';
 import { AuthService } from './auth.service.js';
-import { ALLOW_PASSWORD_CHANGE, HEAVY, IS_PUBLIC, PERMISSIONS, PERMISSIONS_ANY } from './decorators.js';
+import { ALLOW_MFA_SETUP, ALLOW_PASSWORD_CHANGE, HEAVY, IS_PUBLIC, PERMISSIONS, PERMISSIONS_ANY } from './decorators.js';
 
 /**
  * Applied to every route. A route is closed unless it is marked @Public(). For the rest it checks,
@@ -53,6 +53,10 @@ export class AuthGuard implements CanActivate {
 
     if (auth.mustChangePassword && !this.reflector.getAllAndOverride<boolean>(ALLOW_PASSWORD_CHANGE, targets)) {
       throw new AppError('PASSWORD_CHANGE_REQUIRED', 'Choose a new password before you continue', 403);
+    }
+
+    if (auth.mfaSetupRequired && !this.reflector.getAllAndOverride<boolean>(ALLOW_MFA_SETUP, targets)) {
+      throw new AppError('MFA_SETUP_REQUIRED', 'Your company requires two-step sign-in. Set it up before you continue.', 403);
     }
 
     const required = this.reflector.getAllAndOverride<string[] | undefined>(PERMISSIONS, targets) ?? [];

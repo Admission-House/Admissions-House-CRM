@@ -11,3 +11,6 @@ node_modules
 apps/api/storage
 **/.tmp-storage
 apps/api/db/tenants/*.json
+
+**/.next
+apps/mobile

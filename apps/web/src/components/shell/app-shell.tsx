@@ -208,9 +208,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (status === 'anonymous') router.replace('/login');
     else if (status === 'authenticated' && me?.user.mustChangePassword) router.replace('/change-password');
+    else if (status === 'authenticated' && me?.user.mfaSetupRequired) router.replace('/two-step-setup');
   }, [status, me, router]);
 
-  if (status !== 'authenticated' || !me || me.user.mustChangePassword) {
+  if (status !== 'authenticated' || !me || me.user.mustChangePassword || me.user.mfaSetupRequired) {
     return <div className="grid min-h-dvh place-items-center"><Spinner label="Opening your workspace" /></div>;
   }
 

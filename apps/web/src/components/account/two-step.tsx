@@ -48,7 +48,7 @@ function RecoveryCodes({ codes, onDone }: { codes: string[]; onDone: () => void 
 }
 
 /** Turning it on: the password, then the QR code and the first code from the app. */
-function Setup({ onFinished, onCancel }: { onFinished: () => void; onCancel: () => void }) {
+export function Setup({ onFinished, onCancel, cancelLabel = 'Cancel' }: { onFinished: () => void; onCancel: () => void; cancelLabel?: string }) {
   const [password, setPassword] = useState('');
   const [secret, setSecret] = useState<{ secret: string; otpauthUrl: string } | null>(null);
   const [qr, setQr] = useState<string | null>(null);
@@ -85,7 +85,7 @@ function Setup({ onFinished, onCancel }: { onFinished: () => void; onCancel: () 
         {error && <Notice tone="bad">{error}</Notice>}
         <p className="text-sm text-muted">You will need an authenticator app on your phone, such as Google Authenticator, Microsoft Authenticator or Authy. First, enter your password to confirm it is you.</p>
         <Field label="Your password" htmlFor="mfa-pw"><Input id="mfa-pw" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required /></Field>
-        <div className="flex gap-2"><Button type="submit" loading={busy} disabled={!password}>Continue</Button><Button type="button" variant="secondary" onClick={onCancel}>Cancel</Button></div>
+        <div className="flex gap-2"><Button type="submit" loading={busy} disabled={!password}>Continue</Button><Button type="button" variant="secondary" onClick={onCancel}>{cancelLabel}</Button></div>
       </form>
     );
   }
@@ -107,7 +107,7 @@ function Setup({ onFinished, onCancel }: { onFinished: () => void; onCancel: () 
         </div>
       </div>
       <Field label="6-digit code" htmlFor="mfa-code"><Input id="mfa-code" inputMode="numeric" autoComplete="one-time-code" maxLength={7} value={code} onChange={(e) => setCode(e.target.value)} required /></Field>
-      <div className="flex gap-2"><Button type="submit" loading={busy} disabled={code.replace(/\s/g, '').length !== 6}>Turn on</Button><Button type="button" variant="secondary" onClick={onCancel}>Cancel</Button></div>
+      <div className="flex gap-2"><Button type="submit" loading={busy} disabled={code.replace(/\s/g, '').length !== 6}>Turn on</Button><Button type="button" variant="secondary" onClick={onCancel}>{cancelLabel}</Button></div>
     </form>
   );
 }

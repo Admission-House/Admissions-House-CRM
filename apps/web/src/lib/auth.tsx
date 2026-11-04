@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { api, ApiError, onSessionLost, refreshSession, setAccessToken } from './api';
 
 export interface Me {
-  user: { id: string; name: string; email: string; role: { key: string | null; dataScope: 'all' | 'team' | 'own' }; mustChangePassword: boolean };
+  user: { id: string; name: string; email: string; role: { key: string | null; dataScope: 'all' | 'team' | 'own' }; mustChangePassword: boolean; mfaSetupRequired: boolean };
   permissions: string[];
   company: { name: string; productName: string; contactEmail: string | null; brandColor: string | null; accentColor: string | null; hasLogo: boolean };
 }

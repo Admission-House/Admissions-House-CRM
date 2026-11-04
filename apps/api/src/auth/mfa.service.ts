@@ -9,6 +9,7 @@ import { DatabaseService, Trx } from '../database/database.service.js';
 import type { AuthContext } from './auth-context.js';
 import { AuthRepository } from './auth.repository.js';
 import { PasswordService } from './password.service.js';
+import { parseTwoStepPolicy, twoStepRequired } from './two-step-policy.js';
 import { hashRecoveryCode, looksLikeRecoveryCode, newRecoveryCode, newSecret, otpauthUrl, verifyTotp } from './totp.js';
 
 const RECOVERY_CODES = 8;
@@ -120,6 +121,10 @@ export class MfaService {
       const wrong = await this.checkPassword(trx, auth, input.password);
       if (wrong) return wrong;
       if (!(await this.isEnabled(trx, auth.userId))) return new AppError('MFA_NOT_ON', 'Two-step sign-in is not on.', 409);
+      const company = await this.repo.companyProfile(trx);
+      if (twoStepRequired(parseTwoStepPolicy((company.settings as { require_two_step?: unknown } | null)?.require_two_step), auth.roleKey)) {
+        return new AppError('MFA_REQUIRED_BY_POLICY', 'Your company requires two-step sign-in, so it cannot be turned off.', 409);
+      }
       if ((await this.verifyLoginCode(trx, auth.userId, input.code)) === 'bad') {
         await this.repo.registerFailure(trx, auth.userId, this.env.LOGIN_MAX_FAILURES, this.env.LOGIN_LOCK_MINUTES);
         return new AppError('MFA_CODE_WRONG', 'The code is not correct.', 403);

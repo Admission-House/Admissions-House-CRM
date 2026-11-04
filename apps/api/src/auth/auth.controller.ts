@@ -19,7 +19,7 @@ import { ENV } from '../config/config.module.js';
 import type { Env } from '../config/env.js';
 import type { AuthContext } from './auth-context.js';
 import { AuthService, RequestMeta, SignedIn } from './auth.service.js';
-import { AllowPasswordChange, CurrentAuth, Public, RequirePermissions } from './decorators.js';
+import { AllowMfaSetup, AllowPasswordChange, CurrentAuth, Public, RequirePermissions } from './decorators.js';
 import { ChangePasswordDto, ForgotPasswordDto, LoginDto, RefreshDto, ResetPasswordDto } from './dto/auth.dto.js';
 import { PasswordResetService } from './password-reset.service.js';
 
@@ -69,6 +69,7 @@ export class AuthController {
 
   @ApiBearerAuth()
   @AllowPasswordChange()
+  @AllowMfaSetup()
   @Post('logout')
   @HttpCode(204)
   async logout(@CurrentAuth() auth: AuthContext, @Res({ passthrough: true }) reply: FastifyReply): Promise<void> {
@@ -79,6 +80,7 @@ export class AuthController {
   /** The signed-in user, their permissions and the company. Also serves as the activity heartbeat. */
   @ApiBearerAuth()
   @AllowPasswordChange()
+  @AllowMfaSetup()
   @Get('me')
   me(@CurrentAuth() auth: AuthContext) {
     return this.auth.profile(auth);
@@ -103,6 +105,7 @@ export class AuthController {
 
   @ApiBearerAuth()
   @AllowPasswordChange()
+  @AllowMfaSetup()
   @Post('change-password')
   @HttpCode(200)
   changePassword(@CurrentAuth() auth: AuthContext, @Body() body: ChangePasswordDto) {

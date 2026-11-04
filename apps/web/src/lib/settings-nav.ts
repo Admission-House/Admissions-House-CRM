@@ -1,4 +1,4 @@
-import { Building2, KeyRound, ListChecks, Laptop, Palette, Phone, ScrollText, ShieldCheck, Smartphone, Users, type LucideIcon } from 'lucide-react';
+import { Building2, KeyRound, ListChecks, Laptop, LockKeyhole, Palette, Phone, ScrollText, ShieldCheck, Smartphone, Users, type LucideIcon } from 'lucide-react';
 
 export interface SettingsItem {
   label: string;
@@ -21,6 +21,7 @@ export const SETTINGS: SettingsGroup[] = [
     items: [
       { label: 'Company and logo', href: '/settings/company', icon: Palette, description: 'Name, logo and colours of your CRM', any: ['settings.manage'] },
       { label: 'Users', href: '/settings/users', icon: Users, description: 'Add people, change their role or team, and reset passwords', any: ['user.read', 'user.manage'] },
+      { label: 'Security', href: '/settings/security', icon: LockKeyhole, description: 'Who must use two-step sign-in', any: ['settings.manage'] },
       { label: 'Roles', href: '/settings/roles', icon: ShieldCheck, description: 'What each role can see and do', any: ['role.manage'] },
       { label: 'Branches', href: '/settings/branches', icon: Building2, description: 'Office location and networks used for the office sign-in check', any: ['branch.read', 'branch.manage'] },
       { label: 'Lead settings', href: '/settings/leads', icon: ListChecks, description: 'Statuses, sources, extra fields, how new leads are given out, and repeat enquiries', any: ['settings.manage'] },
@@ -33,6 +34,6 @@ export const SETTINGS: SettingsGroup[] = [
   },
 ];
 
-const BUILT = new Set(['/settings/users', '/settings/roles', '/settings/branches', '/settings/leads', '/settings/devices', '/settings/integrations', '/settings/telephony', '/settings/sessions', '/settings/audit', '/settings/company']);
+const BUILT = new Set(['/settings/security', '/settings/users', '/settings/roles', '/settings/branches', '/settings/leads', '/settings/devices', '/settings/integrations', '/settings/telephony', '/settings/sessions', '/settings/audit', '/settings/company']);
 export const SETTINGS_BUILT = SETTINGS.map((g) => ({ ...g, items: g.items.filter((i) => BUILT.has(i.href)) })).filter((g) => g.items.length > 0);
 
