@@ -19,7 +19,7 @@ function Form() {
     e.preventDefault();
     setError(null);
     if (!email.trim()) return setEmailError('Enter your email address.');
-    if (!/^[^s@]+@[^s@]+.[^s@]+$/.test(email.trim())) return setEmailError('Enter a valid email address, for example name@company.com.');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return setEmailError('Enter a valid email address, for example name@company.com.');
     setEmailError(undefined);
     setBusy(true);
     try {

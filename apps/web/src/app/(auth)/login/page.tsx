@@ -69,7 +69,7 @@ function SignIn() {
   function check(): { email?: string; password?: string } {
     const problems: { email?: string; password?: string } = {};
     if (!email.trim()) problems.email = 'Enter your email address.';
-    else if (!/^[^s@]+@[^s@]+.[^s@]+$/.test(email.trim())) problems.email = 'Enter a valid email address, for example name@company.com.';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) problems.email = 'Enter a valid email address, for example name@company.com.';
     if (!password) problems.password = 'Enter your password.';
     return problems;
   }
