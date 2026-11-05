@@ -22,7 +22,7 @@
   --color-line-strong: #cfd8db;
   --color-surface: #ffffff;
   --color-canvas: #f5f7f8;
-  --color-head: #eef3f4;
+  --color-head: rgb(206 226 226 / 0.42);
 
   --color-ok: #12a150;
   --color-ok-50: #eaf9f0;

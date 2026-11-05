@@ -86,7 +86,7 @@ function Slot({ lead, title, docType, shortlistId, docs, limits, manage, onChang
 
   const Icon = imageOnly ? ImageIcon : FileText;
   return (
-    <div className="flex flex-col overflow-hidden rounded-lg border border-line bg-surface">
+    <div className="glass flex flex-col overflow-hidden rounded-xl">
       <div className="flex items-center gap-3 border-b border-line bg-head px-3.5 py-2.5">
         <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-surface text-brand"><Icon className="h-4 w-4" aria-hidden /></span>
         <div className="min-w-0">

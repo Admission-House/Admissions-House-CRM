@@ -121,7 +121,7 @@ export default function FollowUpsPage() {
             {team.data && team.data.items.length > 1 && (
               <Select aria-label="Whose follow-ups" value={userId} onChange={(e) => setUserId(e.target.value)} className="w-52"><option value="">Everyone in my scope</option>{team.data.items.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}</Select>
             )}
-            <div role="group" aria-label="View" className="flex rounded-lg border border-line-strong bg-surface p-0.5">
+            <div role="group" aria-label="View" className="flex rounded-lg border border-white/80 bg-white/65 p-0.5 backdrop-blur-sm">
               {([['list', 'List', List], ['calendar', 'Calendar', CalendarDays]] as const).map(([k, label, Icon]) => (
                 <button key={k} type="button" aria-pressed={view === k} onClick={() => setView(k)} className={cx('flex h-9 items-center gap-1.5 rounded-md px-3 text-sm font-medium', view === k ? 'bg-brand text-white' : 'text-muted hover:text-ink')}><Icon className="h-4 w-4" aria-hidden />{label}</button>
               ))}

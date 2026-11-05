@@ -351,7 +351,7 @@ function Leads() {
           <ul className="space-y-2 md:hidden">
             {items.map((l) => (
               <li key={l.id}>
-                <Link href={`/leads/${l.id}`} className="block rounded-lg border border-line bg-surface p-3.5 shadow-card">
+                <Link href={`/leads/${l.id}`} className="block glass rounded-xl p-3.5">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex min-w-0 items-center gap-2.5">
                       <Avatar name={l.name} size={32} tone="soft" />

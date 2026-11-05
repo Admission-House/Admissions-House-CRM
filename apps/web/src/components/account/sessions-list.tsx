@@ -60,7 +60,7 @@ export function SessionsList({ all, userId: fixedUser }: { all?: boolean; userId
       {error && <Notice tone="bad">{error}</Notice>}
       {ended && <Notice tone="ok">{ended}</Notice>}
       {list.error ? <Notice tone="bad">{list.error.message}</Notice> : !list.data ? <Spinner /> : list.data.length === 0 ? <Empty title="No one is signed in" /> : (
-        <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-surface">
+        <ul className="glass divide-y divide-line/60 overflow-hidden rounded-xl">
           {list.data.map((s) => {
             const Icon = s.clientType === 'mobile' ? Smartphone : Laptop;
             return (
