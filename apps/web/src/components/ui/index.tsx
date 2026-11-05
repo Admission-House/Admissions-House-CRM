@@ -84,7 +84,7 @@ export function Textarea({ className, ...rest }: TextareaHTMLAttributes<HTMLText
 }
 
 export function Card({ className, children }: { className?: string; children: ReactNode }) {
-  return <section className={cx('rounded-[var(--radius-card)] border border-line bg-surface shadow-card', className)}>{children}</section>;
+  return <section className={cx('glass rounded-[var(--radius-card)]', className)}>{children}</section>;
 }
 
 /** A card with a title row, the usual frame for a block of a screen. */
@@ -92,7 +92,7 @@ export function Panel({ title, actions, children, className, flush }: { title?: 
   return (
     <Card className={className}>
       {(title || actions) && (
-        <div className="flex min-h-11 items-center justify-between gap-3 border-b border-line px-4 py-2">
+        <div className="flex min-h-11 items-center justify-between gap-3 border-b border-line/60 px-4 py-2">
           <h2 className="text-sm font-semibold text-ink">{title}</h2>
           {actions && <div className="flex items-center gap-2">{actions}</div>}
         </div>

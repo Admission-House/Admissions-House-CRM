@@ -48,13 +48,16 @@ const shortDay = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString
 const talk = (s: number) => (s >= 3600 ? `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m` : `${Math.floor(s / 60)}m`);
 
 function Kpi({ icon: Icon, label, value, hint, href, tone = 'brand' }: { icon: LucideIcon; label: string; value: number | string; hint?: string; href?: string; tone?: 'brand' | 'bad' | 'warn' | 'info' }) {
-  // A thin coloured edge marks what needs attention; nothing else is decoration.
-  const edge = { brand: 'border-l-brand-600', bad: 'border-l-bad', warn: 'border-l-warn', info: 'border-l-info' };
+  // The circle carries the colour: teal normally, amber, red or blue for what needs attention.
+  const badge = { brand: 'bg-brand-600 text-white', bad: 'bg-bad text-white', warn: 'bg-warn text-white', info: 'bg-info text-white' };
   const body = (
-    <div className={cx('h-full rounded-[var(--radius-card)] border border-line border-l-[3px] bg-surface px-4 py-3.5 shadow-card transition-colors hover:border-line-strong', edge[tone])}>
-      <p className="flex items-center gap-1.5 text-[13px] font-medium text-muted"><Icon className="h-3.5 w-3.5 text-subtle" aria-hidden />{label}</p>
-      <p className="tabular mt-1.5 text-[26px] font-semibold leading-none text-ink">{value}</p>
-      {hint && <p className="mt-1.5 text-xs text-subtle">{hint}</p>}
+    <div className="glass h-full rounded-[var(--radius-card)] px-4 py-4 transition hover:-translate-y-0.5 hover:shadow-[0_12px_36px_rgb(6_59_57/0.14)]">
+      <div className="flex items-center gap-2.5">
+        <span className={cx('grid h-9 w-9 shrink-0 place-items-center rounded-full', badge[tone])}><Icon className="h-[18px] w-[18px]" aria-hidden /></span>
+        <p className="text-[13px] font-medium leading-tight text-muted">{label}</p>
+      </div>
+      <p className="tabular mt-3 text-[28px] font-bold leading-none text-ink">{value}</p>
+      {hint && <p className="mt-2 text-xs text-subtle">{hint}</p>}
     </div>
   );
   return href ? <Link href={href} className="block h-full">{body}</Link> : body;

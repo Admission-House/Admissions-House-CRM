@@ -157,8 +157,8 @@ export function ChartCard({
 }) {
   const [kind, setKind] = useState<Kind>(initial);
   return (
-    <section className={cx('rounded-[var(--radius-card)] border border-line bg-surface shadow-card', className)}>
-      <div className="flex min-h-11 flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-2">
+    <section className={cx('glass rounded-[var(--radius-card)]', className)}>
+      <div className="flex min-h-11 flex-wrap items-center justify-between gap-3 border-b border-line/60 px-4 py-2">
         <h2 className="text-sm font-semibold text-ink">{title}</h2>
         <div className="flex items-center gap-2">
           {actions}

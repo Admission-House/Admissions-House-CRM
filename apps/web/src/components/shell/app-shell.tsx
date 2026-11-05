@@ -46,10 +46,10 @@ function NavLink({ item, active, narrow, nested, onNavigate }: { item: NavItem; 
       title={narrow ? item.label : undefined}
       aria-current={active ? 'page' : undefined}
       className={cx(
-        'group flex items-center rounded-md text-sm font-medium transition-colors',
+        'group flex items-center rounded-xl text-sm font-medium transition-colors',
         nested ? 'h-9 gap-3 pl-[2.625rem] pr-3' : 'h-9 gap-3 px-3',
         narrow && 'justify-center px-0',
-        active ? 'bg-white/12 text-white shadow-[inset_2px_0_0_var(--color-teal)]' : 'text-mint/75 hover:bg-white/8 hover:text-white',
+        active ? 'bg-teal/20 text-white shadow-[inset_0_0_0_1px_rgb(255_255_255/0.14)]' : 'text-mint/75 hover:bg-white/8 hover:text-white',
       )}
     >
       {!nested && <item.icon className={cx('h-[18px] w-[18px] shrink-0', active ? 'text-teal' : 'text-mint/65 group-hover:text-mint')} aria-hidden />}
@@ -69,7 +69,7 @@ function Sidebar({ narrow, onNavigate, onToggle }: { narrow: boolean; onNavigate
   const isActive = (href: string) => (href.includes('?') ? current === href : path === href && !params.get('queue'));
 
   return (
-    <nav aria-label="Main" className="flex h-full flex-col bg-brand text-white">
+    <nav aria-label="Main" className="glass-brand flex h-full flex-col text-white">
       <div className={cx('flex h-14 shrink-0 items-center border-b border-white/10', narrow ? 'justify-center' : 'justify-between pl-5 pr-3')}>
         {!narrow && (
           <div className="flex min-w-0 items-center gap-2.5">
@@ -233,7 +233,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       )}
 
       <div className="flex min-w-0 flex-col">
-        <header className="sticky top-0 z-20 flex h-14 items-center justify-between gap-3 border-b border-line bg-surface px-3 sm:px-6">
+        <header className="sticky top-0 z-20 glass-bar flex h-14 items-center justify-between gap-3 px-3 sm:px-6">
           <div className="flex items-center gap-2">
             <button type="button" aria-label="Open menu" onClick={() => setDrawer(true)} className="grid h-9 w-9 place-items-center rounded-md text-muted hover:bg-head lg:hidden"><Menu className="h-5 w-5" /></button>
             <Clock />
@@ -246,7 +246,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </header>
         <main id="content" className="mx-auto w-full max-w-[1500px] flex-1 px-4 py-6 sm:px-8">{children}</main>
-        <footer className="border-t border-line bg-surface px-6 py-3 text-center text-xs text-muted">
+        <footer className="glass-bar px-6 py-3 text-center text-xs text-muted">
           © {new Date().getFullYear()} <span className="font-semibold text-ink">{me.company.name}</span>{VERSION && <> · Version {VERSION}</>}
         </footer>
       </div>
