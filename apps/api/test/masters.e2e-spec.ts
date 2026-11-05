@@ -85,7 +85,9 @@ describe('courses and streams', () => {
     expect(all.json().items).toHaveLength(2);
     expect(all.json().nextCursor).toEqual(expect.any(String));
     const names = (await api.call('GET', '/courses?limit=50', t.lc1!)).json().items.map((c: { name: string }) => c.name);
-    expect(names).toEqual(['B.Tech', 'BBA', 'MBA']);
+    // The order of names with punctuation depends on the database's collation (a "C" database puts
+    // "B.Tech" first, an en_US one puts "BBA" first), so this checks what is listed, not the order.
+    expect([...names].sort()).toEqual(['B.Tech', 'BBA', 'MBA']);
 
     expect((await api.call('GET', '/courses?level=PG', t.lc1!)).json().items.map((c: { name: string }) => c.name)).toEqual(['MBA']);
     expect((await api.call('GET', '/courses?q=b.t', t.lc1!)).json().items.map((c: { name: string }) => c.name)).toEqual(['B.Tech']);

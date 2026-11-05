@@ -60,6 +60,8 @@ jobs:
         run: pnpm --filter @ah/web lint && pnpm --filter @ah/web typecheck
       - name: Mobile app, lint and type check
         run: pnpm --filter @ah/mobile lint && pnpm --filter @ah/mobile typecheck
+      - name: Public website, lint, type check and tests
+        run: pnpm --filter @ah/site lint && pnpm --filter @ah/site typecheck && pnpm --filter @ah/site test
 
   secrets:
     runs-on: ubuntu-latest
