@@ -22,3 +22,12 @@ crm.example.com {
 		-Server
 	}
 }
+
+# The public product website (the "site" service). Replace www.example.com with its real address.
+www.example.com {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:3100
+	header {
+		-Server
+	}
+}
