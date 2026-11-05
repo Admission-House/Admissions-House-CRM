@@ -7,7 +7,7 @@ import { cx } from '@/components/ui';
 
 /** Larger controls for the sign-in screens, where people deserve a roomy, unmistakable form. */
 const box =
-  'h-14 w-full rounded-lg border border-line-strong bg-surface px-5 text-base text-ink placeholder:text-subtle transition focus:border-teal-600 focus:outline-none focus:ring-0 aria-[invalid=true]:border-bad disabled:bg-head';
+  'h-14 w-full rounded-lg border border-line-strong bg-white/85 px-5 text-base text-ink placeholder:text-subtle transition focus:border-teal-600 focus:outline-none focus:ring-0 aria-[invalid=true]:border-bad disabled:bg-head';
 
 export function AuthField({ label, htmlFor, error, hint, action, children }: { label: string; htmlFor: string; error?: string; hint?: string; action?: ReactNode; children: ReactNode }) {
   return (

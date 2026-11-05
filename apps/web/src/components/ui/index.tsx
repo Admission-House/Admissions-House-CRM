@@ -104,7 +104,7 @@ export function Panel({ title, actions, children, className, flush }: { title?: 
 
 /** The tinted band that starts a section of a long form. */
 export function SectionBand({ children }: { children: ReactNode }) {
-  return <h3 className="border-y border-line bg-head px-4 py-2 text-[13px] font-semibold text-ink">{children}</h3>;
+  return <h3 className="border-y border-line/60 bg-white/30 px-4 py-2 text-[13px] font-semibold text-ink">{children}</h3>;
 }
 
 type Tone = 'neutral' | 'ok' | 'warn' | 'bad' | 'info' | 'brand';
@@ -155,7 +155,7 @@ export function Avatar({ name, size = 32, tone = 'brand' }: { name: string; size
 /** Tabs across the top of a workspace. */
 export function Tabs<T extends string>({ tabs, value, onChange, label }: { tabs: { key: T; label: string; count?: number }[]; value: T; onChange: (key: T) => void; label: string }) {
   return (
-    <div role="tablist" aria-label={label} className="flex overflow-x-auto overflow-y-hidden border-b border-line bg-surface">
+    <div role="tablist" aria-label={label} className="flex overflow-x-auto overflow-y-hidden border-b border-line/60 bg-white/35">
       {tabs.map((t) => {
         const on = t.key === value;
         return (
