@@ -21,12 +21,19 @@ const thisMonth = (): string => new Date().toLocaleDateString('en-CA').slice(0, 
 export function PolicyPanel() {
   const { can } = useAuth();
   const answer = useApi<PolicyAnswer>('/payroll/policy');
+  // Kept here, not in the form: saving loads the new version, which builds the form again.
+  const [saved, setSaved] = useState(false);
   if (answer.error) return <Notice tone="bad">{answer.error.message}</Notice>;
   if (!answer.data) return <Spinner />;
-  return <PolicyForm key={answer.data.current.effectiveFrom ?? 'default'} data={answer.data} canEdit={can('payroll.manage')} onSaved={answer.reload} />;
+  return (
+    <div className="space-y-4">
+      {saved && <Notice tone="ok">Saved. Calculate a draft payroll again to use the new rules.</Notice>}
+      <PolicyForm key={answer.data.current.effectiveFrom ?? 'default'} data={answer.data} canEdit={can('payroll.manage')} onSaved={() => { setSaved(true); answer.reload(); }} onEdit={() => setSaved(false)} />
+    </div>
+  );
 }
 
-function PolicyForm({ data, canEdit, onSaved }: { data: PolicyAnswer; canEdit: boolean; onSaved: () => void }) {
+function PolicyForm({ data, canEdit, onSaved, onEdit }: { data: PolicyAnswer; canEdit: boolean; onSaved: () => void; onEdit: () => void }) {
   const p = data.current;
   const [from, setFrom] = useState(thisMonth());
   const [basis, setBasis] = useState<Policy['workingDaysBasis']>(p.workingDaysBasis);
@@ -36,12 +43,13 @@ function PolicyForm({ data, canEdit, onSaved }: { data: PolicyAnswer; canEdit: b
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
-  const set = (k: keyof typeof v) => (e: React.ChangeEvent<HTMLInputElement>) => setV((x) => ({ ...x, [k]: e.target.value }));
+  const set = (k: keyof typeof v) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    onEdit();
+    setV((x) => ({ ...x, [k]: e.target.value }));
+  };
 
   async function save(): Promise<void> {
     setError(null);
-    setSaved(false);
     const num = (t: string) => (t.trim() === '' || Number.isNaN(Number(t)) ? NaN : Number(t));
     const body = {
       effectiveFrom: from, workingDaysBasis: basis, lateFreePerMonth: num(v.lateFreePerMonth), latePenaltyDays: num(v.latePenaltyDays), halfDayDeductionDays: num(v.halfDayDeductionDays),
@@ -51,7 +59,6 @@ function PolicyForm({ data, canEdit, onSaved }: { data: PolicyAnswer; canEdit: b
     setBusy(true);
     try {
       await api('/payroll/policy', { method: 'PUT', body });
-      setSaved(true);
       onSaved();
     } catch (e) {
       setError(e instanceof ApiError && e.fieldErrors[0] ? `${e.fieldErrors[0].field}: ${e.fieldErrors[0].message}` : errorText(e));
@@ -68,7 +75,6 @@ function PolicyForm({ data, canEdit, onSaved }: { data: PolicyAnswer; canEdit: b
     <div className="space-y-4">
       {p.isDefault && <Notice tone="info">No rules have been saved yet, so the proposed ones below are used. Save them, or change them, to confirm.</Notice>}
       {error && <Notice tone="bad">{error}</Notice>}
-      {saved && <Notice tone="ok">Saved. Calculate a draft payroll again to use the new rules.</Notice>}
       <Panel title="Payroll rules" actions={p.effectiveFrom ? <Badge tone="brand">In force since {monthName(p.effectiveFrom)}</Badge> : <Badge>Proposed</Badge>}>
         <form className="grid gap-4 p-4 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); if (canEdit) void save(); }}>
           <Field label="Applies from" htmlFor="pol-from" hint="The first month these rules are used"><Input id="pol-from" type="month" value={from} onChange={(e) => e.target.value && setFrom(e.target.value)} disabled={!canEdit} /></Field>
