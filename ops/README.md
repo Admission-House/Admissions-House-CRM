@@ -42,6 +42,9 @@ The API refuses to start in production with the log mail driver or a database ow
 
 ## 3. First deployment
 
+Ready-made files in this folder: `production.env.example` (every setting, copy it to `../.env.production`) and `Caddyfile` (HTTPS in front of the web CRM and the API; send `/api/v1/*` straight to port 3001 and everything else to port 3000).
+
+
 ```
 docker compose --env-file .env.production up -d --build
 docker cp company.json <api-container>:/app/company.json
