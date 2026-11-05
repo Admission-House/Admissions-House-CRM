@@ -78,6 +78,29 @@ services:
     ports:
       - '127.0.0.1:3000:3000'
 
+  # The public product website (home, features, about, contact, demo request). A demo request becomes
+  # a lead in the CRM through the API, using the website's own lead source and API key.
+  site:
+    build:
+      context: .
+      dockerfile: Dockerfile.site
+      args:
+        SITE_NAME: ${SITE_NAME:-}
+        SITE_COMPANY: ${SITE_COMPANY:-}
+        SITE_URL: ${SITE_URL:-}
+        SITE_EMAIL: ${SITE_EMAIL:-}
+        SITE_PHONE: ${SITE_PHONE:-}
+        SITE_ADDRESS: ${SITE_ADDRESS:-}
+        SITE_HOURS: ${SITE_HOURS:-}
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      CRM_WEBHOOK_URL: http://api:3001/api/v1/intake/leads
+      CRM_WEBHOOK_SECRET: ${SITE_CRM_API_KEY:-}
+    ports:
+      - '127.0.0.1:3100:3100'
+
 volumes:
   clamdb:
   pgdata:
