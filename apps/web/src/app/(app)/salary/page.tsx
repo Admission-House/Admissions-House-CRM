@@ -9,6 +9,9 @@ import { api, apiRaw, ApiError, download } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import type { Page } from '@/lib/types';
 import { useApi } from '@/lib/use-api';
+import { PolicyPanel } from '@/components/payroll/policy-panel';
+import { RunPanel } from '@/components/payroll/run-panel';
+import { StructuresPanel } from '@/components/payroll/structures-panel';
 
 interface Salary {
   id: string;
@@ -20,6 +23,7 @@ interface Salary {
   netPay: number;
   notes: string | null;
   enteredBy: string;
+  payslipId: string | null;
 }
 interface Detail extends Salary { attendance: { workingDays: number; present: number; late: number; leaveDays: number; absent: number } | null }
 interface ImportResult { month: string; rows: number; toAdd: number; toChange: number; problems: { row: number; email?: string; problem: string }[]; applied: boolean }
@@ -89,14 +93,14 @@ function DetailModal({ id, onClose }: { id: string; onClose: () => void }) {
           </dl>
           {d.data.notes && <p className="text-sm text-muted">{d.data.notes}</p>}
           <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Attendance that month (for reference only)</p>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Attendance that month</p>
             {a ? (
               <ul className="grid grid-cols-5 gap-2 text-center">
                 {[['Working days', a.workingDays], ['Present', a.present], ['Late', a.late], ['Leave', a.leaveDays], ['Absent', a.absent]].map(([k, v]) => <li key={k as string} className="rounded-lg bg-head px-2 py-2"><p className="tabular text-lg font-bold text-ink">{v}</p><p className="text-xs text-muted">{k}</p></li>)}
               </ul>
             ) : <p className="text-sm text-muted">Attendance is not tracked for this person.</p>}
           </div>
-          <p className="text-xs text-subtle">Entered by {d.data.enteredBy}. The amount does not change with attendance.</p>
+          <p className="text-xs text-subtle">{d.data.payslipId ? `Calculated by the payroll run and approved by ${d.data.enteredBy}.` : `Entered by ${d.data.enteredBy}. The amount does not change with attendance.`}</p>
           <div className="flex justify-end"><Button variant="secondary" onClick={() => void download(`/salaries/${id}/payslip.pdf`)}><Download className="h-3.5 w-3.5" aria-hidden /> Payslip PDF</Button></div>
         </div>
       )}
@@ -257,25 +261,33 @@ function SheetImport() {
 
 // --------------------------------------------------------------------- page
 
+type TabKey = 'mine' | 'run' | 'structures' | 'policy' | 'report' | 'bulk' | 'import';
+
 export default function SalaryPage() {
   const { can } = useAuth();
   const tabs = [
     can('salary.read_own') && { key: 'mine' as const, label: 'My salary' },
+    can('salary.read') && { key: 'run' as const, label: 'Payroll run' },
+    can('salary.read') && { key: 'structures' as const, label: 'Salary structures' },
+    can('salary.read') && { key: 'policy' as const, label: 'Payroll rules' },
     can('salary.read') && { key: 'report' as const, label: 'Monthly report' },
-    can('salary.write') && { key: 'bulk' as const, label: 'Bulk entry' },
+    can('salary.write') && { key: 'bulk' as const, label: 'Type in a month' },
     can('salary.import') && { key: 'import' as const, label: 'Upload sheet' },
-  ].filter(Boolean) as { key: 'mine' | 'report' | 'bulk' | 'import'; label: string }[];
-  const [tab, setTab] = useState<'mine' | 'report' | 'bulk' | 'import'>(tabs[0]?.key ?? 'mine');
+  ].filter(Boolean) as { key: TabKey; label: string }[];
+  const [tab, setTab] = useState<TabKey>(tabs[0]?.key ?? 'mine');
   const active = tabs.some((t) => t.key === tab) ? tab : tabs[0]?.key;
   return (
     <>
-      <PageHeader title="Salary" subtitle="Entered by people, not calculated. Attendance is shown beside it for reference." />
+      <PageHeader title="Salary" subtitle="Payroll is calculated each month from the salary structure, attendance, leaves and breaks, then approved." />
       {tabs.length === 0 ? <Notice tone="warn">Your role does not include salary.</Notice> : (
         <div className="space-y-4">
           {tabs.length > 1 && <div className="overflow-hidden rounded-lg border border-line"><Tabs tabs={tabs} value={active!} onChange={setTab} label="Salary" /></div>}
           {active === 'mine' && <MySalary />}
+          {active === 'run' && <RunPanel />}
+          {active === 'structures' && <StructuresPanel />}
+          {active === 'policy' && <PolicyPanel />}
           {active === 'report' && <MonthlyReport />}
-          {active === 'bulk' && <BulkEntry />}
+          {active === 'bulk' && <><Notice tone="info">Use this only for a month that has no payroll run, for example an earlier month before payroll was calculated here. A month with a payroll run takes its salaries from the run.</Notice><BulkEntry /></>}
           {active === 'import' && <SheetImport />}
         </div>
       )}

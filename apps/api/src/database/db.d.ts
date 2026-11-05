@@ -618,6 +618,72 @@ export interface PasswordResetTokens {
   user_id: string;
 }
 
+export interface PayrollPolicies {
+  absent_deduction_days: Generated<Numeric>;
+  break_overrun_per_minute: Generated<Numeric>;
+  created_at: Generated<Timestamp>;
+  created_by: string | null;
+  effective_from: string;
+  half_day_deduction_days: Generated<Numeric>;
+  id: Generated<string>;
+  late_free_per_month: Generated<number>;
+  late_penalty_days: Generated<Numeric>;
+  tenant_id: string;
+  unpaid_leave_deduction_days: Generated<Numeric>;
+  working_days_basis: Generated<string>;
+}
+
+export interface PayrollRuns {
+  approved_at: Timestamp | null;
+  approved_by: string | null;
+  generated_at: Generated<Timestamp>;
+  generated_by: string;
+  id: Generated<string>;
+  month: string;
+  policy: Json;
+  reopened_count: Generated<number>;
+  status: Generated<string>;
+  tenant_id: string;
+}
+
+export interface PayslipLines {
+  adjusted_at: Timestamp | null;
+  adjusted_by: string | null;
+  amount: Numeric;
+  calculated: Numeric;
+  detail: string | null;
+  id: Generated<string>;
+  kind: string;
+  label: string;
+  payslip_id: string;
+  position: Generated<number>;
+  reason: string | null;
+  source: string;
+  tenant_id: string;
+}
+
+export interface Payslips {
+  absent_days: Numeric;
+  adjusted: Generated<boolean>;
+  basis_days: Numeric;
+  break_over_minutes: number;
+  daily_rate: Numeric;
+  deductions: Generated<Numeric>;
+  gross: Generated<Numeric>;
+  half_days: Numeric;
+  id: Generated<string>;
+  late_count: number;
+  month: string;
+  net_pay: Generated<Numeric | null>;
+  paid_leave_days: Numeric;
+  present_days: Numeric;
+  run_id: string;
+  tenant_id: string;
+  unpaid_leave_days: Numeric;
+  user_id: string;
+  working_days: Numeric;
+}
+
 export interface Permissions {
   code: string;
   description: string;
@@ -674,12 +740,35 @@ export interface SalaryRecords {
   deductions: Generated<Numeric>;
   entered_by: string;
   id: Generated<string>;
+  is_live: Generated<boolean>;
   month: string;
   net_pay: Generated<Numeric | null>;
   notes: string | null;
   payslip_file_key: string | null;
+  payslip_id: string | null;
   tenant_id: string;
   updated_at: Generated<Timestamp>;
+  user_id: string;
+}
+
+export interface SalaryStructureLines {
+  amount: Numeric;
+  id: Generated<string>;
+  kind: string;
+  label: string;
+  position: Generated<number>;
+  structure_id: string;
+  tenant_id: string;
+}
+
+export interface SalaryStructures {
+  base_pay: Numeric;
+  created_at: Generated<Timestamp>;
+  created_by: string;
+  effective_from: string;
+  id: Generated<string>;
+  notes: string | null;
+  tenant_id: string;
   user_id: string;
 }
 
@@ -859,12 +948,18 @@ export interface DB {
   login_attempts: LoginAttempts;
   notifications: Notifications;
   password_reset_tokens: PasswordResetTokens;
+  payroll_policies: PayrollPolicies;
+  payroll_runs: PayrollRuns;
+  payslip_lines: PayslipLines;
+  payslips: Payslips;
   permissions: Permissions;
   push_tokens: PushTokens;
   role_permissions: RolePermissions;
   roles: Roles;
   salary_import_batches: SalaryImportBatches;
   salary_records: SalaryRecords;
+  salary_structure_lines: SalaryStructureLines;
+  salary_structures: SalaryStructures;
   schema_migrations: SchemaMigrations;
   streams: Streams;
   telephony_connections: TelephonyConnections;

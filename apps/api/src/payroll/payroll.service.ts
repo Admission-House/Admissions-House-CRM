@@ -11,7 +11,7 @@ import { decodeCursor, Page, toPage } from '../common/pagination.js';
 import { DatabaseService, Trx } from '../database/database.service.js';
 import { readTable } from '../imports/spreadsheet.js';
 import { amountProblem, monthLabel, monthStart, parseSalarySheet, SalaryProblem, SalaryRow } from './payroll-rules.js';
-import { buildPayslip } from './payslip.js';
+import { buildPayslip, PayslipData } from './payslip.js';
 
 export interface SalaryInput {
   userId: string;
@@ -33,16 +33,18 @@ export interface SalaryView {
   notes: string | null;
   enteredBy: string;
   updatedAt: Date;
+  /** Set when the record came from an approved payroll run, which calculated it. */
+  payslipId: string | null;
 }
 
 interface Row {
   id: string; user_id: string; user_name: string; email: string; role: string; month: string; base_pay: string; allowances: string;
-  deductions: string; net_pay: string; notes: string | null; entered_by: string; updated_at: Date; created_text: string;
+  deductions: string; net_pay: string; notes: string | null; entered_by: string; updated_at: Date; created_text: string; payslip_id: string | null;
 }
 
 const SELECT = sql`
   SELECT s.id, s.user_id, u.name AS user_name, u.email::text AS email, r.name AS role, s.month::text AS month, s.base_pay, s.allowances,
-         s.deductions, s.net_pay, s.notes, e.name AS entered_by, s.updated_at, s.created_at::text AS created_text
+         s.deductions, s.net_pay, s.notes, e.name AS entered_by, s.updated_at, s.created_at::text AS created_text, s.payslip_id
   FROM salary_records s JOIN users u ON u.id = s.user_id JOIN roles r ON r.id = u.role_id JOIN users e ON e.id = s.entered_by`;
 
 const cursorShape = z.object({ m: z.string(), i: z.string() });
@@ -123,6 +125,9 @@ export class PayrollService {
   /** Adds or changes one record, with the audit entry. Returns the record's id. */
   private async upsert(trx: Trx, auth: AuthContext, input: SalaryInput & { monthDate: string }, batchId: string | null): Promise<string> {
     if (input.userId === auth.userId) throw new AppError('OWN_SALARY', 'You cannot enter your own salary. Ask another admin.', 403);
+    // A month with a payroll run is worked out by the run; typing a salary in as well would make two answers.
+    const { rows: run } = await sql<{ id: string }>`SELECT id FROM payroll_runs WHERE month = ${input.monthDate}::date`.execute(trx);
+    if (run[0]) throw AppError.conflict('PAYROLL_RUN_EXISTS', `${monthLabel(input.monthDate)} has a payroll run, so its salaries come from the run`, { runId: run[0].id });
     const scoped = scopeCondition(auth, 'u.id');
     const { rows: target } = await sql<{ id: string }>`SELECT u.id FROM users u WHERE u.id = ${input.userId}::uuid ${scoped ? sql`AND ${scoped}` : sql``}`.execute(trx);
     if (!target[0]) throw AppError.notFound('Employee');
@@ -210,7 +215,8 @@ export class PayrollService {
   list(auth: AuthContext, q: { month?: string; userId?: string; roleId?: string; limit: number; cursor?: string }): Promise<Page<SalaryView>> {
     return this.db.withTenant(auth.tenantId, async (trx) => {
       const after = decodeCursor(q.cursor, cursorShape);
-      const c: ReturnType<typeof sql<SqlBool>>[] = [sql<SqlBool>`true`];
+      // A record that came from a payroll run is shown only while that run is approved.
+      const c: ReturnType<typeof sql<SqlBool>>[] = [sql<SqlBool>`s.is_live`];
       const scoped = scopeCondition(auth, 's.user_id');
       if (scoped) c.push(scoped as never);
       if (q.month) c.push(sql<SqlBool>`s.month = ${this.month(q.month)}::date`);
@@ -225,7 +231,7 @@ export class PayrollService {
 
   mine(auth: AuthContext): Promise<SalaryView[]> {
     return this.db.withTenant(auth.tenantId, async (trx) => {
-      const { rows } = await sql<Row>`${SELECT} WHERE s.user_id = ${auth.userId}::uuid ORDER BY s.month DESC LIMIT 60`.execute(trx);
+      const { rows } = await sql<Row>`${SELECT} WHERE s.user_id = ${auth.userId}::uuid AND s.is_live ORDER BY s.month DESC LIMIT 60`.execute(trx);
       return rows.map(toView);
     });
   }
@@ -259,15 +265,26 @@ export class PayrollService {
   }
 
   async payslip(auth: AuthContext, id: string): Promise<{ fileName: string; pdf: Buffer }> {
-    const { row, company } = await this.db.withTenant(auth.tenantId, async (trx) => ({
-      row: await this.reachable(trx, auth, id),
-      company: (await sql<{ name: string }>`SELECT name FROM tenants LIMIT 1`.execute(trx)).rows[0]!.name,
-    }));
+    const { row, company, lines } = await this.db.withTenant(auth.tenantId, async (trx) => {
+      const found = await this.reachable(trx, auth, id);
+      return {
+        row: found,
+        company: (await sql<{ name: string }>`SELECT name FROM tenants LIMIT 1`.execute(trx)).rows[0]!.name,
+        lines: found.payslip_id ? await this.payslipLines(trx, found.payslip_id) : undefined,
+      };
+    });
     const pdf = await buildPayslip({
       company, employee: { name: row.user_name, email: row.email, role: row.role }, month: monthLabel(row.month),
-      basePay: Number(row.base_pay), allowances: Number(row.allowances), deductions: Number(row.deductions), netPay: Number(row.net_pay), notes: row.notes,
+      basePay: Number(row.base_pay), allowances: Number(row.allowances), deductions: Number(row.deductions), netPay: Number(row.net_pay), notes: row.notes, lines,
     });
     return { fileName: `payslip-${monthLabel(row.month)}.pdf`, pdf };
+  }
+
+  /** The lines and the month's attendance facts of a payslip that came from a payroll run. */
+  private async payslipLines(trx: Trx, payslipId: string): Promise<NonNullable<PayslipData['lines']>> {
+    const { rows } = await sql<{ kind: 'earning' | 'deduction'; label: string; amount: string; detail: string | null; reason: string | null }>`
+      SELECT kind, label, amount, detail, reason FROM payslip_lines WHERE payslip_id = ${payslipId}::uuid ORDER BY position, id`.execute(trx);
+    return rows.map((l) => ({ kind: l.kind, label: l.label, amount: Number(l.amount), note: l.reason ?? l.detail }));
   }
 
   // ----------------------------------------------------------------- inner
@@ -288,7 +305,7 @@ export class PayrollService {
     } else if (!auth.permissions.has('salary.read_own')) {
       throw AppError.forbidden();
     }
-    const { rows } = await sql<Row>`${SELECT} WHERE s.id = ${id}::uuid AND ${access}`.execute(trx);
+    const { rows } = await sql<Row>`${SELECT} WHERE s.id = ${id}::uuid AND s.is_live AND ${access}`.execute(trx);
     if (!rows[0]) throw AppError.notFound('Salary record');
     return rows[0];
   }
@@ -302,7 +319,7 @@ export class PayrollService {
 function toView(r: Row): SalaryView {
   return {
     id: r.id, user: { id: r.user_id, name: r.user_name, email: r.email, role: r.role }, month: monthLabel(r.month), basePay: Number(r.base_pay),
-    allowances: Number(r.allowances), deductions: Number(r.deductions), netPay: Number(r.net_pay), notes: r.notes, enteredBy: r.entered_by, updatedAt: r.updated_at,
+    allowances: Number(r.allowances), deductions: Number(r.deductions), netPay: Number(r.net_pay), notes: r.notes, enteredBy: r.entered_by, updatedAt: r.updated_at, payslipId: r.payslip_id,
   };
 }
 
