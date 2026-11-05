@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+/* Same brand colours as the CRM, sampled from the logo. */
+@theme {
+  --color-brand: #063b39;
+  --color-brand-700: #0a4f4c;
+  --color-brand-600: #0f625e;
+  --color-teal: #00dfc2;
+  --color-teal-600: #00b9a1;
+  --color-mint: #c2fdf0;
+  --color-mint-50: #f3fffc;
+  --color-ink: #14262b;
+  --color-muted: #4f6065;
+  --color-line: #e1e7e9;
+  --color-bad: #b4232a;
+  --color-ok: #0d7a3c;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+@layer base {
+  html { scroll-behavior: smooth; }
+  body {
+    background: linear-gradient(180deg, #f3fffc 0%, #ffffff 40rem);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  :focus-visible { outline: 2px solid var(--color-brand-600); outline-offset: 2px; }
+}
+
+@layer components {
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: .5rem; border-radius: .75rem; padding: .7rem 1.25rem; font-weight: 600; transition: background-color .15s; }
+  .btn-primary { background: var(--color-brand); color: #fff; }
+  .btn-primary:hover { background: var(--color-brand-700); }
+  .btn-ghost { border: 1px solid var(--color-line); background: #fff; color: var(--color-brand); }
+  .btn-ghost:hover { background: var(--color-mint-50); }
+  .card { border: 1px solid var(--color-line); border-radius: 1rem; background: #fff; padding: 1.5rem; box-shadow: 0 8px 32px rgb(6 59 57 / .06); }
+  .field { width: 100%; border: 1px solid #cfd8db; border-radius: .6rem; padding: .6rem .8rem; background: #fff; }
+  .field:focus { border-color: var(--color-brand-600); outline: none; }
+}
