@@ -2,6 +2,7 @@
 
 import { Download, FileUp } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { PendingColleges } from '@/components/leads/pending-colleges';
 import { Badge, Button, Card, Empty, Field, Notice, PageHeader, Panel, Select, Spinner, Tabs } from '@/components/ui';
 import { api, apiRaw, ApiError, download } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -386,8 +387,9 @@ export default function ImportsPage() {
     can('lead.import') && { key: 'history' as const, label: 'Earlier imports' },
     can('lead.export') && { key: 'export' as const, label: 'Export leads' },
     can('master.manage') && { key: 'masters' as const, label: 'Colleges and fees' },
-  ].filter(Boolean) as { key: 'import' | 'history' | 'export' | 'masters'; label: string }[];
-  const [tab, setTab] = useState<'import' | 'history' | 'export' | 'masters'>(tabs[0]?.key ?? 'import');
+    can('master.review') && { key: 'review' as const, label: 'Colleges to review' },
+  ].filter(Boolean) as { key: 'import' | 'history' | 'export' | 'masters' | 'review'; label: string }[];
+  const [tab, setTab] = useState<'import' | 'history' | 'export' | 'masters' | 'review'>(tabs[0]?.key ?? 'import');
   const [refresh, setRefresh] = useState(0);
   const active = tabs.some((t) => t.key === tab) ? tab : tabs[0]?.key;
   return (
@@ -400,6 +402,7 @@ export default function ImportsPage() {
           {active === 'history' && <History refreshKey={refresh} />}
           {active === 'export' && <ExportLeads />}
           {active === 'masters' && <div className="space-y-6"><CollegeApi /><ImportMasters /></div>}
+          {active === 'review' && <PendingColleges />}
         </div>
       )}
     </>

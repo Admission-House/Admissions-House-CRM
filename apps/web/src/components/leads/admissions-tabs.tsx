@@ -10,6 +10,7 @@ import { useAuth } from '@/lib/auth';
 import { fmtDateTime } from '@/lib/format';
 import type { Page } from '@/lib/types';
 import { useApi } from '@/lib/use-api';
+import { AddCollegeModal } from './add-college-modal';
 import type { LeadDetail } from './lead-panels';
 
 const errorText = (e: unknown) => (e instanceof ApiError ? e.message : 'Cannot reach the server. Try again.');
@@ -120,6 +121,9 @@ export function RecommendedTab({ lead, onChanged }: { lead: LeadDetail; onChange
   const colleges = useApi<Page<CollegeItem>>('/colleges', { leadId: lead.id, q: q.trim() || undefined, locationId: place[0]?.id, courseId: courseId || undefined, mode: mode || undefined, limit: 24 });
   const [shortlisting, setShortlisting] = useState<{ id: string; name: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const canAdd = can('master.manage') || can('master.create');
 
   const recommendedIds = new Set(recommended.data?.map((r) => r.college.id));
 
@@ -146,9 +150,24 @@ export function RecommendedTab({ lead, onChanged }: { lead: LeadDetail; onChange
   return (
     <div className="space-y-4">
       {error && <Notice tone="bad">{error}</Notice>}
+      {notice && <Notice tone="ok">{notice}</Notice>}
+      {adding && (
+        <AddCollegeModal
+          initialName={q.trim()}
+          onClose={() => setAdding(false)}
+          onDone={(waits) => {
+            setAdding(false);
+            setNotice(waits ? 'The institute is added. An Admin will review it.' : 'The institute is added.');
+            colleges.reload();
+          }}
+        />
+      )}
 
       <Card>
-        <div className="border-b border-line px-4 py-3"><h2 className="text-sm font-semibold">Find colleges</h2></div>
+        <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
+          <h2 className="text-sm font-semibold">Find colleges</h2>
+          {canAdd && <Button variant="secondary" onClick={() => { setNotice(null); setAdding(true); }}><Plus className="h-4 w-4" aria-hidden />Add an institute</Button>}
+        </div>
         <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-4">
           <Field label="Name"><Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search a college" /></Field>
           <Field label="City or state"><LocationPicker value={place} onChange={setPlace} /></Field>
@@ -159,7 +178,7 @@ export function RecommendedTab({ lead, onChanged }: { lead: LeadDetail; onChange
             <Select value={mode} onChange={(e) => setMode(e.target.value)}><option value="">{lead.studyMode ? 'Student preference' : 'Online or regular'}</option><option value="online">Online</option><option value="regular">Regular</option><option value="any">Any</option></Select>
           </Field>
         </div>
-        {colleges.loading && !colleges.data ? <Spinner /> : (colleges.data?.items.length ?? 0) === 0 ? <Empty title="No colleges match">Change a filter, or ask an admin to add the college.</Empty> : (
+        {colleges.loading && !colleges.data ? <Spinner /> : (colleges.data?.items.length ?? 0) === 0 ? <Empty title="No colleges match">{canAdd ? 'Change a filter, or add the institute yourself.' : 'Change a filter, or ask an admin to add the college.'}</Empty> : (
           <ul className="divide-y divide-line border-t border-line">
             {colleges.data!.items.map((c) => {
               const isRec = recommendedIds.has(c.id);
