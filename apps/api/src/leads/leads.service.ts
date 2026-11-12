@@ -13,6 +13,7 @@ import { DatabaseService, Trx } from '../database/database.service.js';
 import { AssignmentService } from '../intake/assignment.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { AuditService } from '../audit/audit.service.js';
+import { StorageService } from '../storage/storage.service.js';
 import { Assignees } from './assignees.js';
 import { ExportRow, MAX_EXPORT_ROWS, toCsv, toXlsx } from './lead-export.js';
 import { FollowUpWriter } from './followup-writer.js';
@@ -130,6 +131,7 @@ export class LeadsService {
     private readonly notifications: NotificationsService,
     private readonly assignees: Assignees,
     private readonly audit: AuditService,
+    private readonly storage: StorageService,
     @Inject(ENV) env: Env,
     live: LiveBus,
   ) {
@@ -607,26 +609,27 @@ export class LeadsService {
           (dto.substatusId !== undefined && dto.substatusId !== l.substatus_id),
       );
 
-      for (const lead of changing) {
-        await sql`UPDATE leads SET status_id = ${status.id}, substatus_id = ${dto.substatusId ?? null}, updated_by = ${auth.userId} WHERE id = ${lead.id}`.execute(
-          trx,
+      if (changing.length > 0) {
+        // One UPDATE for all of them, and one lookup of the old status names instead of one per lead.
+        await sql`UPDATE leads SET status_id = ${status.id}, substatus_id = ${dto.substatusId ?? null}, updated_by = ${auth.userId}
+                  WHERE id = ANY (${changing.map((l) => l.id)}::uuid[])`.execute(trx);
+        const oldIds = [...new Set(changing.map((l) => l.status_id))];
+        const names = new Map(
+          (await trx.selectFrom('lead_statuses').select(['id', 'name']).where('id', 'in', oldIds).execute()).map((r) => [r.id, r.name]),
         );
-        const old = await trx
-          .selectFrom('lead_statuses')
-          .select('name')
-          .where('id', '=', lead.status_id)
-          .executeTakeFirstOrThrow();
-        await this.writer.activity(trx, {
-          tenantId: auth.tenantId,
-          leadId: lead.id,
-          userId: auth.userId,
-          type: 'status_change',
-          field: 'status',
-          oldValue: old.name,
-          newValue: status.name,
-          remark: dto.remark,
-        });
-        if (!status.is_open) await this.followUps.closeAll(trx, lead.id);
+        for (const lead of changing) {
+          await this.writer.activity(trx, {
+            tenantId: auth.tenantId,
+            leadId: lead.id,
+            userId: auth.userId,
+            type: 'status_change',
+            field: 'status',
+            oldValue: names.get(lead.status_id) ?? null,
+            newValue: status.name,
+            remark: dto.remark,
+          });
+          if (!status.is_open) await this.followUps.closeAll(trx, lead.id);
+        }
       }
       return { requested: leads.length, changed: changing.length };
     });
@@ -739,6 +742,32 @@ export class LeadsService {
     });
   }
 
+  /**
+   * Erases everything that identifies the student (see migration 032), then removes their files from
+   * the file store. The lead row stays as an anonymous number. Cannot be undone.
+   */
+  async erase(auth: AuthContext, id: string): Promise<{ filesRemoved: number }> {
+    const keys = await this.db.withTenant(auth.tenantId, async (trx) => {
+      const lead = await this.lockVisible(trx, auth, id);
+      const { rows } = await sql<{ keys: string[] | null }>`SELECT erase_lead(${id}::uuid) AS keys`.execute(trx);
+      if (rows[0]?.keys == null) throw AppError.notFound('Lead');
+      await this.followUps.closeAll(trx, id);
+      await this.writer.activity(trx, {
+        tenantId: auth.tenantId, leadId: id, userId: auth.userId, type: 'field_change', field: 'erased',
+        oldValue: null, newValue: 'yes', remark: `Personal data of lead ${lead.lead_no} erased by ${auth.name}`,
+      });
+      await this.audit.write(trx, {
+        tenantId: auth.tenantId, actorId: auth.userId, action: 'lead.erase', entity: 'lead', entityId: id,
+        after: { leadNo: lead.lead_no, files: rows[0].keys.length }, ip: auth.ip, requestId: auth.requestId,
+      });
+      return rows[0].keys;
+    });
+    // After the commit: if a file cannot be removed the data is already gone from the database, and the
+    // orphan file has no row pointing to it. A missing file is not an error.
+    for (const key of keys) await this.storage.delete(key);
+    return { filesRemoved: keys.length };
+  }
+
   // ---------------------------------------------------------------- helpers
 
   private filters(auth: AuthContext, q: ListLeadsDto) {
@@ -755,7 +784,9 @@ export class LeadsService {
     // that set and is still subject to the caller's row-level security and data scope.
     // "= ANY (ARRAY(...))" makes the database fetch the ids first. With "IN (SELECT ...)" it walked all
     // leads in date order and checked each one (383 ms against 3 ms for a specific name at 300,000 leads).
-    else if (term?.kind === 'phone') {
+    else if (term?.kind === 'text' && term.value.length < 3) {
+      throw AppError.badRequest('SEARCH_TOO_SHORT', 'Type at least 3 letters to search', [{ field: 'q', message: 'Type at least 3 letters to search' }]);
+    } else if (term?.kind === 'phone') {
       c.push(sql<SqlBool>`l.id = ANY (ARRAY(SELECT lead_ids_matching_phone(${likePattern(term.value)})))`);
     } else if (term?.kind === 'text') {
       c.push(sql<SqlBool>`l.id = ANY (ARRAY(SELECT lead_ids_matching_text(${likePattern(term.value)})))`);

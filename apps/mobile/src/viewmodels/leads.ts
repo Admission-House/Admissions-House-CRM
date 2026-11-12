@@ -25,7 +25,10 @@ export function useLeadsViewModel() {
   const [moreError, setMoreError] = useState<string | null>(null);
 
   useEffect(() => {
-    const t = setTimeout(() => setQ(typed.trim()), 350);
+    // One or two letters are too short for the server to search (numbers are lead IDs).
+    const word = typed.trim();
+    if (word !== '' && word.length < 3 && !/^\d+$/.test(word)) return;
+    const t = setTimeout(() => setQ(word), 350);
     return () => clearTimeout(t);
   }, [typed]);
 

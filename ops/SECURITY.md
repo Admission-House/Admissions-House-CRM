@@ -22,14 +22,16 @@ hire that before taking other companies' data.
 | Dependencies | `pnpm audit` runs in CI at high severity. |
 | Rate limits | Sign-in, reset, intake and webhooks; each signed-in user 600 requests/min, and 30/min for exports, imports, uploads and file downloads. Counted per process. |
 | Document access | Opening a student document is written to the audit log (`document.view`). |
-| Search | Name, email and phone search go through tenant-safe database functions (migration 025), because row-level security stops PostgreSQL using text indexes directly. |
+| History and erasure | The lead history table cannot be changed or deleted by the application role (migration 032). A Super Admin (`lead.erase`) can erase a student's personal data with `POST /leads/:id/erase`: name, e-mail, phones, profile, guardians, documents and recordings (files too), notes in history and the raw website payload. The anonymous lead row stays for the numbers. Import files already processed are not scrubbed by this. |
+| Retention | Once a day each server clears sign-in attempts, finished website events (failed ones twice as long), ended sessions older than `RETENTION_KEEP_DAYS` (default 90) and used or expired reset links older than 30 days. Switch off with `RETENTION_INTERVAL_HOURS=0`. Business records and the audit log are never cleared. |
+| Search | Text search needs at least 3 letters. Name, email and phone search go through tenant-safe database functions (migration 025), because row-level security stops PostgreSQL using text indexes directly. |
 
 ## Not in place yet
 
 1. **No outside security test.** Do one.
 2. **Antivirus** runs on uploads only when `CLAMAV_HOST` is set (the compose file sets it). Without it there is none.
 3. **Rate limits are per process** (in memory). Fine for one container; move to Redis for several.
-4. **No two-factor sign-in** (AUTH-8 is optional in the requirements).
+4. **Two-step sign-in (TOTP) exists and a company can require it** (Settings > Security), but the mobile app cannot enter the code yet, so people covered by the rule use the web CRM only.
 5. **No automated secret rotation.** Rotating `JWT_ACCESS_SECRET` signs everyone out; rotating
    `DATA_ENCRYPTION_KEY` needs a re-encryption script that does not exist yet.
 6. **Audit log is append-only for the application role, but the database owner can still change it.**
