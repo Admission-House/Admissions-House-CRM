@@ -12,7 +12,7 @@ await client.connect();
 
 // Children before parents.
 const TABLES = [
-  'audit_logs', 'login_attempts', 'notifications', 'lead_enquiries', 'lead_activities', 'lead_profiles', 'lead_phones',
+  'video_sessions', 'audit_logs', 'login_attempts', 'notifications', 'lead_enquiries', 'lead_activities', 'lead_profiles', 'lead_phones',
   'password_reset_tokens', 'custom_field_values', 'custom_field_options', 'custom_field_defs', 'salary_records', 'payslip_lines', 'payslips', 'payroll_runs', 'salary_structure_lines', 'salary_structures', 'payroll_policies', 'salary_import_batches', 'call_recordings', 'calls', 'dialer_session_leads', 'dialer_sessions', 'telephony_connections', 'lead_import_batches', 'lead_documents', 'lead_shortlist_courses', 'lead_shortlists', 'lead_recommendations', 'followups', 'leads', 'inbound_events', 'api_keys', 'assignment_rule_users', 'assignment_rules', 'lead_policies', 'lead_statuses',
   'lead_sources', 'college_courses', 'colleges', 'courses', 'streams', 'tenant_counters', 'break_logs', 'attendance_exceptions', 'attendance_records',
   'leave_requests', 'holidays', 'leave_balances', 'leave_types', 'user_sessions', 'user_devices', 'user_profiles',

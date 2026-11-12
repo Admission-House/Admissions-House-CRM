@@ -898,6 +898,22 @@ export interface UserSessions {
   user_id: string;
 }
 
+export interface VideoSessions {
+  created_at: Generated<Timestamp>;
+  created_by: string;
+  ended_at: Timestamp | null;
+  ended_by: string | null;
+  expires_at: Timestamp;
+  id: Generated<string>;
+  lead_id: string;
+  max_minutes: Generated<number>;
+  scheduled_for: Timestamp | null;
+  started_at: Timestamp | null;
+  status: Generated<string>;
+  tenant_id: string;
+  updated_at: Generated<Timestamp>;
+}
+
 export interface DB {
   api_keys: ApiKeys;
   assignment_rule_users: AssignmentRuleUsers;
@@ -971,4 +987,5 @@ export interface DB {
   user_recovery_codes: UserRecoveryCodes;
   user_sessions: UserSessions;
   users: Users;
+  video_sessions: VideoSessions;
 }

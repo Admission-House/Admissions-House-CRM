@@ -13,8 +13,8 @@ const SECURITY_HEADERS = [
   { key: 'X-Frame-Options', value: 'DENY' },
   { key: 'Content-Security-Policy', value: "frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'" },
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-  // geolocation is needed for the office check and the Detect button; nothing else is.
-  { key: 'Permissions-Policy', value: 'geolocation=(self), camera=(), microphone=(), payment=(), usb=()' },
+  // geolocation is needed for the office check and the Detect button; camera and microphone for video counselling.
+  { key: 'Permissions-Policy', value: 'geolocation=(self), camera=(self), microphone=(self), payment=(), usb=()' },
   { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
   // Only takes effect over HTTPS, so it is harmless on a developer machine.
   { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains' },

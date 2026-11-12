@@ -26,6 +26,7 @@ import { HealthModule } from './health/health.module.js';
 import { IntegrationsModule } from './integrations/integrations.module.js';
 import { IntakeModule } from './intake/intake.module.js';
 import { RetentionModule } from './retention/retention.module.js';
+import { VideoModule } from './video/video.module.js';
 import { LeadsModule } from './leads/leads.module.js';
 import { LeadConfigModule } from './lead-config/lead-config.module.js';
 import { LeaveModule } from './leave/leave.module.js';
@@ -99,6 +100,7 @@ export const safeUrl = (url: string): string => url.replace(/(\/telephony\/hooks
     DevicesModule,
     HealthModule,
     RetentionModule,
+    VideoModule,
   ],
   providers: [
     { provide: APP_PIPE, useClass: ZodValidationPipe },
