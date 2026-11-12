@@ -68,6 +68,10 @@ const schema = z.object({
 
   /** How often follow-up reminders are sent, in seconds. 0 turns it off. */
   FOLLOWUP_REMINDER_INTERVAL_SEC: z.coerce.number().int().min(0).max(3600).default(60),
+  /** How often old technical records are cleared, in hours. 0 turns it off. */
+  RETENTION_INTERVAL_HOURS: z.coerce.number().int().min(0).max(168).default(24),
+  /** How many days sign-in attempts, finished website events and ended sessions are kept. */
+  RETENTION_KEEP_DAYS: z.coerce.number().int().min(7).max(3650).default(90),
   IMPORT_INTERVAL_SEC: z.coerce.number().int().min(0).max(3600).default(30),
 
   /**

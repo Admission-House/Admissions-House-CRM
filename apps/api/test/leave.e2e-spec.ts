@@ -52,6 +52,19 @@ async function nextSunday(minAhead = 3): Promise<string> {
     )
   ).rows[0].d;
 }
+/**
+ * A Sunday far enough ahead that nothing else in these tests touches it, but still in the current
+ * year: balances are counted per calendar year, so a request dated next year would not change the
+ * balance these tests read.
+ */
+async function sundayInThisYear(): Promise<string> {
+  const thisYear = (await owner.query(`SELECT EXTRACT(YEAR FROM now() AT TIME ZONE 'Asia/Kolkata')::int AS y`)).rows[0].y as number;
+  for (const ahead of [50, 30, 10, 3]) {
+    const sunday = await nextSunday(ahead);
+    if (Number(sunday.slice(0, 4)) === thisYear) return sunday;
+  }
+  return nextSunday(3);
+}
 const plusDays = async (date: string, n: number) =>
   (await owner.query(`SELECT ($1::date + $2::int)::text AS d`, [date, n])).rows[0].d as string;
 
@@ -334,7 +347,7 @@ describe('deciding on leave', () => {
 describe('withdrawing a request', () => {
   const futureRequest = async (name: string, offset: number) => {
     const token = await asOffice(name);
-    const date = await plusDays(await nextSunday(50), offset);
+    const date = await plusDays(await sundayInThisYear(), offset);
     const res = await request(token, { leaveTypeId: await typeId('Sick Leave'), fromDate: date }, OFFICE_IP);
     expect(res.statusCode, res.body).toBe(201);
     return { token, id: res.json().id as string };

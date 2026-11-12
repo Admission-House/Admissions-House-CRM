@@ -226,7 +226,7 @@ describe('the lead list', () => {
     expect(await find(q1.slice(-8))).toContain(ids.a);
     expect(await find(`#${ids.aNo}`)).toEqual([ids.a]);
     expect(await find('nobody-has-this-name')).toEqual([]);
-    expect(await find('%')).toEqual([]); // wildcards are not wildcards
+    expect(await find('%%%')).toEqual([]); // wildcards are not wildcards (three characters, the shortest text search)
   });
 
   it('filters by status, source, intent, study mode and owner', async () => {

@@ -121,4 +121,12 @@ export class LeadsController {
   remove(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string): Promise<void> {
     return this.leads.remove(auth, id);
   }
+
+  /** Permanently erases the student's personal data (name, phones, documents, recordings, notes). Cannot be undone. */
+  @RequirePermissions('lead.erase')
+  @Post(':id/erase')
+  @HttpCode(200)
+  erase(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string) {
+    return this.leads.erase(auth, id);
+  }
 }

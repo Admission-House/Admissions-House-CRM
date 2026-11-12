@@ -128,8 +128,12 @@ function Leads() {
   useEffect(() => {
     if (typed === null) return;
     const t = setTimeout(() => {
-      set({ q: typed.trim() });
-      setTyped(null);
+      // One or two letters are too short for the server to search; wait for a third (numbers are lead IDs).
+      const word = typed.trim();
+      if (word === '' || word.length >= 3 || /^\d+$/.test(word)) {
+        set({ q: word });
+        setTyped(null);
+      }
     }, 350);
     return () => clearTimeout(t);
   }, [typed, set]);
