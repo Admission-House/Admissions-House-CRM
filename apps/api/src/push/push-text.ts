@@ -61,6 +61,21 @@ export function pushText(payload: Record<string, unknown>): PushText | null {
       return { title: `${who} was signed out by an admin`, data: {} };
     case 'attendance_exception':
       return { title: `Attendance marked by hand for ${text(payload.userName, 'someone')}`, body: [str(payload.date), str(payload.reason)].filter(Boolean).join(': ') || undefined, data: {} };
+    // Calls and meetings between staff, and with outside guests (voice, video, group meetings).
+    case 'comm_incoming':
+      return { title: `Incoming ${payload.kind === 'voice' ? 'voice' : 'video'} call from ${who === 'Someone' ? text(payload.fromName, 'a colleague') : who}`, body: str(payload.leadName) && `About ${str(payload.leadName)}`, data: { screen: 'communications', ...lead } };
+    case 'comm_missed':
+      return { title: `Missed ${payload.kind === 'voice' ? 'voice' : 'video'} call from ${text(payload.fromName, 'a colleague')}`, data: { screen: 'communications', ...lead } };
+    case 'comm_declined':
+      return { title: `${text(payload.fromName, 'Your colleague')} turned down your call`, data: { screen: 'communications' } };
+    case 'comm_meeting_invite':
+      return { title: `Meeting invitation: ${text(payload.title, 'a meeting')}`, body: [str(payload.fromName) && `From ${str(payload.fromName)}`, str(payload.scheduledFor)].filter(Boolean).join(', ') || undefined, data: { screen: 'communications' } };
+    case 'comm_meeting_reminder':
+      return { title: `Meeting soon: ${text(payload.title, 'a meeting')}`, body: str(payload.scheduledFor), data: { screen: 'communications' } };
+    case 'comm_meeting_started':
+      return { title: `${text(payload.title, 'A meeting')} has started`, body: str(payload.fromName) && `Hosted by ${str(payload.fromName)}`, data: { screen: 'communications' } };
+    case 'comm_ended':
+      return { title: payload.cancelled ? `${text(payload.title, 'A session')} was cancelled` : `${text(payload.title, 'A session')} has ended`, body: str(payload.fromName) && `By ${str(payload.fromName)}`, data: { screen: 'communications' } };
     default:
       return null;
   }

@@ -145,6 +145,17 @@ const schema = z.object({
    * minutes of calls. When Agora's free minutes run out it stops the service rather than charging.
    * 0 means no limit.
    */
+  /** How long a call rings for a colleague before it counts as missed, in seconds. */
+  COMMUNICATION_RING_SECONDS: z.coerce.number().int().min(10).max(120).default(45),
+  /** How often ringing, lost connections, finished calls and meeting reminders are looked after, in seconds. 0 turns it off. */
+  COMMUNICATION_SWEEP_SEC: z.coerce.number().int().min(0).max(300).default(15),
+  /**
+   * The most people to let into one session. Agora's guidance is up to 32 people sending sound at once in a
+   * channel and 17 of them also sending video (docs.agora.io, "How many users can Agora RTC SDK support").
+   * Confirm the figures for your account with Agora before raising them.
+   */
+  COMMUNICATION_MAX_VOICE_PEOPLE: z.coerce.number().int().min(2).max(100).default(32),
+  COMMUNICATION_MAX_VIDEO_PEOPLE: z.coerce.number().int().min(2).max(100).default(17),
   VIDEO_MONTHLY_MINUTE_LIMIT: z.coerce.number().int().min(0).max(10_000_000).default(9_000),
   COLLEGE_API_KEY: z.string().optional(),
   /** The header that carries the key, and the word before it ("Bearer"). An empty scheme sends the key alone (for "x-api-key"). */

@@ -1,6 +1,8 @@
 'use client';
 
-import { Download, ExternalLink, PhoneCall, Plus, Search, SlidersHorizontal, X } from 'lucide-react';
+import { LeadCallMenu, type CallMenuLead } from '@/components/communications/lead-call-menu';
+import { NewMeetingModal } from '@/components/communications/session-modals';
+import { Download, ExternalLink, Plus, Search, SlidersHorizontal, X } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
@@ -177,6 +179,10 @@ function Leads() {
     }
   }
 
+  // Voice and video calls and meetings need the calling service to be set up; ask once, not for every row.
+  const comm = useApi<{ enabled: boolean }>(can('video.host') ? '/communications/status' : null);
+  const [meetingFor, setMeetingFor] = useState<CallMenuLead | null>(null);
+
   async function callLead(id: string) {
     setNotice(null);
     try {
@@ -341,7 +347,10 @@ function Leads() {
                       <td className="px-3 py-2.5 text-muted"><span className="tabular">{fromNow(l.updatedAt)}</span></td>
                       <td className="px-4 py-2.5">
                         <div className="flex justify-end gap-1">
-                          {can('call.place') && l.status.isOpen && <button onClick={() => void callLead(l.id)} aria-label={`Call ${l.name}`} title="Call" className="grid h-8 w-8 place-items-center rounded-md text-muted hover:bg-info-50 hover:text-info"><PhoneCall className="h-[17px] w-[17px]" /></button>}
+                          {(can('call.place') || can('video.host')) && l.status.isOpen && (
+                            <LeadCallMenu lead={{ id: l.id, name: l.name }} phone={can('call.place') ? { enabled: true, onCall: () => void callLead(l.id) } : undefined}
+                              internet={can('video.host') && comm.data?.enabled === true} onMeeting={setMeetingFor} onError={(text) => setNotice({ tone: 'bad', text })} />
+                          )}
                           <Link href={`/leads/${l.id}`} aria-label={`Open ${l.name}`} title="Open" className="grid h-8 w-8 place-items-center rounded-md text-muted hover:bg-head hover:text-ink"><ExternalLink className="h-[17px] w-[17px]" /></Link>
                         </div>
                       </td>
@@ -391,6 +400,7 @@ function Leads() {
           }}
         />
       )}
+      {meetingFor && <NewMeetingModal lead={meetingFor} onClose={() => setMeetingFor(null)} onCreated={() => undefined} />}
     </>
   );
 }

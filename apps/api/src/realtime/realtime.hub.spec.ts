@@ -37,6 +37,13 @@ describe('who hears about what', () => {
     expect(wants(admin, ev('lead', 'c2'))).toBe(true);
   });
 
+  it('tells only the person concerned about a call or meeting invitation, not even an Admin', () => {
+    expect(wants(counsellor, ev('call', 'c1'))).toBe(true);
+    expect(wants(counsellor, ev('call', 'c2'))).toBe(false);
+    expect(wants(admin, ev('call', 'c1'))).toBe(false);
+    expect(wants(admin, ev('call', 'c1', T2))).toBe(false);
+  });
+
   it('never crosses from one company to another', () => {
     expect(wants(admin, ev('team', null, T2))).toBe(false);
     expect(wants(counsellor, ev('notification', 'c1', T2))).toBe(false);
