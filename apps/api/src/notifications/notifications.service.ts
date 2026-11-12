@@ -5,7 +5,7 @@ import type { AuthContext } from '../auth/auth-context.js';
 import { decodeCursor, Page, toPage } from '../common/pagination.js';
 import { DatabaseService, Trx } from '../database/database.service.js';
 
-export type NotificationType = 'followup_due' | 'assignment' | 'approval' | 'security' | 'lead_new' | 'system';
+export type NotificationType = 'followup_due' | 'assignment' | 'approval' | 'security' | 'lead_new' | 'system' | 'communication';
 
 export interface NotificationView {
   id: string;

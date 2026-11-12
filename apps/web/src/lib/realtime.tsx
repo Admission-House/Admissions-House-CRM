@@ -5,7 +5,7 @@ import { getAccessToken, refreshSession } from './api';
 import { useAuth } from './auth';
 
 /** What a hint can be about. `resync` means the connection was lost for a while, so ask for everything again. */
-export type Topic = 'notification' | 'team' | 'lead' | 'resync';
+export type Topic = 'notification' | 'team' | 'lead' | 'call' | 'resync';
 type Listener = (topics: readonly string[]) => void;
 
 interface Live {

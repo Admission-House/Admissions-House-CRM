@@ -1,5 +1,5 @@
 import {
-  BarChart3, CalendarCheck, CalendarClock, CheckCircle2, Clock3, FileSpreadsheet, LayoutDashboard, PhoneCall, PhoneMissed, Settings, Sparkles, Users, Wallet,
+  BarChart3, CalendarCheck, CalendarClock, CheckCircle2, Clock3, FileSpreadsheet, LayoutDashboard, PhoneCall, PhoneMissed, Settings, Sparkles, Users, Video, Wallet,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -37,6 +37,7 @@ const ALL: NavItem[] = [
     ],
   },
   { label: 'Follow-ups', href: '/followups', icon: CalendarClock, any: ['followup.manage'] },
+  { label: 'Calls and meetings', href: '/communications', icon: Video, any: ['video.host'] },
   {
     label: 'Calling',
     icon: PhoneCall,

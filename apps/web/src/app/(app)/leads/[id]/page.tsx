@@ -50,7 +50,7 @@ function Workspace() {
   const [calling, setCalling] = useState(false);
   const [videoOpen, setVideoOpen] = useState(false);
   // Shown only when the company has set video up (Agora keys in the environment).
-  const video = useApi<{ enabled: boolean }>(can('video.host') ? '/video-sessions/status' : null);
+  const video = useApi<{ enabled: boolean }>(can('video.host') ? '/communications/status' : null);
   const [callMessage, setCallMessage] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null);
 
   const requested = params.get('tab');

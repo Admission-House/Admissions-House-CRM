@@ -898,19 +898,58 @@ export interface UserSessions {
   user_id: string;
 }
 
+export interface VideoSessionEvents {
+  detail: string | null;
+  event: string;
+  id: Generated<Int8>;
+  invite_id: string | null;
+  occurred_at: Generated<Timestamp>;
+  session_id: string;
+  tenant_id: string;
+}
+
+export interface VideoSessionInvites {
+  agora_uid: number;
+  device_hash: string | null;
+  expires_at: Timestamp;
+  first_joined_at: Timestamp | null;
+  guest_name: string | null;
+  id: Generated<string>;
+  invited_at: Generated<Timestamp>;
+  invited_by: string;
+  joined_at: Timestamp | null;
+  kind: string;
+  last_left_at: Timestamp | null;
+  last_seen_at: Timestamp | null;
+  responded_at: Timestamp | null;
+  role: Generated<string>;
+  session_id: string;
+  state: Generated<string>;
+  tenant_id: string;
+  token_version: Generated<number>;
+  user_id: string | null;
+}
+
 export interface VideoSessions {
   created_at: Generated<Timestamp>;
   created_by: string;
+  description: string | null;
   ended_at: Timestamp | null;
   ended_by: string | null;
   expires_at: Timestamp;
+  failure_reason: string | null;
   id: Generated<string>;
-  lead_id: string;
+  kind: Generated<string>;
+  lead_id: string | null;
   max_minutes: Generated<number>;
+  outcome: string | null;
+  reminded_at: Timestamp | null;
   scheduled_for: Timestamp | null;
   started_at: Timestamp | null;
   status: Generated<string>;
   tenant_id: string;
+  title: string | null;
+  type: Generated<string>;
   updated_at: Generated<Timestamp>;
 }
 
@@ -987,5 +1026,7 @@ export interface DB {
   user_recovery_codes: UserRecoveryCodes;
   user_sessions: UserSessions;
   users: Users;
+  video_session_events: VideoSessionEvents;
+  video_session_invites: VideoSessionInvites;
   video_sessions: VideoSessions;
 }

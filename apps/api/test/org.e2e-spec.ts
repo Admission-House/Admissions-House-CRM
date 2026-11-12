@@ -57,7 +57,7 @@ describe('roles and permissions', () => {
     const res = await api.call('GET', '/permissions', sa);
     expect(res.statusCode).toBe(200);
     const total = res.json().reduce((n: number, g: { permissions: unknown[] }) => n + g.permissions.length, 0);
-    expect(total).toBe(47);
+    expect(total).toBe(48);
     expect((await api.call('GET', '/permissions', admin, undefined, OFFICE_IP)).statusCode).toBe(403);
   });
 

@@ -6,6 +6,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Avatar, Spinner, cx } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
+import { IncomingCalls } from '@/components/communications/incoming-calls';
 import { RealtimeProvider } from '@/lib/realtime';
 import { NAV, type NavItem } from '@/lib/nav';
 import { themeStyle } from '@/lib/brand-theme';
@@ -251,6 +252,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </footer>
       </div>
 
+      <IncomingCalls />
     </div>
     </RealtimeProvider>
   );
