@@ -14,7 +14,7 @@ export const ADMIN = [
   'attendance.self', 'attendance.read', 'attendance.exception',
   'leave.request', 'leave.read', 'leave.approve',
   'salary.read_own', 'salary.read', 'salary.write', 'salary.import',
-  'dashboard.read', 'report.read',
+  'dashboard.read', 'report.read', 'video.host',
 ];
 
 export const COUNSELLOR = [
@@ -24,5 +24,5 @@ export const COUNSELLOR = [
   'master.read', 'master.create',
   'attendance.self', 'leave.request',
   'salary.read_own',
-  'dashboard.read', 'report.read',
+  'dashboard.read', 'report.read', 'video.host',
 ];

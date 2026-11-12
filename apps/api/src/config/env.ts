@@ -135,6 +135,17 @@ const schema = z.object({
 
   /** The college data provider's list endpoint. Leave out until the provider is chosen. */
   COLLEGE_API_URL: z.string().url().optional(),
+  /** Agora project credentials for video counselling (console.agora.io). Leave empty to switch the feature off. */
+  AGORA_APP_ID: z.string().trim().optional(),
+  /** The project's App Certificate. Never sent to a browser; it only signs the short-lived join tokens. */
+  AGORA_APP_CERTIFICATE: z.string().trim().optional(),
+  /**
+   * The most Agora "Standard minutes" to use in a calendar month. Agora's free package is 10,000; a video
+   * call costs 8 of them for each minute (two people, 4 each), so the default of 9,000 is about 1,125
+   * minutes of calls. When Agora's free minutes run out it stops the service rather than charging.
+   * 0 means no limit.
+   */
+  VIDEO_MONTHLY_MINUTE_LIMIT: z.coerce.number().int().min(0).max(10_000_000).default(9_000),
   COLLEGE_API_KEY: z.string().optional(),
   /** The header that carries the key, and the word before it ("Bearer"). An empty scheme sends the key alone (for "x-api-key"). */
   COLLEGE_API_AUTH_HEADER: z.string().min(1).default('Authorization'),

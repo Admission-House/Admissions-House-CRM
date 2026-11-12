@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowLeft, Mail, MessageCircle, MessageSquareText, PhoneCall } from 'lucide-react';
+import { ArrowLeft, Mail, MessageCircle, MessageSquareText, PhoneCall, Video } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useState } from 'react';
@@ -10,6 +10,7 @@ import { CustomFieldsPanel } from '@/components/leads/custom-fields-panel';
 import { DocumentsTab } from '@/components/leads/documents-tab';
 import { AssignPanel, FollowUpsPanel, StatusPanel, Timeline, type LeadDetail } from '@/components/leads/lead-panels';
 import { ProfileTab } from '@/components/leads/profile-tab';
+import { VideoModal } from '@/components/leads/video-modal';
 import { Avatar, Badge, Button, Card, Notice, Panel, Spinner, Tabs } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -47,6 +48,9 @@ function Workspace() {
   const lead = useApi<LeadDetail>(`/leads/${id}`);
   const [version, setVersion] = useState(0);
   const [calling, setCalling] = useState(false);
+  const [videoOpen, setVideoOpen] = useState(false);
+  // Shown only when the company has set video up (Agora keys in the environment).
+  const video = useApi<{ enabled: boolean }>(can('video.host') ? '/video-sessions/status' : null);
   const [callMessage, setCallMessage] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null);
 
   const requested = params.get('tab');
@@ -108,9 +112,11 @@ function Workspace() {
             <a href={`https://wa.me/${l.phone.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer" className="inline-flex h-10 items-center gap-2 rounded-lg border border-white/80 bg-white/65 px-3.5 text-sm font-medium text-ink shadow-[0_2px_10px_rgb(6_59_57/0.06)] backdrop-blur-sm transition hover:bg-white/95"><MessageCircle className="h-4 w-4 text-ok" aria-hidden /> WhatsApp</a>
             <a href={`sms:+${l.phone.replace(/\D/g, '')}`} className="inline-flex h-10 items-center gap-2 rounded-lg border border-white/80 bg-white/65 px-3.5 text-sm font-medium text-ink shadow-[0_2px_10px_rgb(6_59_57/0.06)] backdrop-blur-sm transition hover:bg-white/95"><MessageSquareText className="h-4 w-4 text-info" aria-hidden /> SMS</a>
             {l.email && <a href={`mailto:${l.email}`} className="inline-flex h-10 items-center gap-2 rounded-lg border border-white/80 bg-white/65 px-3.5 text-sm font-medium text-ink shadow-[0_2px_10px_rgb(6_59_57/0.06)] backdrop-blur-sm transition hover:bg-white/95"><Mail className="h-4 w-4 text-muted" aria-hidden /> Email</a>}
+            {can('video.host') && video.data?.enabled && l.status.isOpen && <Button variant="secondary" onClick={() => setVideoOpen(true)}><Video className="h-4 w-4" aria-hidden /> Video</Button>}
             {can('call.place') && l.status.isOpen && <Button variant="accent" onClick={() => void call()} loading={calling}><PhoneCall className="h-4 w-4" aria-hidden /> Call</Button>}
           </div>
         </div>
+        {videoOpen && <VideoModal leadId={id} leadName={l.name} phone={l.phone} onClose={() => setVideoOpen(false)} />}
         {callMessage && <div className="border-t border-line px-4 py-2.5"><Notice tone={callMessage.tone}>{callMessage.text}</Notice></div>}
         <Tabs label="Lead sections" tabs={TABS.map((t) => ({ key: t.key, label: t.label }))} value={tab} onChange={setTab} />
       </Card>

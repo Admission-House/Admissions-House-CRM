@@ -99,8 +99,8 @@ export const DEFAULT_USERS: UserSpec[] = [
 ];
 
 const STANDARD_PERMISSIONS: Record<Exclude<RoleKey, 'super_admin'>, string[]> = {
-  admin: ['lead.read', 'lead.create', 'lead.update', 'lead.assign', 'lead.import', 'lead.export', 'call.place', 'dashboard.read', 'report.read', 'report.export', 'salary.write', 'salary.read', 'salary.import', 'salary.read_own', 'call.read', 'call.listen', 'dialer.use', 'followup.manage', 'user.read', 'device.approve', 'branch.read', 'attendance.self', 'attendance.read', 'attendance.exception', 'leave.request', 'leave.read', 'leave.approve', 'master.read', 'master.create', 'master.review', 'shortlist.manage', 'document.manage'],
-  counsellor: ['lead.read', 'dashboard.read', 'report.read', 'salary.read_own', 'call.place', 'dialer.use', 'call.read', 'lead.create', 'lead.update', 'followup.manage', 'attendance.self', 'leave.request', 'master.read', 'master.create', 'shortlist.manage', 'document.manage'],
+  admin: ['lead.read', 'lead.create', 'lead.update', 'lead.assign', 'lead.import', 'lead.export', 'call.place', 'dashboard.read', 'report.read', 'report.export', 'salary.write', 'salary.read', 'salary.import', 'salary.read_own', 'call.read', 'call.listen', 'dialer.use', 'followup.manage', 'user.read', 'device.approve', 'branch.read', 'attendance.self', 'attendance.read', 'attendance.exception', 'leave.request', 'leave.read', 'leave.approve', 'master.read', 'master.create', 'master.review', 'shortlist.manage', 'document.manage', 'video.host'],
+  counsellor: ['lead.read', 'video.host', 'dashboard.read', 'report.read', 'salary.read_own', 'call.place', 'dialer.use', 'call.read', 'lead.create', 'lead.update', 'followup.manage', 'attendance.self', 'leave.request', 'master.read', 'master.create', 'shortlist.manage', 'document.manage'],
 };
 
 /** A company with the three standard roles, an office, and users, in the real database. */
@@ -229,7 +229,7 @@ export async function createFixture(owner: pg.Client, specs: UserSpec[] = DEFAUL
     addUser: (spec) => insert(spec.name, spec.roleId, { manager: spec.managerName, branch: spec.branch ?? false }),
     async cleanup() {
       const tables = [
-        'audit_logs', 'login_attempts', 'notifications', 'lead_enquiries', 'lead_activities', 'lead_profiles', 'lead_phones',
+        'video_sessions', 'audit_logs', 'login_attempts', 'notifications', 'lead_enquiries', 'lead_activities', 'lead_profiles', 'lead_phones',
         'password_reset_tokens', 'custom_field_values', 'custom_field_options', 'custom_field_defs', 'salary_records', 'payslip_lines', 'payslips', 'payroll_runs', 'salary_structure_lines', 'salary_structures', 'payroll_policies', 'salary_import_batches', 'call_recordings', 'calls', 'dialer_session_leads', 'dialer_sessions', 'telephony_connections', 'lead_import_batches', 'lead_documents', 'lead_shortlist_courses', 'lead_shortlists', 'lead_recommendations', 'followups', 'leads', 'inbound_events', 'api_keys', 'assignment_rule_users', 'assignment_rules', 'lead_policies', 'lead_statuses',
         'lead_sources', 'college_courses', 'colleges', 'courses', 'streams', 'tenant_counters',
         'break_logs', 'attendance_exceptions', 'attendance_records',
