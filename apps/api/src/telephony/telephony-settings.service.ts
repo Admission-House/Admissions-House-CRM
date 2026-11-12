@@ -10,7 +10,7 @@ import { DatabaseService, Trx } from '../database/database.service.js';
 import { ProviderRegistry } from './providers/registry.js';
 import { hashWebhookKey } from './telephony-key.guard.js';
 
-const HOST = /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
+export const HOST = /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
 
 export const connectionSchema = z.object({
   provider: z.string().trim().min(2).max(40),

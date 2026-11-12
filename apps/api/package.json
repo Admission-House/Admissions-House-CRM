@@ -14,6 +14,7 @@
     "db:migrate": "node --env-file=.env db/migrate.mjs",
     "db:types": "kysely-codegen --dialect postgres --url \"env(DATABASE_URL)\" --env-file .env --type-mapping \"{\\\"date\\\":\\\"string\\\"}\" --out-file src/database/db.d.ts",
     "tenant:provision": "node --env-file=.env db/provision-tenant.mjs",
+    "telephony:connect": "node --env-file=.env db/connect-exotel.mjs",
     "load-test": "vitest run --config ./vitest.config.perf.ts",
     "db:seed-locations": "node --env-file=.env db/seed-locations.mjs"
   },
