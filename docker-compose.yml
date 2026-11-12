@@ -101,7 +101,26 @@ services:
     ports:
       - '127.0.0.1:3100:3100'
 
+  # One-off: connects a company to Exotel from the EXOTEL_* settings in .env.production.
+  #   COMPANY=<short name> docker compose --env-file .env.production --profile tools run --rm connect-exotel
+  # The address to give Exotel is printed as a file path inside the "secrets" volume, not on the screen.
+  connect-exotel:
+    build: .
+    profiles: ['tools']
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    command: ['sh', '-c', 'node db/connect-exotel.mjs "$${COMPANY:?set COMPANY to the company short name}"']
+    env_file: .env.production
+    environment:
+      MIGRATOR_DATABASE_URL: postgres://ah_owner:${OWNER_DB_PASSWORD}@db:5432/admission_house
+      COMPANY: ${COMPANY:-}
+    volumes:
+      - secrets:/app/.secrets
+    restart: 'no'
+
 volumes:
+  secrets:
   clamdb:
   pgdata:
   storage:
