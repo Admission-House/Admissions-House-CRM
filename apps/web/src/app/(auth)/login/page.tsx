@@ -9,6 +9,7 @@ import { ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { BRAND } from '@/lib/brand-config';
 import { useCompanySlug } from '@/lib/company-slug';
+import { homePath } from '@/lib/start-page';
 
 const EMAIL_KEY = 'ah.email';
 
@@ -47,7 +48,7 @@ function friendly(err: unknown): string {
 }
 
 function SignIn() {
-  const { login, status } = useAuth();
+  const { login, status, me } = useAuth();
   const router = useRouter();
   const company = useCompanySlug();
   const savedEmail = useSyncExternalStore(subscribe, readEmail, () => '');
@@ -62,8 +63,8 @@ function SignIn() {
   const email = emailTyped ?? savedEmail;
 
   useEffect(() => {
-    if (status === 'authenticated') router.replace('/dashboard');
-  }, [status, router]);
+    if (status === 'authenticated') router.replace(homePath(me?.user.startPage));
+  }, [status, router, me]);
 
   /** What is wrong with the form before it is sent, in plain words. */
   function check(): { email?: string; password?: string } {
@@ -87,7 +88,7 @@ function SignIn() {
     try {
       const res = await login({ tenant: company, email: email.trim(), password, ...(needsCode && mfaCode.trim() && { mfaCode: mfaCode.trim() }) });
       writeEmail(remember ? email.trim() : null);
-      router.replace(res.mustChangePassword ? '/change-password' : '/dashboard');
+      router.replace(res.mustChangePassword ? '/change-password' : res.home);
     } catch (err) {
       if (err instanceof ApiError && (err.code === 'MFA_REQUIRED' || err.code === 'MFA_CODE_WRONG')) {
         setNeedsCode(true);

@@ -1,12 +1,13 @@
 'use client';
 
-import { Video } from 'lucide-react';
+import Image from 'next/image';
 import { useParams } from 'next/navigation';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ConsentCard } from '@/components/communications/consent-card';
 import { Button, Field, Input, Notice } from '@/components/ui';
 import { VideoRoom } from '@/components/video/video-room';
 import { api, ApiError } from '@/lib/api';
-import { deviceIdFor, type LeaveReason, type PresenceEvent, type RtcJoin, type Snapshot } from '@/lib/communications';
+import { deviceIdFor, greetingFor, type GuestInfo, type LeaveReason, type PresenceEvent, type RtcJoin, type Snapshot } from '@/lib/communications';
 import { fmtDateTime } from '@/lib/format';
 
 interface GuestJoin extends RtcJoin {
@@ -45,23 +46,36 @@ export default function MeetPage() {
   const [error, setError] = useState<string | null>(null);
   const [over, setOver] = useState<LeaveReason | null>(null);
   const [name, setName] = useState('');
+  const [consent, setConsent] = useState<string | null>(null);
+  // Who is calling, asked before the student presses Join. Opening the link starts nothing and ties it to no device.
+  const [info, setInfo] = useState<GuestInfo | 'invalid' | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    api<GuestInfo>('/video/guest/info', { method: 'POST', body: { token }, anonymous: true })
+      .then((i) => { if (!cancelled) setInfo(i); })
+      .catch((e: unknown) => { if (!cancelled) setInfo(e instanceof ApiError && e.status === 404 ? 'invalid' : null); });
+    return () => { cancelled = true; };
+  }, [token]);
 
   // Read once the page is in the browser; the server never sees it until the guest joins.
   const deviceId = useMemo(() => (typeof window === 'undefined' ? '' : deviceIdFor(token)), [token]);
 
   const call = useCallback(
-    (name?: string) => api<GuestJoin>('/video/guest/join', { method: 'POST', body: { token, deviceId, ...(name ? { name } : {}) }, anonymous: true }),
+    (name?: string, agreed?: boolean) => api<GuestJoin>('/video/guest/join', { method: 'POST', body: { token, deviceId, ...(name ? { name } : {}), ...(agreed ? { consent: true } : {}) }, anonymous: true }),
     [token, deviceId],
   );
 
-  async function enter() {
+  async function enter(agreed = false) {
     setBusy(true);
     setError(null);
     try {
-      setJoin(await call(name.trim() || undefined));
+      setJoin(await call(name.trim() || undefined, agreed));
       setOver(null);
+      setConsent(null);
     } catch (e) {
-      if (e instanceof ApiError && e.code === 'MEETING_NOT_STARTED') {
+      if (e instanceof ApiError && e.code === 'CONSENT_REQUIRED') {
+        setConsent(typeof e.details?.notice === 'string' ? e.details.notice : 'This session is recorded.');
+      } else if (e instanceof ApiError && e.code === 'MEETING_NOT_STARTED') {
         const at = typeof e.details?.scheduledFor === 'string' ? fmtDateTime(e.details.scheduledFor) : 'its planned time';
         setError(`This meeting has not started yet. It opens a few minutes before ${at}. Please come back then.`);
       } else {
@@ -101,6 +115,7 @@ export default function MeetPage() {
   }, []);
 
   const ending = over ? ENDINGS[over] : null;
+  const greeting = greetingFor(info);
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-3xl flex-col justify-center gap-5 px-4 py-8">
       {join ? (
@@ -109,28 +124,30 @@ export default function MeetPage() {
           <p className="mb-4 text-sm text-muted">{join.companyName} · hosted by {join.hostName}</p>
           <VideoRoom join={join} renew={renew} report={report} onLeft={onLeft} label={`${join.kind === 'voice' ? 'Voice' : 'Video'} call with ${join.hostName}`} />
         </div>
+      ) : consent ? (
+        <div className="glass mx-auto w-full max-w-md rounded-2xl px-6 py-6">
+          <ConsentCard notice={consent} busy={busy} onAgree={() => void enter(true)} onCancel={() => setConsent(null)} />
+        </div>
       ) : (
         <div className="glass mx-auto w-full max-w-md rounded-2xl px-6 py-9 text-center">
-          <span className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-full bg-mint text-brand"><Video className="h-6 w-6" aria-hidden /></span>
-          <h1 className="text-lg font-semibold text-ink">{ending ? ending.title : 'You are invited to a session'}</h1>
-          <p className="mt-2 text-sm text-muted">
-            {ending
-              ? ending.text
-              : 'Your microphone (and camera, for a video call) is used only during this call. When you are ready, press the button below and allow it when your browser asks.'}
-          </p>
-          {!ending && (
+          <Image src="/brand/logo-mark.png" alt={greeting.company} width={72} height={54} priority className="mx-auto mb-3 h-14 w-auto" />
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted">{greeting.company}</p>
+          <h1 className="mt-1 text-lg font-semibold text-ink">{ending ? ending.title : greeting.title}</h1>
+          <p className="mt-2 text-sm text-muted">{ending ? ending.text : greeting.text}</p>
+          {!ending && !greeting.closed && (
             <div className="mt-5 text-left">
               <Field label="Your name (shown to the others)" htmlFor="gname" hint="Optional. Leave it if the name is right.">
-                <Input id="gname" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} autoComplete="name" />
+                <Input id="gname" value={name} onChange={(e) => setName(e.target.value)} placeholder={typeof info === 'object' && info ? info.guestName : ''} maxLength={80} autoComplete="name" />
               </Field>
             </div>
           )}
           {error && <div className="mt-4 text-left"><Notice tone="bad">{error}</Notice></div>}
-          {(!ending || ending.again) && (
+          {(ending ? ending.again : !greeting.closed) && (
             <Button className="mt-6 w-full" variant="primary" onClick={() => void enter()} loading={busy}>
               {ending?.again ? 'Join again' : 'Join the call'}
             </Button>
           )}
+          <p className="mt-5 text-xs text-muted">Nothing to install and no account needed. It works in your phone&apos;s browser.</p>
         </div>
       )}
     </main>

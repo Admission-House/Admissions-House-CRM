@@ -8,6 +8,7 @@ import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { fmtPhone } from '@/lib/format';
 import { NAV } from '@/lib/nav';
+import { usePhoneReady } from '@/lib/use-phone';
 import type { LeadListItem, Page } from '@/lib/types';
 
 interface Result {
@@ -34,10 +35,11 @@ export function SidebarSearch({ narrow, onExpand, onNavigate }: { narrow: boolea
   const box = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const wantFocus = useRef(false);
+  const phoneReady = usePhoneReady();
 
   const pages = useMemo<Result[]>(
-    () => NAV.flatMap((i) => (i.children ? i.children.map((c) => ({ ...c, label: `${i.label}: ${c.label}` })) : [i])).filter((i) => i.href && canAny(...i.any)).map((i) => ({ key: i.href!, label: i.label, href: i.href!, kind: 'page' as const })),
-    [canAny],
+    () => NAV.filter((i) => !i.needsPhone || phoneReady).flatMap((i) => (i.children ? i.children.map((c) => ({ ...c, label: `${i.label}: ${c.label}` })) : [i])).filter((i) => i.href && canAny(...i.any)).map((i) => ({ key: i.href!, label: i.label, href: i.href!, kind: 'page' as const })),
+    [canAny, phoneReady],
   );
 
   // Ctrl+K from anywhere. A narrow menu is widened first, and the box is focused once it exists.

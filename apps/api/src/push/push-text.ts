@@ -55,6 +55,8 @@ export function pushText(payload: Record<string, unknown>): PushText | null {
         body: [str(payload.decidedBy) && `By ${str(payload.decidedBy)}`, str(payload.note)].filter(Boolean).join('. ') || undefined,
         data: { screen: 'leave' },
       };
+    case 'login_ok':
+      return { title: `${who} signed in`, body: `${text(payload.role, 'Staff')} · ${payload.clientType === 'mobile' ? 'phone' : 'web'}`, data: {} };
     case 'login_refused':
       return { title: `${who} was refused at sign-in`, body: payload.reason === 'device_rooted' ? 'This phone is rooted or jailbroken' : `Not at the office (${REFUSED_REASON[String(payload.reason)] ?? text(payload.reason, 'outside the office')})`, data: {} };
     case 'forced_logout':
@@ -76,6 +78,10 @@ export function pushText(payload: Record<string, unknown>): PushText | null {
       return { title: `${text(payload.title, 'A meeting')} has started`, body: str(payload.fromName) && `Hosted by ${str(payload.fromName)}`, data: { screen: 'communications' } };
     case 'comm_ended':
       return { title: payload.cancelled ? `${text(payload.title, 'A session')} was cancelled` : `${text(payload.title, 'A session')} has ended`, body: str(payload.fromName) && `By ${str(payload.fromName)}`, data: { screen: 'communications' } };
+    case 'comm_recording_ready':
+      return { title: `Recording ready: ${text(payload.title, payload.kind === 'voice' ? 'voice call' : 'video call')}`, data: { screen: 'communications' } };
+    case 'comm_recording_failed':
+      return { title: `Recording failed: ${text(payload.title, payload.kind === 'voice' ? 'voice call' : 'video call')}`, body: str(payload.reason), data: { screen: 'communications' } };
     default:
       return null;
   }

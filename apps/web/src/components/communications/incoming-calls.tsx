@@ -7,7 +7,7 @@ import { Button } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import type { CallKind } from '@/lib/communications';
-import { useRealtime, useRealtimeStatus } from '@/lib/realtime';
+import { POLLING, useRealtime, useRealtimeStatus } from '@/lib/realtime';
 import { useApi } from '@/lib/use-api';
 
 interface Ringing {
@@ -41,7 +41,7 @@ export function IncomingCalls() {
   useRealtime(['call'], reload, 500);
   useEffect(() => {
     if (!allowed) return;
-    const id = setInterval(reload, live ? 20_000 : 5_000);
+    const id = setInterval(reload, live ? (POLLING ? 180_000 : 20_000) : 5_000);
     return () => clearInterval(id);
   }, [allowed, live, reload]);
 

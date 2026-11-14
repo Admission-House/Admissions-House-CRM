@@ -139,8 +139,10 @@ export function Chip({ active, count, children, onClick, dot }: { active?: boole
   );
 }
 
-export function Avatar({ name, size = 32, tone = 'brand' }: { name: string; size?: number; tone?: 'brand' | 'soft' }) {
+export function Avatar({ name, size = 32, tone = 'brand', photo }: { name: string; size?: number; tone?: 'brand' | 'soft'; photo?: string | null }) {
   const text = name.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]!.toUpperCase()).join('');
+  // eslint-disable-next-line @next/next/no-img-element
+  if (photo) return <img src={photo} alt="" aria-hidden width={size} height={size} style={{ width: size, height: size }} className="shrink-0 rounded-full object-cover" />;
   return (
     <span
       aria-hidden

@@ -6,16 +6,12 @@ import { AuditService } from '../audit/audit.service.js';
 import type { AuthContext } from '../auth/auth-context.js';
 import { AppError } from '../common/app-error.js';
 import { calendarDate } from '../common/dates.js';
-import { normalizePhone } from '../common/phone.js';
+import { phoneSchema } from '../common/phone-schema.js';
 import { SecretBox } from '../crypto/secret-box.js';
 import { DatabaseService, Trx } from '../database/database.service.js';
 
 const text = (max: number) => z.string().trim().max(max);
-const phone = z.string().trim().transform((v, ctx) => {
-  const n = normalizePhone(v);
-  if (!n) ctx.addIssue({ code: 'custom', message: 'Enter a valid mobile number' });
-  return n ?? z.NEVER;
-});
+const phone = phoneSchema;
 
 /** What a person may change about themselves. */
 const selfFields = {

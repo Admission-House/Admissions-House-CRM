@@ -3,12 +3,15 @@
 import { ArrowLeft, Check, Copy, MessageCircle } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { ConsentCard } from '@/components/communications/consent-card';
 import { PeoplePanel } from '@/components/communications/people-panel';
+import { RecordingsPanel } from '@/components/communications/recordings-panel';
 import { Badge, Button, Card, Notice, Spinner } from '@/components/ui';
 import { VideoRoom } from '@/components/video/video-room';
 import { api, ApiError } from '@/lib/api';
 import { fmtDateTime } from '@/lib/format';
-import { OUTCOME_TEXT, PHASE_TEXT, type LeaveReason, type PresenceEvent, type RtcJoin, type SessionDetail, type Snapshot } from '@/lib/communications';
+import { joinMessage, OUTCOME_TEXT, whatsappLink, PHASE_TEXT, type LeaveReason, type PresenceEvent, type RtcJoin, type SessionDetail, type Snapshot } from '@/lib/communications';
+import { useAuth } from '@/lib/auth';
 import { useRealtime } from '@/lib/realtime';
 import { useApi } from '@/lib/use-api';
 
@@ -31,25 +34,34 @@ const ENDINGS: Record<LeaveReason, string> = {
 export default function SessionPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const { me } = useAuth();
   const detail = useApi<SessionDetail>(`/communications/${id}`);
   const [join, setJoin] = useState<RtcJoin | null>(null);
   const [error, setError] = useState<{ code: string; text: string } | null>(null);
   const [over, setOver] = useState<LeaveReason | null>(null);
   const [ending, setEnding] = useState(false);
+  const [consent, setConsent] = useState<{ notice: string } | null>(null);
+  const [joining, setJoining] = useState(false);
   const asked = useRef(false);
 
-  const enter = useCallback(async () => {
+  const enter = useCallback(async (agreed = false) => {
     setError(null);
+    setJoining(true);
     try {
-      setJoin(await api<RtcJoin>(`/communications/${id}/join`, { method: 'POST', body: {} }));
+      setJoin(await api<RtcJoin>(`/communications/${id}/join`, { method: 'POST', body: agreed ? { consent: true } : {} }));
       setOver(null);
+      setConsent(null);
     } catch (e) {
-      if (e instanceof ApiError && e.code === 'MEETING_NOT_STARTED') {
+      if (e instanceof ApiError && e.code === 'CONSENT_REQUIRED') {
+        setConsent({ notice: typeof e.details?.notice === 'string' ? e.details.notice : 'This session is recorded.' });
+      } else if (e instanceof ApiError && e.code === 'MEETING_NOT_STARTED') {
         const at = typeof e.details?.scheduledFor === 'string' ? fmtDateTime(e.details.scheduledFor) : 'its planned time';
         setError({ code: e.code, text: `This meeting has not started yet. It opens a few minutes before ${at}.` });
       } else {
         setError({ code: e instanceof ApiError ? e.code : 'NETWORK', text: e instanceof ApiError ? (WORDS[e.code] ?? e.message) : 'Cannot reach the server.' });
       }
+    } finally {
+      setJoining(false);
     }
   }, [id]);
 
@@ -122,7 +134,7 @@ export default function SessionPage() {
         <Card className="flex flex-wrap items-center gap-3 border-brand/30 bg-mint/40 p-3">
           <p className="min-w-0 flex-1 text-sm text-ink">Send the link to <span className="font-semibold">{waitingGuest.name}</span> so they can join{s.leadName ? ` (${s.leadName})` : ''}.</p>
           <a className="inline-flex h-9 items-center gap-2 rounded-md bg-brand px-3.5 text-sm font-medium text-white hover:bg-brand-700" target="_blank" rel="noopener noreferrer"
-            href={`https://wa.me/${(leadPhone ?? '').replace(/\D/g, '')}?text=${encodeURIComponent(`Hello ${waitingGuest.name}, please join our ${s.kind === 'voice' ? 'voice' : 'video'} call using this link: ${waitingGuest.link}`)}`}>
+            href={whatsappLink(leadPhone, joinMessage({ guest: waitingGuest.name, host: me?.user.name ?? '', company: me?.company.name ?? '', kind: s.kind, link: waitingGuest.link ?? '' }))}>
             <MessageCircle className="h-4 w-4" aria-hidden /> Send on WhatsApp
           </a>
           <Button variant="secondary" onClick={() => void copyLink()}>{copiedLink ? <Check className="h-4 w-4 text-ok" aria-hidden /> : <Copy className="h-4 w-4" aria-hidden />} {copiedLink ? 'Copied' : 'Copy link'}</Button>
@@ -132,7 +144,8 @@ export default function SessionPage() {
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <Card className="space-y-3 p-4">
-          {!join && !error && <div className="grid place-items-center py-16"><Spinner label="Opening the session" /></div>}
+          {consent && !join && <ConsentCard notice={consent.notice} busy={joining} onAgree={() => void enter(true)} onCancel={() => router.push('/communications')} />}
+          {!join && !error && !consent && <div className="grid place-items-center py-16"><Spinner label="Opening the session" /></div>}
           {join && !over && <VideoRoom join={join} renew={renew} report={report} onLeft={onLeft} onSnapshot={onSnapshot} label={`${join.kind === 'voice' ? 'Voice' : 'Video'} call`} />}
           {over && (
             <div className="space-y-3 py-8 text-center">
@@ -151,7 +164,10 @@ export default function SessionPage() {
         {s && (
           <Card className="p-4">
             <PeoplePanel session={s} onChanged={reload} />
-            <p className="mt-3 text-xs text-muted">Recording is not switched on for calls and meetings.</p>
+            <p className="mt-3 text-xs text-muted">
+              {s.recordingStatus === 'off' ? 'This session is not recorded.' : s.recordingStatus === 'unavailable' ? 'Recording was wanted but is not set up on the server, so this session is not recorded.' : 'This session is recorded.'}
+            </p>
+            {s.recordingEnabled && s.status === 'ended' && <div className="mt-3"><RecordingsPanel sessionId={s.id} kind={s.kind} /></div>}
           </Card>
         )}
       </div>

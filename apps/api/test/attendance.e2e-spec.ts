@@ -168,7 +168,7 @@ describe('the idle sweep', () => {
   const notificationsAbout = async (name: string) =>
     (
       await owner.query(
-        `SELECT user_id, type, payload FROM notifications WHERE tenant_id = $1 AND payload->>'userName' = $2`,
+        `SELECT user_id, type, payload FROM notifications WHERE tenant_id = $1 AND payload->>'userName' = $2 AND payload->>'event' <> 'login_ok'`,
         [fx.tenantId, name],
       )
     ).rows;

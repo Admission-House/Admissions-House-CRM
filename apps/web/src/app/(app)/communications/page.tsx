@@ -7,7 +7,7 @@ import { CallColleagueModal, NewMeetingModal, SessionDetailModal } from '@/compo
 import { Badge, Button, Card, Empty, Input, PageHeader, Select, Spinner } from '@/components/ui';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { OUTCOME_TEXT, PHASE_TEXT, fmtDuration, type HistoryItem } from '@/lib/communications';
+import { OUTCOME_TEXT, PHASE_TEXT, RECORDING_TEXT, fmtDuration, type HistoryItem } from '@/lib/communications';
 import { fmtDateTime } from '@/lib/format';
 import { useRealtime } from '@/lib/realtime';
 import { useApi } from '@/lib/use-api';
@@ -25,11 +25,12 @@ export default function CommunicationsPage() {
   const [outcome, setOutcome] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
+  const [recording, setRecording] = useState('');
   const [calling, setCalling] = useState(false);
   const [meeting, setMeeting] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
 
-  const query = useMemo(() => ({ type: type || undefined, kind: kind || undefined, outcome: outcome || undefined, from: from || undefined, to: to || undefined, limit: 25 }), [type, kind, outcome, from, to]);
+  const query = useMemo(() => ({ type: type || undefined, kind: kind || undefined, outcome: outcome || undefined, recording: recording || undefined, from: from || undefined, to: to || undefined, limit: 25 }), [type, kind, outcome, recording, from, to]);
   const first = useApi<Page>('/communications', query);
   useRealtime(['call'], first.reload, 2_000);
 
@@ -63,7 +64,7 @@ export default function CommunicationsPage() {
           <Button onClick={() => setMeeting(true)}><Plus className="h-4 w-4" aria-hidden /> New meeting</Button>
         </>} />
       <Card className="p-3">
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
           <Select aria-label="Calls or meetings" value={type} onChange={(e) => setType(e.target.value)}>
             <option value="">Calls and meetings</option><option value="call">Calls</option><option value="meeting">Meetings</option>
           </Select>
@@ -73,6 +74,9 @@ export default function CommunicationsPage() {
           <Select aria-label="What became of it" value={outcome} onChange={(e) => setOutcome(e.target.value)}>
             <option value="">Any result</option><option value="open">Planned or running</option><option value="completed">Completed</option><option value="missed">Missed</option>
             <option value="declined">Declined</option><option value="busy">Busy</option><option value="cancelled">Cancelled</option><option value="failed">Failed</option>
+          </Select>
+          <Select aria-label="Recording" value={recording} onChange={(e) => setRecording(e.target.value)}>
+            <option value="">Any recording</option><option value="available">Recorded</option><option value="failed">Recording failed</option>
           </Select>
           <Input aria-label="From date" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
           <Input aria-label="To date" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
@@ -101,7 +105,7 @@ export default function CommunicationsPage() {
                   <td className="px-3 py-2.5 align-top text-muted">{i.people}<span className="ml-1 text-xs">({i.peopleJoined}/{i.peopleInvited} joined)</span></td>
                   <td className="px-3 py-2.5 align-top tabular-nums">{fmtDuration(i.durationSec) || '—'}</td>
                   <td className="px-3 py-2.5 align-top"><Badge tone={tone(i)}>{i.phase === 'ended' && i.outcome ? OUTCOME_TEXT[i.outcome] : PHASE_TEXT[i.phase]}</Badge></td>
-                  <td className="px-3 py-2.5 align-top text-xs text-muted">Off</td>
+                  <td className="px-3 py-2.5 align-top text-xs text-muted">{RECORDING_TEXT[i.recordingStatus]}</td>
                   <td className="px-3 py-2.5 text-right align-top">
                     <span className="inline-flex gap-1.5">
                       {i.phase !== 'ended' && <Button size="sm" onClick={() => router.push(`/video/${i.id}`)}>Open</Button>}

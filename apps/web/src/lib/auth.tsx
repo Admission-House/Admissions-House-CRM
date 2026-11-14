@@ -2,9 +2,10 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { api, ApiError, onSessionLost, refreshSession, setAccessToken } from './api';
+import { homePath } from './start-page';
 
 export interface Me {
-  user: { id: string; name: string; email: string; role: { key: string | null; dataScope: 'all' | 'team' | 'own' }; mustChangePassword: boolean; mfaSetupRequired: boolean };
+  user: { id: string; name: string; email: string; role: { key: string | null; dataScope: 'all' | 'team' | 'own' }; mustChangePassword: boolean; mfaSetupRequired: boolean; startPage: string | null; avatarVersion: number | null };
   permissions: string[];
   company: { name: string; productName: string; contactEmail: string | null; brandColor: string | null; accentColor: string | null; hasLogo: boolean };
 }
@@ -16,9 +17,9 @@ interface AuthState {
   me: Me | null;
   can: (...permissions: string[]) => boolean;
   canAny: (...permissions: string[]) => boolean;
-  login: (input: { tenant: string; email: string; password: string; mfaCode?: string }) => Promise<{ mustChangePassword: boolean }>;
+  login: (input: { tenant: string; email: string; password: string; mfaCode?: string }) => Promise<{ mustChangePassword: boolean; home: string }>;
   logout: () => Promise<void>;
-  reload: () => Promise<void>;
+  reload: () => Promise<Me>;
 }
 
 const Ctx = createContext<AuthState | null>(null);
@@ -35,17 +36,33 @@ function position(): Promise<{ lat: number; lng: number; accuracy: number } | un
   );
 }
 
+/** The marker the web server reads to skip the "Loading, then back to /login" step for someone who is not signed in. It holds nothing secret. */
+function markSignedIn(on: boolean, startPage?: string | null): void {
+  if (typeof document === 'undefined') return;
+  const secure = location.protocol === 'https:' ? '; secure' : '';
+  const set = (name: string, value: string | null) => {
+    document.cookie = value === null ? `${name}=; path=/; max-age=0; samesite=lax` : `${name}=${value}; path=/; max-age=${7 * 24 * 3600}; samesite=lax${secure}`;
+  };
+  set('ah_in', on ? '1' : null);
+  // The page they chose to open first. Only a hint for the web server; the app still checks what they may see.
+  set('ah_home', on && startPage ? startPage : null);
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<Status>('loading');
   const [me, setMe] = useState<Me | null>(null);
 
   const load = useCallback(async () => {
-    setMe(await api<Me>('/auth/me'));
+    const fresh = await api<Me>('/auth/me');
+    setMe(fresh);
     setStatus('authenticated');
+    markSignedIn(true, fresh.user.startPage);
+    return fresh;
   }, []);
 
   useEffect(() => {
     onSessionLost(() => {
+      markSignedIn(false);
       setMe(null);
       setStatus('anonymous');
     });
@@ -58,6 +75,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           /* fall through to anonymous */
         }
       }
+      markSignedIn(false);
       setStatus('anonymous');
     })();
   }, [load]);
@@ -83,8 +101,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
       setAccessToken(res.accessToken);
-      await load();
-      return { mustChangePassword: res.mustChangePassword };
+      const fresh = await load();
+      return { mustChangePassword: res.mustChangePassword, home: homePath(fresh.user.startPage) };
     },
     [load],
   );
@@ -95,6 +113,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (e) {
       if (!(e instanceof ApiError)) throw e;
     }
+    markSignedIn(false);
     setAccessToken(null);
     setMe(null);
     setStatus('anonymous');

@@ -15,6 +15,8 @@ const schema = z.object({
   /** Connection used by the API. It must be the restricted role (ah_app), never the owner. */
   DATABASE_URL: z.string().url(),
   DB_POOL_MAX: z.coerce.number().int().min(1).max(200).default(20),
+  /** How long to wait for a database connection, in milliseconds. A database far away (another region) needs longer than one next door. */
+  DB_CONNECT_TIMEOUT_MS: z.coerce.number().int().min(1000).max(60_000).default(15_000),
   /** Longest a single statement may run, in milliseconds. */
   DB_STATEMENT_TIMEOUT_MS: z.coerce.number().int().min(100).default(15_000),
 
@@ -90,6 +92,10 @@ const schema = z.object({
   PUSH_INTERVAL_SEC: z.coerce.number().int().min(0).max(3600).default(10),
   /** Who delivers the alerts. "expo" uses Expo's push service; "off" sends nothing. */
   PUSH_PROVIDER: z.enum(['expo', 'off']).default('expo'),
+  /** How background work runs: on timers inside a server (interval), or when a scheduler calls /internal/jobs/<group> (cron, for Vercel). */
+  JOBS_MODE: z.enum(['interval', 'cron']).default('interval'),
+  /** The secret the scheduler sends. Vercel Cron sends the CRON_SECRET variable as a Bearer token. Needed when JOBS_MODE=cron. */
+  CRON_SECRET: z.string().min(32).optional(),
   /** Only if "enhanced push security" is switched on for the project in the Expo dashboard. */
   EXPO_ACCESS_TOKEN: z.string().optional(),
 
@@ -145,6 +151,29 @@ const schema = z.object({
    * minutes of calls. When Agora's free minutes run out it stops the service rather than charging.
    * 0 means no limit.
    */
+  // ------------------------------------------------------------------ recording (Agora Cloud Recording)
+  /** From Agora Console > account menu > RESTful API Keys. Used by the server only, to start and stop recordings. */
+  AGORA_CUSTOMER_ID: z.string().trim().optional(),
+  AGORA_CUSTOMER_SECRET: z.string().trim().optional(),
+  /** The Signing Secret of the Cloud Recording webhook made in the Agora Console. Notices without a matching signature are refused. */
+  AGORA_WEBHOOK_SECRET: z.string().trim().optional(),
+  /** The private bucket recordings are written to. Never public. */
+  RECORDING_S3_BUCKET: z.string().trim().optional(),
+  /** The bucket's AWS region name, such as ap-south-1. */
+  RECORDING_S3_REGION: z.string().trim().optional(),
+  /**
+   * Agora's own number for that region (Agora docs, "region-vendor": for Amazon S3, AP_SOUTH_1 is 14). Left empty,
+   * it is worked out from the region name for the regions Agora lists; set it if your region is not found.
+   */
+  RECORDING_AGORA_REGION_CODE: z.coerce.number().int().min(0).max(100).optional(),
+  /** The key handed to Agora so it can write into the bucket. It should be allowed to add files and nothing else. */
+  RECORDING_S3_UPLOAD_ACCESS_KEY_ID: z.string().trim().optional(),
+  RECORDING_S3_UPLOAD_SECRET_ACCESS_KEY: z.string().trim().optional(),
+  /** The key this server uses to list, read and delete recordings. It is never given to Agora or to a browser. */
+  RECORDING_S3_ACCESS_KEY_ID: z.string().trim().optional(),
+  RECORDING_S3_SECRET_ACCESS_KEY: z.string().trim().optional(),
+  /** The recorder leaves a channel that has been empty this long, in seconds (Agora allows 5 to 2,592,000). */
+  RECORDING_MAX_IDLE_SECONDS: z.coerce.number().int().min(5).max(3600).default(60),
   /** How long a call rings for a colleague before it counts as missed, in seconds. */
   COMMUNICATION_RING_SECONDS: z.coerce.number().int().min(10).max(120).default(45),
   /** How often ringing, lost connections, finished calls and meeting reminders are looked after, in seconds. 0 turns it off. */

@@ -16,7 +16,7 @@ import {
   assertNotLastSuperAdmin,
   assertPlacement,
 } from './user-rules.js';
-import type { CreateUserDto, ListUsersDto, UpdateUserDto } from './users.dto.js';
+import type { CreateUserDto, ListUsersDto, UpdateOwnAccountDto, UpdateUserDto } from './users.dto.js';
 
 export interface UserView {
   id: string;
@@ -54,6 +54,39 @@ export class UsersService {
     private readonly authRepo: AuthRepository,
     private readonly passwords: PasswordService,
   ) {}
+
+  /**
+   * A person changes their own name, mobile number or sign-in email. Works the same for every role. The email is
+   * what they sign in with, so changing it needs the current password, and it must not belong to anyone else.
+   */
+  updateOwnAccount(auth: AuthContext, dto: UpdateOwnAccountDto): Promise<{ name: string; email: string; phone: string | null }> {
+    return this.db.withTenant(auth.tenantId, async (trx) => {
+      const me = await trx.selectFrom('users').select(['id', 'name', 'email', 'phone', 'password_hash']).where('id', '=', auth.userId).executeTakeFirstOrThrow();
+      const emailChanges = dto.email !== undefined && dto.email !== me.email;
+      if (emailChanges) {
+        if (!dto.currentPassword || !(await this.passwords.verify(me.password_hash, dto.currentPassword))) {
+          throw AppError.forbidden('PASSWORD_REQUIRED', 'Enter your current password to change your email');
+        }
+        const taken = await trx.selectFrom('users').select('id').where('email', '=', dto.email!).where('id', '<>', me.id).executeTakeFirst();
+        if (taken) throw AppError.conflict('EMAIL_TAKEN', 'Someone already has this email address');
+      }
+      await trx
+        .updateTable('users')
+        .set({
+          ...(dto.name !== undefined && { name: dto.name }),
+          ...(dto.phone !== undefined && { phone: dto.phone }),
+          ...(emailChanges && { email: dto.email }),
+        })
+        .where('id', '=', me.id)
+        .execute();
+      const next = { name: dto.name ?? me.name, email: emailChanges ? dto.email! : me.email, phone: dto.phone !== undefined ? dto.phone : me.phone };
+      await this.audit.write(trx, {
+        tenantId: auth.tenantId, actorId: auth.userId, action: 'user.update_self', entity: 'user', entityId: me.id,
+        before: { name: me.name, email: me.email, phone: me.phone }, after: next, ip: auth.ip, requestId: auth.requestId,
+      });
+      return next;
+    });
+  }
 
   // ------------------------------------------------------------------ reads
 

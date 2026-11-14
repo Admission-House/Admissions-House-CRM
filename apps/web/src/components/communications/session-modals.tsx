@@ -4,10 +4,11 @@ import { Mic, Phone, Plus, Video, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { PeoplePanel } from '@/components/communications/people-panel';
+import { RecordingsPanel } from '@/components/communications/recordings-panel';
 import { Badge, Button, Field, Input, Notice, Select, Spinner, Textarea } from '@/components/ui';
 import { Modal } from '@/components/ui/modal';
 import { api, ApiError } from '@/lib/api';
-import { OUTCOME_TEXT, PHASE_TEXT, fmtDuration, type CallKind, type SessionDetail, type SessionView } from '@/lib/communications';
+import { OUTCOME_TEXT, PHASE_TEXT, RECORDING_TEXT, fmtDuration, type CallKind, type RecordingPolicy, type SessionDetail, type SessionView } from '@/lib/communications';
 import { fmtDateTime } from '@/lib/format';
 import { useApi } from '@/lib/use-api';
 
@@ -92,6 +93,8 @@ export function NewMeetingModal({ onClose, onCreated, lead }: { onClose: () => v
   const [guest, setGuest] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const policy = useApi<RecordingPolicy>('/communications/recording/policy');
+  const [record, setRecord] = useState(true);
 
   const toggle = (id: string) => setStaff((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
   const addGuest = () => {
@@ -104,7 +107,7 @@ export function NewMeetingModal({ onClose, onCreated, lead }: { onClose: () => v
     setBusy(true);
     setError(null);
     try {
-      const body: Record<string, unknown> = { title: title.trim(), kind, durationMinutes: Number(minutes), staffIds: staff, guests: guests.map((name) => ({ name })) };
+      const body: Record<string, unknown> = { title: title.trim(), kind, durationMinutes: Number(minutes), record, staffIds: staff, guests: guests.map((name) => ({ name })) };
       if (description.trim()) body.description = description.trim();
       if (lead) body.leadId = lead.id;
       if (when) body.scheduledFor = new Date(when).toISOString();
@@ -133,6 +136,9 @@ export function NewMeetingModal({ onClose, onCreated, lead }: { onClose: () => v
             </Select>
           </Field>
         </div>
+        {policy.data?.mode === 'optional' && policy.data.ready && (
+          <label className="flex items-center gap-2 text-sm text-ink"><input type="checkbox" checked={record} onChange={(e) => setRecord(e.target.checked)} /> Record this meeting</label>
+        )}
         <fieldset>
           <legend className="mb-1.5 text-sm font-medium text-ink">Colleagues to invite</legend>
           {colleagues.loading && !colleagues.data && <Spinner />}
@@ -195,10 +201,11 @@ export function SessionDetailModal({ id, onClose, onChanged }: { id: string; onC
             {s.scheduledFor && <div><dt className="inline text-muted">Planned for </dt><dd className="inline text-ink">{fmtDateTime(s.scheduledFor)}</dd></div>}
             {s.startedAt && <div><dt className="inline text-muted">Began </dt><dd className="inline text-ink">{fmtDateTime(s.startedAt)}</dd></div>}
             {s.endedAt && <div><dt className="inline text-muted">Ended </dt><dd className="inline text-ink">{fmtDateTime(s.endedAt)}</dd></div>}
-            <div><dt className="inline text-muted">Recording </dt><dd className="inline text-ink">Not switched on</dd></div>
+            <div><dt className="inline text-muted">Recording </dt><dd className="inline text-ink">{RECORDING_TEXT[s.recordingStatus]}</dd></div>
           </dl>
           {s.description && <p className="text-sm text-muted">{s.description}</p>}
           <PeoplePanel session={s} onChanged={() => { detail.reload(); onChanged(); }} />
+          {s.recordingEnabled && <RecordingsPanel sessionId={s.id} kind={s.kind} />}
           <div>
             <h3 className="mb-2 text-sm font-semibold text-ink">What happened</h3>
             <ol className="space-y-1 text-sm">

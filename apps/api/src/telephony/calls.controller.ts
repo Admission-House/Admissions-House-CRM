@@ -21,6 +21,13 @@ export class CallsController {
     private readonly downloads: DownloadAlerts,
   ) {}
 
+  /** Whether phone calling is set up, for screens that offer a Call button. Before "calls/:id" so "ready" is not read as an id. */
+  @RequirePermissions('call.place')
+  @Get('calls/ready')
+  ready(@CurrentAuth() auth: AuthContext) {
+    return this.calls.ready(auth);
+  }
+
   /** Starts a call to the lead: the provider rings the counsellor's own phone, then connects the student. */
   @RequirePermissions('call.place', 'lead.read')
   @Post('leads/:id/call')

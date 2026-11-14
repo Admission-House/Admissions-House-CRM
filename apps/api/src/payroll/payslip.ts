@@ -4,10 +4,14 @@ import PDFDocument from 'pdfkit';
 const require = createRequire(import.meta.url);
 const font = (pkg: string, file: string): string => require.resolve(`${pkg}/files/${file}`);
 
-const LATIN = { regular: font('@fontsource/noto-sans', 'noto-sans-latin-400-normal.woff'), bold: font('@fontsource/noto-sans', 'noto-sans-latin-700-normal.woff') };
-const DEVANAGARI = {
-  regular: font('@fontsource/noto-sans-devanagari', 'noto-sans-devanagari-devanagari-400-normal.woff'),
-  bold: font('@fontsource/noto-sans-devanagari', 'noto-sans-devanagari-devanagari-700-normal.woff'),
+// The font files are looked up when a payslip is made, not when the app starts: a font that cannot be found must
+// fail that one payslip, never the whole API.
+const sets = {
+  latin: () => ({ regular: font('@fontsource/noto-sans', 'noto-sans-latin-400-normal.woff'), bold: font('@fontsource/noto-sans', 'noto-sans-latin-700-normal.woff') }),
+  devanagari: () => ({
+    regular: font('@fontsource/noto-sans-devanagari', 'noto-sans-devanagari-devanagari-400-normal.woff'),
+    bold: font('@fontsource/noto-sans-devanagari', 'noto-sans-devanagari-devanagari-700-normal.woff'),
+  }),
 };
 
 export interface PayslipData {
@@ -61,7 +65,7 @@ export function buildPayslip(d: PayslipData): Promise<Buffer> {
   });
 
   const text = (s: string, opts: { bold?: boolean; size?: number; x?: number; y?: number; width?: number; align?: 'left' | 'right' | 'center' } = {}) => {
-    const set = hasDevanagari(s) ? DEVANAGARI : LATIN;
+    const set = hasDevanagari(s) ? sets.devanagari() : sets.latin();
     doc.font(opts.bold ? set.bold : set.regular).fontSize(opts.size ?? 11);
     if (opts.x !== undefined && opts.y !== undefined) doc.text(s, opts.x, opts.y, { width: opts.width, align: opts.align });
     else doc.text(s, { align: opts.align });

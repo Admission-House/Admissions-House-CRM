@@ -30,6 +30,9 @@ export interface SessionRow {
   started_at: Date | null;
   ended_at: Date | null;
   created_at: Date;
+  recording_enabled: boolean;
+  recording_unavailable: boolean;
+  recording_policy_version: number | null;
 }
 
 export interface InviteRow {
@@ -51,16 +54,18 @@ export interface InviteRow {
   joined_at: Date | null;
   last_left_at: Date | null;
   last_seen_at: Date | null;
+  consented_at: Date | null;
 }
 
-export type EventName = 'created' | 'invited' | 'ringing' | 'accepted' | 'declined' | 'missed' | 'busy' | 'joined' | 'left' | 'removed' | 'reset' | 'started' | 'ended' | 'reminder';
+export type EventName = 'created' | 'invited' | 'ringing' | 'accepted' | 'declined' | 'missed' | 'busy' | 'joined' | 'left' | 'removed' | 'reset' | 'started' | 'ended' | 'reminder' | 'consent' | 'recording';
 
 /** What the notification bell and the phone alert say about a call or meeting. */
-export type CommunicationEvent = 'comm_incoming' | 'comm_missed' | 'comm_declined' | 'comm_meeting_invite' | 'comm_meeting_reminder' | 'comm_meeting_started' | 'comm_ended';
+export type CommunicationEvent = 'comm_incoming' | 'comm_missed' | 'comm_declined' | 'comm_meeting_invite' | 'comm_meeting_reminder' | 'comm_meeting_started' | 'comm_ended' | 'comm_recording_ready' | 'comm_recording_failed';
 
 const SESSION_SELECT = sql`
   SELECT v.id, v.tenant_id, v.lead_id, l.name AS lead_name, l.lead_no::text AS lead_no, v.created_by, u.name AS creator_name, v.type, v.kind, v.title, v.description,
-         v.scheduled_for, v.expires_at, v.max_minutes, v.status, v.outcome, v.started_at, v.ended_at, v.created_at
+         v.scheduled_for, v.expires_at, v.max_minutes, v.status, v.outcome, v.started_at, v.ended_at, v.created_at,
+         v.recording_enabled, v.recording_unavailable, v.recording_policy_version
   FROM video_sessions v JOIN users u ON u.id = v.created_by LEFT JOIN leads l ON l.id = v.lead_id`;
 
 /**
@@ -99,7 +104,7 @@ export class VideoStore {
   async invites(trx: Trx, sessionId: string): Promise<InviteRow[]> {
     const { rows } = await sql<InviteRow>`
       SELECT i.id, i.session_id, i.kind, i.user_id, u.name AS user_name, i.guest_name, i.role, i.state, i.agora_uid, i.token_version, i.device_hash,
-             i.expires_at, i.invited_at, i.responded_at, i.first_joined_at, i.joined_at, i.last_left_at, i.last_seen_at
+             i.expires_at, i.invited_at, i.responded_at, i.first_joined_at, i.joined_at, i.last_left_at, i.last_seen_at, i.consented_at
       FROM video_session_invites i LEFT JOIN users u ON u.id = i.user_id
       WHERE i.session_id = ${sessionId}::uuid ORDER BY i.invited_at, i.id`.execute(trx);
     return rows;
@@ -108,7 +113,7 @@ export class VideoStore {
   async invite(trx: Trx, id: string, opts: { lock?: boolean } = {}): Promise<InviteRow> {
     const { rows } = await sql<InviteRow>`
       SELECT i.id, i.session_id, i.kind, i.user_id, u.name AS user_name, i.guest_name, i.role, i.state, i.agora_uid, i.token_version, i.device_hash,
-             i.expires_at, i.invited_at, i.responded_at, i.first_joined_at, i.joined_at, i.last_left_at, i.last_seen_at
+             i.expires_at, i.invited_at, i.responded_at, i.first_joined_at, i.joined_at, i.last_left_at, i.last_seen_at, i.consented_at
       FROM video_session_invites i LEFT JOIN users u ON u.id = i.user_id
       WHERE i.id = ${id}::uuid ${opts.lock ? sql`FOR UPDATE OF i` : sql``}`.execute(trx);
     if (!rows[0]) throw AppError.notFound('Invitation');
@@ -165,6 +170,15 @@ export class VideoStore {
       UPDATE video_session_invites SET joined_at = NULL, last_left_at = COALESCE(last_left_at, now())
       WHERE session_id = ${session.id}::uuid AND joined_at IS NOT NULL`.execute(trx);
     await this.event(trx, session.tenant_id, session.id, null, 'ended', opts.detail ?? outcome);
+    // A recording that never started cannot now; one that is running or starting must be stopped. Only the state is
+    // changed here; the call to Agora is made after the transaction (see RecordingService.sweep).
+    const noStart = await sql<{ id: string }>`
+      UPDATE session_recordings SET status = 'failed', failure_reason = 'The session ended before the recording could start.', stopped_at = now()
+      WHERE session_id = ${session.id}::uuid AND status = 'pending' RETURNING id`.execute(trx);
+    for (const r of noStart.rows) await this.event(trx, session.tenant_id, session.id, null, 'recording', `failed: the session ended before the recording could start (${r.id})`);
+    await sql`
+      UPDATE session_recordings SET stop_requested_at = now(), last_attempt_at = NULL, status = CASE WHEN status = 'recording' THEN 'stopping' ELSE status END
+      WHERE session_id = ${session.id}::uuid AND status IN ('starting', 'recording') AND stop_requested_at IS NULL`.execute(trx);
     if (session.lead_id && session.started_at) {
       const minutes = Math.max(1, Math.round((Date.now() - new Date(session.started_at).getTime()) / 60_000));
       await this.writer.activity(trx, {

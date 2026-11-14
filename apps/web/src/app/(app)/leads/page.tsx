@@ -10,6 +10,7 @@ import { AddLeadModal } from '@/components/leads/add-lead-modal';
 import { Avatar, Badge, Button, Card, Empty, Input, Notice, PageHeader, Select, Spinner, cx } from '@/components/ui';
 import { api, ApiError, download } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import { usePhoneReady } from '@/lib/use-phone';
 import { fmtDate, fmtPhone, fromNow } from '@/lib/format';
 import { useRealtime } from '@/lib/realtime';
 import type { LeadListItem, Page, Queues, SourceOption, StatusOption, UserOption } from '@/lib/types';
@@ -95,6 +96,7 @@ function Leads() {
   const router = useRouter();
   const params = useSearchParams();
   const { can } = useAuth();
+  const phoneReady = usePhoneReady();
   const filters = useMemo(() => Object.fromEntries(FILTER_KEYS.map((k) => [k, params.get(k) ?? ''])) as Record<FilterKey, string>, [params]);
 
   const [typed, setTyped] = useState<string | null>(null);
@@ -348,7 +350,7 @@ function Leads() {
                       <td className="px-4 py-2.5">
                         <div className="flex justify-end gap-1">
                           {(can('call.place') || can('video.host')) && l.status.isOpen && (
-                            <LeadCallMenu lead={{ id: l.id, name: l.name }} phone={can('call.place') ? { enabled: true, onCall: () => void callLead(l.id) } : undefined}
+                            <LeadCallMenu lead={{ id: l.id, name: l.name }} phone={can('call.place') && phoneReady ? { enabled: true, onCall: () => void callLead(l.id) } : undefined}
                               internet={can('video.host') && comm.data?.enabled === true} onMeeting={setMeetingFor} onError={(text) => setNotice({ tone: 'bad', text })} />
                           )}
                           <Link href={`/leads/${l.id}`} aria-label={`Open ${l.name}`} title="Open" className="grid h-8 w-8 place-items-center rounded-md text-muted hover:bg-head hover:text-ink"><ExternalLink className="h-[17px] w-[17px]" /></Link>

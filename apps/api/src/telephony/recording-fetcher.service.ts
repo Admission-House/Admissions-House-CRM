@@ -1,7 +1,7 @@
 import { lookup as dnsLookup } from 'node:dns';
 import http from 'node:http';
 import https from 'node:https';
-import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { sql } from 'kysely';
 import { ENV } from '../config/config.module.js';
 import type { Env } from '../config/env.js';
@@ -9,6 +9,7 @@ import { DatabaseService } from '../database/database.service.js';
 import { StorageService } from '../storage/storage.service.js';
 import { checkRecordingUrl, isPrivateAddress, sniffAudio } from './recording-rules.js';
 import { TelephonySettingsService } from './telephony-settings.service.js';
+import { JobRegistry } from '../jobs/job-registry.service.js';
 
 const MAX_ATTEMPTS = 5;
 const BATCH = 5;
@@ -29,9 +30,8 @@ interface Waiting {
  * gaps, five times, then marked failed.
  */
 @Injectable()
-export class RecordingFetcher implements OnModuleInit, OnModuleDestroy {
+export class RecordingFetcher implements OnModuleInit {
   private readonly logger = new Logger(RecordingFetcher.name);
-  private timer?: NodeJS.Timeout;
   private running = false;
 
   constructor(
@@ -39,19 +39,15 @@ export class RecordingFetcher implements OnModuleInit, OnModuleDestroy {
     private readonly settings: TelephonySettingsService,
     private readonly storage: StorageService,
     @Inject(ENV) private readonly env: Env,
+  
+    private readonly jobs: JobRegistry,
   ) {}
 
   onModuleInit(): void {
-    if (this.env.RECORDING_INTERVAL_SEC <= 0) return;
-    this.timer = setInterval(() => void this.runSafely(), this.env.RECORDING_INTERVAL_SEC * 1000);
-    this.timer.unref();
+    this.jobs.register({ name: 'call-recordings', group: 'quarter', everySec: this.env.RECORDING_INTERVAL_SEC, run: () => this.runSafely() });
   }
 
-  onModuleDestroy(): void {
-    if (this.timer) clearInterval(this.timer);
-  }
-
-  private async runSafely(): Promise<void> {
+  async runSafely(): Promise<void> {
     if (this.running) return;
     this.running = true;
     try {

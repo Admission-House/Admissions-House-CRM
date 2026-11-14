@@ -4,7 +4,8 @@ import { Check, Copy, MessageCircle, UserMinus, UserPlus } from 'lucide-react';
 import { useState } from 'react';
 import { Badge, Button, Input, Notice, Select } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
-import { STATE_TEXT, type Participant, type SessionView } from '@/lib/communications';
+import { useAuth } from '@/lib/auth';
+import { joinMessage, STATE_TEXT, whatsappLink, type Participant, type SessionView } from '@/lib/communications';
 import { useApi } from '@/lib/use-api';
 
 const stateTone = (p: Participant) => (p.state === 'accepted' ? 'ok' : p.state === 'ringing' || p.state === 'invited' ? 'brand' : p.state === 'removed' ? 'neutral' : 'bad');
@@ -15,6 +16,7 @@ const stateTone = (p: Participant) => (p.state === 'accepted' ? 'ok' : p.state =
  * for people it would allow.
  */
 export function PeoplePanel({ session, onChanged }: { session: SessionView; onChanged: () => void }) {
+  const { me } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [colleague, setColleague] = useState('');
@@ -68,7 +70,7 @@ export function PeoplePanel({ session, onChanged }: { session: SessionView; onCh
                   <>
                     <Button size="sm" variant="secondary" onClick={() => void copy(p)} aria-label={`Copy the link for ${p.name}`}>{copied === p.id ? <Check className="h-3.5 w-3.5 text-ok" aria-hidden /> : <Copy className="h-3.5 w-3.5" aria-hidden />}</Button>
                     <a className="inline-flex h-7 items-center rounded-md border border-line-strong bg-surface px-2 text-xs hover:bg-head" target="_blank" rel="noopener noreferrer" aria-label={`Send the link to ${p.name} on WhatsApp`}
-                      href={`https://wa.me/?text=${encodeURIComponent(`Hello ${p.name}, please join our ${session.kind === 'voice' ? 'voice' : 'video'} session using this link: ${p.link}`)}`}><MessageCircle className="h-3.5 w-3.5 text-ok" aria-hidden /></a>
+                      href={whatsappLink(null, joinMessage({ guest: p.name, host: me?.user.name ?? '', company: me?.company.name ?? '', kind: session.kind, link: p.link }))}><MessageCircle className="h-3.5 w-3.5 text-ok" aria-hidden /></a>
                     {p.deviceBound && <Button size="sm" variant="ghost" disabled={busy} onClick={() => void run(`invites/${p.id}/reset-device`)}>Release</Button>}
                   </>
                 )}

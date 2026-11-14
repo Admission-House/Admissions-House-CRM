@@ -2,9 +2,10 @@
 
 import { Mic, PhoneCall, Users, Video } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import type { SessionView } from '@/lib/communications';
+import { useDismiss } from '@/lib/use-dismiss';
 
 export interface CallMenuLead {
   id: string;
@@ -31,22 +32,12 @@ export function LeadCallMenu({ lead, phone, internet, onMeeting, onError }: Prop
   const [busy, setBusy] = useState(false);
   const box = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    const close = (e: MouseEvent) => !box.current?.contains(e.target as Node) && setOpen(false);
-    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
-    document.addEventListener('mousedown', close);
-    document.addEventListener('keydown', esc);
-    return () => {
-      document.removeEventListener('mousedown', close);
-      document.removeEventListener('keydown', esc);
-    };
-  }, [open]);
+  useDismiss(open, box, () => setOpen(false));
 
   async function start(kind: 'voice' | 'video') {
     setBusy(true);
     try {
-      const made = await api<SessionView>(`/leads/${lead.id}/communications`, { method: 'POST', body: { kind, maxMinutes: 30 } });
+      const made = await api<SessionView>(`/leads/${lead.id}/communications`, { method: 'POST', body: { kind, maxMinutes: 30, record: true } });
       router.push(`/video/${made.id}`);
     } catch (e) {
       onError(e instanceof ApiError ? e.message : 'Cannot reach the server.');

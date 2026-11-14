@@ -13,6 +13,8 @@ export interface NavItem {
   /** Which count from /leads/queues to show beside it. */
   count?: 'total' | 'fresh' | 'missed' | 'followup' | 'counselled' | 'fee_paid';
   children?: NavItem[];
+  /** Shown only once a calling provider is connected (the phone screens do nothing without one). */
+  needsPhone?: boolean;
 }
 
 /**
@@ -41,6 +43,7 @@ const ALL: NavItem[] = [
   {
     label: 'Calling',
     icon: PhoneCall,
+    needsPhone: true,
     any: ['call.read', 'call.place'],
     children: [
       { label: 'Call history', href: '/calls', icon: PhoneCall, any: ['call.read'] },
@@ -62,15 +65,17 @@ const ALL: NavItem[] = [
   {
     label: 'Settings',
     icon: Settings,
-    any: ['settings.manage', 'user.read', 'user.manage', 'role.manage', 'branch.read', 'device.approve', 'integration.manage', 'audit.read'],
+    any: ['settings.manage', 'user.read', 'user.manage', 'role.manage', 'branch.read', 'device.approve', 'integration.manage', 'audit.read', 'recording.manage'],
     children: [
       { label: 'Company and logo', href: '/settings/company', icon: Settings, any: ['settings.manage'] },
       { label: 'Users', href: '/settings/users', icon: Users, any: ['user.read', 'user.manage'] },
+      { label: 'Security', href: '/settings/security', icon: Settings, any: ['settings.manage'] },
       { label: 'Roles', href: '/settings/roles', icon: Settings, any: ['role.manage'] },
       { label: 'Branches', href: '/settings/branches', icon: Settings, any: ['branch.read', 'branch.manage'] },
       { label: 'Lead settings', href: '/settings/leads', icon: Settings, any: ['settings.manage'] },
       { label: 'Integrations', href: '/settings/integrations', icon: Settings, any: ['integration.manage'] },
       { label: 'Telephony', href: '/settings/telephony', icon: Settings, any: ['integration.manage'] },
+      { label: 'Call recording', href: '/settings/recording', icon: Settings, any: ['recording.manage'] },
       { label: 'Sign-ins', href: '/settings/sessions', icon: Settings, any: ['user.manage'] },
       { label: 'Audit log', href: '/settings/audit', icon: Settings, any: ['audit.read'] },
       { label: 'Mobile devices', href: '/settings/devices', icon: Settings, any: ['device.approve'] },
@@ -79,7 +84,7 @@ const ALL: NavItem[] = [
 ];
 
 /** Screens that exist so far (the part of the address before "?"). */
-const BUILT = new Set(['/dashboard', '/settings/security', '/imports', '/settings/integrations', '/settings/telephony', '/settings/sessions', '/settings/audit', '/settings/company', '/account', '/notifications', '/settings/devices', '/salary', '/leave', '/attendance', '/reports', '/calls', '/dialer', '/followups', '/leads', '/settings/users', '/settings/roles', '/settings/branches', '/settings/leads']);
+const BUILT = new Set(['/dashboard', '/settings/security', '/imports', '/settings/integrations', '/settings/telephony', '/settings/recording', '/settings/sessions', '/settings/audit', '/settings/company', '/account', '/notifications', '/settings/devices', '/salary', '/leave', '/attendance', '/reports', '/calls', '/dialer', '/followups', '/leads', '/communications', '/settings/users', '/settings/roles', '/settings/branches', '/settings/leads']);
 
 const built = (href?: string) => !!href && BUILT.has(href.split('?')[0]!);
 

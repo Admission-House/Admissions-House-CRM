@@ -70,6 +70,8 @@ export function VideoRoom({ join, renew, report, onLeft, onSnapshot, label }: Ro
   const [camOn, setCamOn] = useState(true);
   const [remotes, setRemotes] = useState<IAgoraRTCRemoteUser[]>([]);
   const [version, setVersion] = useState(0);
+  /** The recorder is a member of the channel but is not a person: it is not shown or counted. */
+  const [rec, setRec] = useState<{ status: string; botUid: number | null }>({ status: 'off', botUid: null });
   const [left, setLeft] = useState(join.secondsLeft);
   const finished = useRef(false);
   /** True once the server has been told this screen is connected, and until it is told that it left. */
@@ -107,6 +109,7 @@ export function VideoRoom({ join, renew, report, onLeft, onSnapshot, label }: Ro
     const heard = (s: Snapshot | null) => {
       if (!s) return;
       latest.current.onSnapshot?.(s);
+      if (s.recording) setRec(s.recording);
       setLeft(s.secondsLeft);
       if (s.removed) void leave('removed');
       else if (s.status === 'ended') void leave('ended');
@@ -223,26 +226,35 @@ export function VideoRoom({ join, renew, report, onLeft, onSnapshot, label }: Ro
 
   if (phase === 'failed') return <Notice tone="bad">{problem}</Notice>;
 
-  const grid = remotes.length <= 1 ? 'grid-cols-1' : remotes.length <= 4 ? 'grid-cols-2' : 'grid-cols-3';
+  const people = remotes.filter((u) => u.uid !== rec.botUid);
+  const grid = people.length <= 1 ? 'grid-cols-1' : people.length <= 4 ? 'grid-cols-2' : 'grid-cols-3';
   return (
     <div className="space-y-3">
       <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-[#0b1f1e] p-2" aria-label={label ?? (voice ? 'Voice call' : 'Video call')}>
-        {remotes.length > 0 && (
+        {people.length > 0 && (
           <div className={`grid h-full w-full gap-2 ${grid}`}>
-            {remotes.map((u) => <RemoteTile key={String(u.uid)} user={u} version={version} voice={voice} />)}
+            {people.map((u) => <RemoteTile key={String(u.uid)} user={u} version={version} voice={voice} />)}
           </div>
         )}
         {phase === 'starting' && <div className="absolute inset-0 grid place-items-center text-white"><Spinner label="Connecting" /></div>}
-        {phase === 'live' && remotes.length === 0 && (
+        {phase === 'live' && people.length === 0 && (
           <div className="absolute inset-0 grid place-items-center px-6 text-center text-sm text-white/85">Waiting for the other person to join…</div>
         )}
         {voice ? (
-          phase === 'live' && <div className="absolute bottom-3 right-3 rounded-md bg-black/55 px-2 py-1 text-xs text-white">Voice · {remotes.length + 1} {remotes.length === 0 ? 'person' : 'people'}</div>
+          phase === 'live' && <div className="absolute bottom-3 right-3 rounded-md bg-black/55 px-2 py-1 text-xs text-white">Voice · {people.length + 1} {people.length === 0 ? 'person' : 'people'}</div>
         ) : (
           <div ref={local} className="absolute bottom-3 right-3 h-28 w-40 overflow-hidden rounded-lg border border-white/30 bg-black/60 shadow-lg" />
         )}
         {phase === 'live' && (
           <div className="absolute left-3 top-3 rounded-md bg-black/55 px-2 py-1 text-xs tabular-nums text-white" role="timer" aria-label="Time left">{clock(left)} left</div>
+        )}
+        {phase === 'live' && (rec.status === 'recording' || rec.status === 'pending' || rec.status === 'starting') && (
+          <div className="absolute right-3 top-3 flex items-center gap-1.5 rounded-md bg-black/55 px-2 py-1 text-xs text-white" role="status">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" aria-hidden /> Recording
+          </div>
+        )}
+        {phase === 'live' && rec.status === 'failed' && (
+          <div className="absolute right-3 top-3 rounded-md bg-amber-600/90 px-2 py-1 text-xs text-white" role="status">Recording failed</div>
         )}
       </div>
       <div className="flex items-center justify-center gap-3">

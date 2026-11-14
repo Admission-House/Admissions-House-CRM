@@ -4,6 +4,7 @@ import { z } from 'zod';
 import type { AuthContext } from '../auth/auth-context.js';
 import { decodeCursor, Page, toPage } from '../common/pagination.js';
 import { DatabaseService, Trx } from '../database/database.service.js';
+import { kindOfAlert } from '../preferences/preferences-rules.js';
 
 export type NotificationType = 'followup_due' | 'assignment' | 'approval' | 'security' | 'lead_new' | 'system' | 'communication';
 
@@ -29,8 +30,20 @@ export class NotificationsService {
     trx: Trx,
     n: { tenantId: string; userIds: readonly string[]; type: NotificationType; payload: Record<string, unknown> },
   ): Promise<number> {
-    const userIds = [...new Set(n.userIds)];
+    let userIds = [...new Set(n.userIds)];
     if (userIds.length === 0) return 0;
+    // People who switched this kind of alert off in their own settings do not get it. Security alerts and
+    // system messages have no switch, so they always arrive.
+    const kind = kindOfAlert(n.type);
+    if (kind) {
+      const { rows } = await sql<{ user_id: string }>`
+        SELECT user_id FROM user_preferences WHERE user_id = ANY(${userIds}::uuid[]) AND notify->>${kind} = 'false'`.execute(trx);
+      if (rows.length > 0) {
+        const off = new Set(rows.map((r) => r.user_id));
+        userIds = userIds.filter((id) => !off.has(id));
+        if (userIds.length === 0) return 0;
+      }
+    }
     await trx
       .insertInto('notifications')
       .values(userIds.map((user_id) => ({ tenant_id: n.tenantId, user_id, type: n.type, payload: JSON.stringify(n.payload) })))

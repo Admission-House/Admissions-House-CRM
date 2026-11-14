@@ -1,20 +1,10 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import { calendarDate } from '../common/dates.js';
-import { normalizePhone } from '../common/phone.js';
+import { phoneSchema } from '../common/phone-schema.js';
 import { pageQuerySchema } from '../common/pagination.js';
 
-const phone = z
-  .string()
-  .trim()
-  .transform((value, ctx) => {
-    const normalized = normalizePhone(value);
-    if (!normalized) {
-      ctx.addIssue({ code: 'custom', message: 'Enter a valid mobile number' });
-      return z.NEVER;
-    }
-    return normalized;
-  });
+const phone = phoneSchema;
 
 const base = {
   name: z.string().trim().min(2).max(80),
@@ -25,6 +15,17 @@ const base = {
   joinedOn: calendarDate.nullable(),
   designation: z.string().trim().max(80).nullable(),
 };
+
+/** A person's own name, number and sign-in email. Changing the email needs the current password. */
+export const updateOwnAccountSchema = z
+  .object({
+    name: base.name.optional(),
+    phone: base.phone.optional(),
+    email: z.string().trim().toLowerCase().email().max(254).optional(),
+    currentPassword: z.string().min(1).max(128).optional(),
+  })
+  .refine((v) => v.name !== undefined || v.phone !== undefined || v.email !== undefined, { message: 'Nothing to change' });
+export class UpdateOwnAccountDto extends createZodDto(updateOwnAccountSchema) {}
 
 export const createUserSchema = z.object({
   name: base.name,

@@ -70,6 +70,11 @@ export class CallsService {
   // ------------------------------------------------------------ place a call
 
   /** Rings the counsellor's own phone through the provider, which then connects the student. */
+  /** Whether the company has connected a calling provider. Until it has, the phone call buttons are hidden: pressing them could only fail. */
+  ready(auth: AuthContext): Promise<{ ready: boolean }> {
+    return this.db.withTenant(auth.tenantId, async (trx) => ({ ready: !!(await this.settings.credentials(trx, auth.tenantId))?.isEnabled }));
+  }
+
   async place(auth: AuthContext, leadId: string, input: { phone?: string }, dialerSessionId?: string): Promise<CallView> {
     const pending = await this.db.withTenant(auth.tenantId, async (trx) => {
       const lead = await this.access.get(trx, auth, leadId);

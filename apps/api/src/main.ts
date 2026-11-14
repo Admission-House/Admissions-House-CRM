@@ -10,6 +10,8 @@ async function bootstrap(): Promise<void> {
   const env = loadEnv();
   const app = await NestFactory.create<NestFastifyApplication>(AppModule, createAdapter(env), {
     bufferLogs: true,
+    // Agora signs the exact bytes of each notice, so the server keeps them to check the signature.
+    rawBody: true,
   });
   await configureApp(app, env);
   await app.listen(env.PORT, env.HOST);

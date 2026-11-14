@@ -1,31 +1,27 @@
-import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ENV } from '../config/config.module.js';
 import type { Env } from '../config/env.js';
 import { IntakeService } from './intake.service.js';
+import { JobRegistry } from '../jobs/job-registry.service.js';
 
 /** Runs the intake retry on a timer, so a lead that failed to file is not left waiting for a person. */
 @Injectable()
-export class IntakeRetryService implements OnModuleInit, OnModuleDestroy {
+export class IntakeRetryService implements OnModuleInit {
   private readonly logger = new Logger(IntakeRetryService.name);
-  private timer?: NodeJS.Timeout;
   private running = false;
 
   constructor(
     private readonly intake: IntakeService,
     @Inject(ENV) private readonly env: Env,
+  
+    private readonly jobs: JobRegistry,
   ) {}
 
   onModuleInit(): void {
-    if (this.env.INTAKE_RETRY_INTERVAL_SEC <= 0) return;
-    this.timer = setInterval(() => void this.run(), this.env.INTAKE_RETRY_INTERVAL_SEC * 1000);
-    this.timer.unref();
+    this.jobs.register({ name: 'intake-retry', group: 'minute', everySec: this.env.INTAKE_RETRY_INTERVAL_SEC, run: () => this.run() });
   }
 
-  onModuleDestroy(): void {
-    if (this.timer) clearInterval(this.timer);
-  }
-
-  private async run(): Promise<void> {
+  async run(): Promise<void> {
     if (this.running) return;
     this.running = true;
     try {

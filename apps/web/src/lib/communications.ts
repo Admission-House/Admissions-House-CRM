@@ -2,6 +2,36 @@
 
 export type CallKind = 'video' | 'voice';
 
+export type RecordingState = 'off' | 'unavailable' | 'pending' | 'starting' | 'recording' | 'stopping' | 'processing' | 'available' | 'failed' | 'expired';
+
+/** Short words for the history table and the room. */
+export const RECORDING_TEXT: Record<RecordingState, string> = {
+  off: 'Off', unavailable: 'Not possible', pending: 'Starting', starting: 'Starting', recording: 'Recording', stopping: 'Saving', processing: 'Saving', available: 'Ready', failed: 'Failed', expired: 'Removed',
+};
+
+export interface RecordingPolicy {
+  mode: 'off' | 'optional' | 'always';
+  retentionDays: number;
+  noticeText: string;
+  version: number;
+  ready: boolean;
+  missing?: string[];
+}
+
+export interface RecordingFile { id: string; kind: 'audio' | 'video' | 'audio_and_video'; format: 'mp4' | 'mp3' | 'm3u8' | 'ts'; sizeBytes: number | null; playable: boolean }
+export interface RecordingItem {
+  id: string;
+  status: RecordingState;
+  failureReason: string | null;
+  startedAt: string | null;
+  stoppedAt: string | null;
+  availableAt: string | null;
+  expiresAt: string | null;
+  files: RecordingFile[];
+  canPlay: boolean;
+  canDownload: boolean;
+}
+
 export interface Participant {
   id: string;
   kind: 'staff' | 'guest';
@@ -39,7 +69,8 @@ export interface SessionView {
   participants: Participant[];
   guestUrl: string | null;
   canManage: boolean;
-  recordingStatus: 'not_enabled';
+  recordingStatus: RecordingState;
+  recordingEnabled: boolean;
 }
 
 export interface SessionDetail extends SessionView {
@@ -65,7 +96,7 @@ export interface HistoryItem {
   peopleInvited: number;
   peopleJoined: number;
   people: string;
-  recordingStatus: 'not_enabled';
+  recordingStatus: RecordingState;
 }
 
 export interface Snapshot {
@@ -74,6 +105,7 @@ export interface Snapshot {
   secondsLeft: number;
   removed: boolean;
   participants: { name: string; kind: 'staff' | 'guest'; state: string; connected: boolean }[];
+  recording?: { status: RecordingState; botUid: number | null };
 }
 
 export interface RtcJoin {
@@ -86,6 +118,49 @@ export interface RtcJoin {
   kind: CallKind;
   type: 'call' | 'meeting';
   title: string | null;
+  recordingEnabled?: boolean;
+}
+
+/** What the student's page shows before they press Join: who is calling, and whether the call is still open. */
+export interface GuestInfo {
+  companyName: string;
+  hostName: string;
+  guestName: string;
+  kind: CallKind;
+  title: string | null;
+  ended: boolean;
+}
+
+/** A WhatsApp link: to a number, or, with no number, to a chat the person picks. The text is filled in but not sent. */
+export function whatsappLink(phone: string | null | undefined, text?: string): string {
+  return `https://wa.me/${(phone ?? '').replace(/\D/g, '')}${text ? `?text=${encodeURIComponent(text)}` : ''}`;
+}
+
+const firstName = (name: string, fallback: string): string => name.trim().split(/\s+/)[0] || fallback;
+
+/**
+ * The WhatsApp message that carries a student's link: who is writing and from where, so it does not look like a
+ * message from a stranger. The name is the counsellor who sends it.
+ */
+export function joinMessage(p: { guest: string; host: string; company: string; kind: CallKind; link: string }): string {
+  const what = p.kind === 'voice' ? 'voice' : 'video';
+  return `Hello ${firstName(p.guest, 'there')}, this is ${firstName(p.host, 'your counsellor')} from ${p.company || 'Admissions House'}. Please open this link to join your counselling ${what} call:\n${p.link}`;
+}
+
+/** The words on the student's page before they join. */
+export function greetingFor(info: GuestInfo | 'invalid' | null): { company: string; title: string; text: string; closed: boolean } {
+  if (info === 'invalid') return { company: 'Admissions House', title: 'This link is not valid', text: 'This link is not valid. Please use the link you were sent. If it was changed or cancelled, ask for a new one.', closed: true };
+  if (!info) return { company: 'Admissions House', title: 'You are invited to a session', text: 'Press the button below when you are ready, and allow your microphone when your browser asks.', closed: false };
+  const first = firstName(info.guestName, 'there');
+  const company = info.companyName || 'Admissions House';
+  if (info.ended) return { company, title: 'This session has ended', text: `Please contact ${info.hostName} for a new link.`, closed: true };
+  const call = info.kind === 'voice' ? 'voice' : 'video';
+  return {
+    company,
+    title: `Hello ${first}, your counselling session is ready`,
+    text: `${info.hostName} from ${company} is waiting for you on a ${call} call. Press the button below and allow your microphone${info.kind === 'video' ? ' and camera' : ''} when your browser asks.`,
+    closed: false,
+  };
 }
 
 export type LeaveReason = 'left' | 'time' | 'ended' | 'removed';

@@ -5,6 +5,8 @@ import { z } from 'zod';
 import type { AuthContext } from '../auth/auth-context.js';
 import { CurrentAuth } from '../auth/decorators.js';
 import { ProfileService, selfProfileSchema, staffProfileSchema } from './profile.service.js';
+import { UpdateOwnAccountDto } from './users.dto.js';
+import { UsersService } from './users.service.js';
 
 class SelfDto extends createZodDto(selfProfileSchema) {}
 class StaffDto extends createZodDto(staffProfileSchema) {}
@@ -14,7 +16,17 @@ class RevealDto extends createZodDto(z.object({ reveal: z.enum(['true', 'false']
 @ApiBearerAuth()
 @Controller()
 export class ProfileController {
-  constructor(private readonly profiles: ProfileService) {}
+  constructor(
+    private readonly profiles: ProfileService,
+    private readonly users: UsersService,
+  ) {}
+
+  /** Anyone signed in (Super Admin, Admin or Counsellor) changes their own name, number and email. */
+  @Put('me/account')
+  updateAccount(@CurrentAuth() auth: AuthContext, @Body() body: UpdateOwnAccountDto) {
+    return this.users.updateOwnAccount(auth, body);
+  }
+
 
   /** The signed-in person's own profile. `?reveal=true` shows the full bank account number. */
   @Get('me/profile')

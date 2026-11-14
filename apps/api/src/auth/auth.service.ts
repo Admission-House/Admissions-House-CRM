@@ -8,6 +8,7 @@ import { ENV } from '../config/config.module.js';
 import type { Env } from '../config/env.js';
 import { DatabaseService, Trx } from '../database/database.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
+import { allowedStartPages, type StartPage } from '../preferences/preferences-rules.js';
 import type { AuthContext, RoleKey } from './auth-context.js';
 import { AuthRepository, LoginUser } from './auth.repository.js';
 import type { LoginInput } from './dto/auth.dto.js';
@@ -208,6 +209,11 @@ export class AuthService {
     });
     await this.repo.registerSuccess(trx, user.id);
     await attempt(user.id, 'success');
+    // The Super Admins are told who signed in (a repeat within 30 minutes is not sent again, so the bell stays readable).
+    await this.notifications.notifySuperAdmins(trx, {
+      tenantId: tenant.id, exceptUserId: user.id, quietMinutes: 30,
+      payload: { event: 'login_ok', userId: user.id, userName: user.name, role: user.role_name, ip, clientType: input.clientType },
+    });
     // Signing in from the office is the attendance: people who must sign in from the office are
     // checked in here, and checked out when their last session ends (see migration 013).
     if (user.requires_office) {
@@ -449,7 +455,10 @@ export class AuthService {
   }
 
   async profile(auth: AuthContext) {
-    const company = await this.db.withTenant(auth.tenantId, (trx) => this.repo.companyProfile(trx));
+    const { company, own } = await this.db.withTenant(auth.tenantId, async (trx) => ({
+      company: await this.repo.companyProfile(trx),
+      own: (await sql<{ start_page: string | null; avatar_updated_at: Date | null }>`SELECT start_page, avatar_updated_at FROM user_preferences WHERE user_id = ${auth.userId}::uuid`.execute(trx)).rows[0],
+    }));
     const settings = (company.settings ?? {}) as { product_name?: string; contact_email?: string; brand_color?: string; accent_color?: string; logo_key?: string };
     return {
       user: {
@@ -459,6 +468,9 @@ export class AuthService {
         role: { key: auth.roleKey, dataScope: auth.dataScope },
         mustChangePassword: auth.mustChangePassword,
         mfaSetupRequired: auth.mfaSetupRequired,
+        // Their chosen first page, only if they may still open it (a role change can take that away).
+        startPage: own?.start_page && allowedStartPages(auth.permissions).includes(own.start_page as StartPage) ? own.start_page : null,
+        avatarVersion: own?.avatar_updated_at ? new Date(own.avatar_updated_at).getTime() : null,
       },
       permissions: [...auth.permissions].sort(),
       company: {

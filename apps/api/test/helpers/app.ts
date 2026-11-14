@@ -41,7 +41,7 @@ export async function startApp(overrides: Partial<NodeJS.ProcessEnv> = {}): Prom
     .overrideProvider(ENV)
     .useValue(env)
     .compile();
-  const app = moduleRef.createNestApplication<NestFastifyApplication>(createAdapter(env));
+  const app = moduleRef.createNestApplication<NestFastifyApplication>(createAdapter(env), { rawBody: true });
   await configureApp(app, env);
   await app.init();
   await app.getHttpAdapter().getInstance().ready();

@@ -2,19 +2,9 @@ import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import { calendarDate } from '../common/dates.js';
 import { pageQuerySchema } from '../common/pagination.js';
-import { normalizePhone } from '../common/phone.js';
+import { phoneSchema } from '../common/phone-schema.js';
 
-const phone = z
-  .string()
-  .trim()
-  .transform((value, ctx) => {
-    const normalized = normalizePhone(value);
-    if (!normalized) {
-      ctx.addIssue({ code: 'custom', message: 'Enter a valid mobile number' });
-      return z.NEVER;
-    }
-    return normalized;
-  });
+const phone = phoneSchema;
 
 const instant = z.iso.datetime({ offset: true, message: 'Use a date and time such as 2026-11-03T15:30:00+05:30' }).transform((v) => new Date(v));
 

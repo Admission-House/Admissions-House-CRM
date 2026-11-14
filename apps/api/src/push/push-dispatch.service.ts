@@ -1,10 +1,11 @@
-import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { sql } from 'kysely';
 import { ENV } from '../config/config.module.js';
 import type { Env } from '../config/env.js';
 import { DatabaseService } from '../database/database.service.js';
 import { PushMessage, PushProvider, PushTransportError } from './push-provider.js';
 import { pushText } from './push-text.js';
+import { JobRegistry } from '../jobs/job-registry.service.js';
 
 /** A notification older than this when the job gets to it (the server was down) is not worth an alert any more. */
 const FRESH_MINUTES = 15;
@@ -23,28 +24,23 @@ export interface DispatchSummary { claimed: number; alerts: number; sent: number
  * they are too old to be worth an alert. A phone that reports it is gone is forgotten.
  */
 @Injectable()
-export class PushDispatchService implements OnModuleInit, OnModuleDestroy {
+export class PushDispatchService implements OnModuleInit {
   private readonly logger = new Logger(PushDispatchService.name);
-  private timer?: NodeJS.Timeout;
   private running = false;
 
   constructor(
     private readonly db: DatabaseService,
     private readonly provider: PushProvider,
     @Inject(ENV) private readonly env: Env,
+  
+    private readonly jobs: JobRegistry,
   ) {}
 
   onModuleInit(): void {
-    if (this.env.PUSH_INTERVAL_SEC <= 0 || this.env.PUSH_PROVIDER === 'off') return;
-    this.timer = setInterval(() => void this.runSafely(), this.env.PUSH_INTERVAL_SEC * 1000);
-    this.timer.unref();
+    this.jobs.register({ name: 'push-dispatch', group: 'minute', everySec: this.env.PUSH_PROVIDER === 'off' ? 0 : this.env.PUSH_INTERVAL_SEC, run: () => this.runSafely() });
   }
 
-  onModuleDestroy(): void {
-    if (this.timer) clearInterval(this.timer);
-  }
-
-  private async runSafely(): Promise<void> {
+  async runSafely(): Promise<void> {
     if (this.running) return;
     this.running = true;
     try {

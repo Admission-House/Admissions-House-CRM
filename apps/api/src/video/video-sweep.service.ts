@@ -1,10 +1,12 @@
-import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { sql } from 'kysely';
 import { ENV } from '../config/config.module.js';
 import type { Env } from '../config/env.js';
 import { DatabaseService } from '../database/database.service.js';
 import { EMPTY_CALL_GRACE_SECONDS, PRESENCE_STALE_SECONDS, REMINDER_MINUTES } from './video-rules.js';
+import { RecordingService } from '../recording/recording.service.js';
 import { SessionRow, VideoStore } from './video-store.js';
+import { JobRegistry } from '../jobs/job-registry.service.js';
 
 export interface SweepCounts {
   missed: number;
@@ -21,25 +23,21 @@ export interface SweepCounts {
  * an advisory lock per company means one of them does the work.
  */
 @Injectable()
-export class VideoSweepService implements OnModuleInit, OnModuleDestroy {
+export class VideoSweepService implements OnModuleInit {
   private readonly logger = new Logger(VideoSweepService.name);
-  private timer?: NodeJS.Timeout;
   private running = false;
 
   constructor(
     private readonly db: DatabaseService,
     private readonly store: VideoStore,
+    private readonly recording: RecordingService,
     @Inject(ENV) private readonly env: Env,
+  
+    private readonly jobs: JobRegistry,
   ) {}
 
   onModuleInit(): void {
-    if (this.env.COMMUNICATION_SWEEP_SEC <= 0) return;
-    this.timer = setInterval(() => void this.runSafely(), this.env.COMMUNICATION_SWEEP_SEC * 1000);
-    this.timer.unref();
-  }
-
-  onModuleDestroy(): void {
-    if (this.timer) clearInterval(this.timer);
+    this.jobs.register({ name: 'communication-sweep', group: 'minute', everySec: this.env.COMMUNICATION_SWEEP_SEC, run: () => this.runSafely() });
   }
 
   /** One pass over every active company. */
@@ -49,6 +47,8 @@ export class VideoSweepService implements OnModuleInit, OnModuleDestroy {
     for (const { id } of tenants) {
       const c = await this.sweepTenant(id);
       for (const k of Object.keys(total) as (keyof SweepCounts)[]) total[k] += c[k];
+      // Recordings are looked after outside the transaction above: they call Agora and the storage bucket.
+      await this.recording.sweep(id).catch((e: unknown) => this.logger.error(`recording sweep failed: ${e instanceof Error ? e.message : String(e)}`));
     }
     return total;
   }
@@ -130,7 +130,7 @@ export class VideoSweepService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  private async runSafely(): Promise<void> {
+  async runSafely(): Promise<void> {
     if (this.running) return;
     this.running = true;
     try {

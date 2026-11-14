@@ -4,7 +4,7 @@ import type { FastifyRequest } from 'fastify';
 import { createZodDto } from 'nestjs-zod';
 import type { AuthContext } from '../auth/auth-context.js';
 import { CurrentAuth, Public, RequirePermissions } from '../auth/decorators.js';
-import { callSchema, guestJoinSchema, guestPresenceSchema, historyQuerySchema, inviteSchema, leadSessionSchema, meetingSchema, presenceSchema, respondSchema } from './video.dto.js';
+import { callSchema, guestInfoSchema, guestJoinSchema, guestPresenceSchema, historyQuerySchema, inviteSchema, leadSessionSchema, meetingSchema, presenceSchema, respondSchema, staffJoinSchema } from './video.dto.js';
 import { VideoAccessService } from './video-access.service.js';
 import { VideoService } from './video.service.js';
 
@@ -12,10 +12,12 @@ class LeadSessionDto extends createZodDto(leadSessionSchema) {}
 class CallDto extends createZodDto(callSchema) {}
 class MeetingDto extends createZodDto(meetingSchema) {}
 class InviteDto extends createZodDto(inviteSchema) {}
+class StaffJoinDto extends createZodDto(staffJoinSchema) {}
 class RespondDto extends createZodDto(respondSchema) {}
 class PresenceDto extends createZodDto(presenceSchema) {}
 class HistoryDto extends createZodDto(historyQuerySchema) {}
 class GuestJoinDto extends createZodDto(guestJoinSchema) {}
+class GuestInfoDto extends createZodDto(guestInfoSchema) {}
 class GuestPresenceDto extends createZodDto(guestPresenceSchema) {}
 
 /**
@@ -91,8 +93,8 @@ export class VideoController {
   @RequirePermissions('video.host')
   @Post('communications/:id/join')
   @HttpCode(200)
-  join(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string) {
-    return this.access.join(auth, id);
+  join(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: StaffJoinDto) {
+    return this.access.join(auth, id, body.consent);
   }
 
   /** The screen reports that it is connected, still here, or gone. */
@@ -161,10 +163,17 @@ export class VideoController {
 export class GuestVideoController {
   constructor(private readonly access: VideoAccessService) {}
 
+  /** Who is calling, for the greeting before the student presses Join. */
+  @Post('info')
+  @HttpCode(200)
+  info(@Body() body: GuestInfoDto, @Req() req: FastifyRequest) {
+    return this.access.guestInfo(body.token, req.ip);
+  }
+
   @Post('join')
   @HttpCode(200)
   join(@Body() body: GuestJoinDto, @Req() req: FastifyRequest) {
-    return this.access.guestJoin(body.token, body.deviceId, body.name, req.ip);
+    return this.access.guestJoin(body.token, body.deviceId, body.name, body.consent, req.ip);
   }
 
   @Post('presence')

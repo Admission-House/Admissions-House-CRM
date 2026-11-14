@@ -87,7 +87,7 @@ export function EmployeeProfile({ path, canEditHr, title }: { path: string; canE
             <div key={k}><dt className="text-xs font-semibold uppercase tracking-wide text-muted">{k}</dt><dd className="mt-1 break-words text-sm font-medium">{v}</dd></div>
           ))}
         </dl>
-        <p className="mt-4 text-xs text-muted">Name, email and mobile number are changed from Settings, Users.</p>
+        <p className="mt-4 text-xs text-muted">{path.startsWith('/me') ? 'You can change your name, email and mobile number in the box above.' : 'Name, email and mobile number are changed from Settings, Users.'}</p>
       </Panel>
 
       <Panel title="Personal and work">

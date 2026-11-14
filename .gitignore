@@ -23,3 +23,14 @@ out
 
 # Written by `next dev` when an AI tool starts it; not part of the product.
 apps/web/AGENTS.md
+
+# Only code goes to GitHub. Everything below is local working material: tool output, test pictures, backups, scratch files.
+.vercel
+.playwright-mcp
+*.bak
+*.orig
+*.rej
+/qa-*
+/*.png
+/*.jpg
+.tmp*

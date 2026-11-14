@@ -1,8 +1,9 @@
-import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { sql } from 'kysely';
 import { ENV } from '../config/config.module.js';
 import type { Env } from '../config/env.js';
 import { DatabaseService } from '../database/database.service.js';
+import { JobRegistry } from '../jobs/job-registry.service.js';
 
 const BATCH = 5_000;
 /** Password-reset links are useless a day after they expire; a month is plenty for investigating abuse. */
@@ -24,29 +25,18 @@ export interface RetentionCounts {
  * Rows go in batches so a large backlog never holds a long lock.
  */
 @Injectable()
-export class RetentionService implements OnModuleInit, OnModuleDestroy {
+export class RetentionService implements OnModuleInit {
   private readonly logger = new Logger(RetentionService.name);
-  private timer?: NodeJS.Timeout;
-  private first?: NodeJS.Timeout;
   private running = false;
 
   constructor(
     private readonly db: DatabaseService,
     @Inject(ENV) private readonly env: Env,
+    private readonly jobs: JobRegistry,
   ) {}
 
   onModuleInit(): void {
-    if (this.env.RETENTION_INTERVAL_HOURS <= 0) return;
-    // A first pass shortly after start, so a server that restarts often still gets cleaned.
-    this.first = setTimeout(() => void this.runSafely(), 2 * 60_000);
-    this.first.unref();
-    this.timer = setInterval(() => void this.runSafely(), this.env.RETENTION_INTERVAL_HOURS * 3_600_000);
-    this.timer.unref();
-  }
-
-  onModuleDestroy(): void {
-    if (this.timer) clearInterval(this.timer);
-    if (this.first) clearTimeout(this.first);
+    this.jobs.register({ name: 'retention', group: 'daily', everySec: this.env.RETENTION_INTERVAL_HOURS * 3600, firstRunMs: 2 * 60_000, run: () => this.runSafely() });
   }
 
   /** One pass over every active company. Returns what was removed in total. */
@@ -104,7 +94,7 @@ export class RetentionService implements OnModuleInit, OnModuleDestroy {
     return counts;
   }
 
-  private async runSafely(): Promise<void> {
+  async runSafely(): Promise<void> {
     if (this.running) return;
     this.running = true;
     try {

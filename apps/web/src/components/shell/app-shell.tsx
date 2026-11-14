@@ -9,6 +9,8 @@ import { useAuth } from '@/lib/auth';
 import { IncomingCalls } from '@/components/communications/incoming-calls';
 import { RealtimeProvider } from '@/lib/realtime';
 import { NAV, type NavItem } from '@/lib/nav';
+import { usePhoneReady } from '@/lib/use-phone';
+import { usePhoto } from '@/lib/use-photo';
 import { themeStyle } from '@/lib/brand-theme';
 import { CompanyLogo } from '@/components/company-logo';
 import { SidebarSearch } from './sidebar-search';
@@ -67,6 +69,7 @@ function Sidebar({ narrow, onNavigate, onToggle }: { narrow: boolean; onNavigate
   // Only one group is open at a time. What the person picked holds until they go to another page, then the group holding that page opens.
   const [pick, setPick] = useState<{ at: string; label: string | null } | null>(null);
   const picked = pick && pick.at === current ? pick : null;
+  const phoneReady = usePhoneReady();
   const isActive = (href: string) => (href.includes('?') ? current === href : path === href && !params.get('queue'));
 
   return (
@@ -91,7 +94,7 @@ function Sidebar({ narrow, onNavigate, onToggle }: { narrow: boolean; onNavigate
 
       <div className={cx('flex-1 overflow-y-auto py-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden', narrow ? 'px-2.5' : 'px-3')}>
         <ul className="space-y-0.5">
-          {NAV.filter((i) => canAny(...i.any)).map((item) => {
+          {NAV.filter((i) => canAny(...i.any) && (!i.needsPhone || phoneReady)).map((item) => {
             if (!item.children) return <li key={item.label}><NavLink item={item} active={isActive(item.href!)} narrow={narrow} onNavigate={onNavigate} /></li>;
 
             const kids = item.children.filter((c) => canAny(...c.any));
@@ -151,6 +154,7 @@ function Clock() {
 
 function UserMenu() {
   const { me, logout } = useAuth();
+  const photo = usePhoto(me?.user.id, me?.user.avatarVersion);
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -171,7 +175,7 @@ function UserMenu() {
   return (
     <div ref={ref} className="relative">
       <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-haspopup="menu" className="flex items-center gap-2.5 rounded-lg py-1 pl-1 pr-2 hover:bg-head">
-        <Avatar name={me.user.name} size={32} />
+        <Avatar name={me.user.name} size={32} photo={photo} />
         <span className="hidden text-left leading-tight sm:block">
           <span className="block text-sm font-semibold text-ink">{me.user.name}</span>
           <span className="block text-xs capitalize text-muted">{me.user.role.key?.replace(/_/g, ' ')}</span>

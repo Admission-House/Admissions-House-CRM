@@ -1,8 +1,9 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { getAccessToken, refreshSession } from './api';
+import { api, getAccessToken, refreshSession } from './api';
 import { useAuth } from './auth';
+import { changedTopics, nextWaitMs, type Pulse } from './pulse-rules';
 
 /** What a hint can be about. `resync` means the connection was lost for a while, so ask for everything again. */
 export type Topic = 'notification' | 'team' | 'lead' | 'call' | 'resync';
@@ -32,6 +33,21 @@ function socketUrl(): string {
 const KEEPALIVE_MS = 25_000;
 
 /**
+ * "ws": a WebSocket carries the hints (a server that can keep it open). "poll": a place that cannot (Vercel) asks one small
+ * question now and then instead. Chosen when the web app is built (NEXT_PUBLIC_REALTIME=poll).
+ */
+export const POLLING = process.env.NEXT_PUBLIC_REALTIME === 'poll';
+
+// How often the question is asked. Quiet and cheap by default: fast only while someone is ringing, slow when nobody is looking.
+const POLL_ACTIVE_MS = Math.max(5, Number(process.env.NEXT_PUBLIC_POLL_SEC ?? 15) || 15) * 1000;
+const POLL_QUIET_MS = 60_000; // tab hidden, or nobody has touched the screen for two minutes
+const POLL_RINGING_MS = 3_000;
+const POLL_MAX_BACKOFF_MS = 120_000;
+const QUIET_AFTER_MS = 120_000;
+const RESYNC_EVERY_MS = 300_000; // a safety net: now and then every screen looks again, in case a change was missed
+
+
+/**
  * Keeps one connection to the server while someone is signed in. The server only says that something
  * changed ("a notification came", "the team changed"); the screens then ask the normal API for the new
  * numbers. If the connection fails, screens still refresh on their own timers, a little later.
@@ -48,6 +64,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (status !== 'authenticated') return;
+    if (POLLING) return startPolling((topics) => listeners.current.forEach((l) => l(topics)), setConnected);
     let stopped = false;
     let socket: WebSocket | null = null;
     let retry: ReturnType<typeof setTimeout> | undefined;
@@ -110,6 +127,56 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo(() => ({ connected, subscribe }), [connected, subscribe]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}
+
+/**
+ * Asks the server what changed, and tells the screens which topics moved. One request for everything, never one
+ * per screen. It slows down when the tab is hidden or untouched, speeds up while a call is ringing, backs off when
+ * the server does not answer, and stops with the returned function.
+ */
+function startPolling(emit: (topics: readonly string[]) => void, setConnected: (on: boolean) => void): () => void {
+  let stopped = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let last: Pulse | null = null;
+  let failures = 0;
+  let touched = Date.now();
+  let lastResync = Date.now();
+
+  const touch = () => { touched = Date.now(); };
+  const wait = (ringing: boolean): number =>
+    nextWaitMs({ activeMs: POLL_ACTIVE_MS, quietMs: POLL_QUIET_MS, ringingMs: POLL_RINGING_MS, maxBackoffMs: POLL_MAX_BACKOFF_MS }, { failures, ringing, hidden: document.hidden, untouchedMs: Date.now() - touched }, QUIET_AFTER_MS);
+  const schedule = (ms: number) => { if (!stopped) timer = setTimeout(() => void tick(), ms); };
+
+  async function tick() {
+    try {
+      const now = await api<Pulse>('/realtime/pulse');
+      failures = 0;
+      setConnected(true);
+      const resyncDue = Date.now() - lastResync > RESYNC_EVERY_MS;
+      if (resyncDue) lastResync = Date.now();
+      const changed = changedTopics(last, now, resyncDue);
+      last = now;
+      if (changed.length > 0) emit(changed);
+      schedule(wait(now.ringing));
+    } catch {
+      failures += 1;
+      setConnected(false);
+      schedule(wait(false));
+    }
+  }
+
+  const visible = () => { if (!document.hidden) { clearTimeout(timer); void tick(); } };
+  const events = ['pointerdown', 'keydown', 'scroll'] as const;
+  events.forEach((e) => window.addEventListener(e, touch, { passive: true }));
+  document.addEventListener('visibilitychange', visible);
+  void tick();
+  return () => {
+    stopped = true;
+    clearTimeout(timer);
+    events.forEach((e) => window.removeEventListener(e, touch));
+    document.removeEventListener('visibilitychange', visible);
+    setConnected(false);
+  };
 }
 
 /** Whether the live connection is up. Screens that refresh on a timer can slow it down while it is. */

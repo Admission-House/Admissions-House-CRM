@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { sql } from 'kysely';
 import { scopeCondition } from '../access/scope.js';
 import type { AuthContext } from '../auth/auth-context.js';
@@ -13,6 +13,7 @@ import { Assignees } from '../leads/assignees.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { applyOverride, detectMapping, Field, InvalidRow, Mapping, repeatsInFile, toRecords, validateRecords, ValidRow } from './import-rules.js';
 import { readTable } from './spreadsheet.js';
+import { JobRegistry } from '../jobs/job-registry.service.js';
 
 /** Rows handled in one transaction. Small enough that a lock is held briefly, large enough to be quick. */
 const CHUNK = 25;
@@ -64,9 +65,8 @@ interface BatchRow {
 const missingFields = (mapping: Mapping): Field[] => (['name', 'phone'] as const).filter((f) => mapping[f] === undefined);
 
 @Injectable()
-export class ImportsService implements OnModuleInit, OnModuleDestroy {
+export class ImportsService implements OnModuleInit {
   private readonly logger = new Logger(ImportsService.name);
-  private timer?: NodeJS.Timeout;
   private sweeping = false;
   /** Batches being worked on by this process, so a second kick-off does not start a second loop. */
   private readonly running = new Set<string>();
@@ -77,16 +77,12 @@ export class ImportsService implements OnModuleInit, OnModuleDestroy {
     private readonly assignees: Assignees,
     private readonly notifications: NotificationsService,
     @Inject(ENV) private readonly env: Env,
+  
+    private readonly jobs: JobRegistry,
   ) {}
 
   onModuleInit(): void {
-    if (this.env.IMPORT_INTERVAL_SEC <= 0) return;
-    this.timer = setInterval(() => void this.sweepSafely(), this.env.IMPORT_INTERVAL_SEC * 1000);
-    this.timer.unref();
-  }
-
-  onModuleDestroy(): void {
-    if (this.timer) clearInterval(this.timer);
+    this.jobs.register({ name: 'lead-imports', group: 'minute', everySec: this.env.IMPORT_INTERVAL_SEC, run: () => this.sweepSafely() });
   }
 
   // ---------------------------------------------------------------- preview
@@ -300,7 +296,7 @@ export class ImportsService implements OnModuleInit, OnModuleDestroy {
 
   // ---------------------------------------------------------------- restart
 
-  private async sweepSafely(): Promise<void> {
+  async sweepSafely(): Promise<void> {
     if (this.sweeping) return;
     this.sweeping = true;
     try {

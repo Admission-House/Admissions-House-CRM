@@ -10,6 +10,8 @@ export const leadSessionSchema = z.object({
   maxMinutes: minutes.default(45),
   /** Without it the session can be joined straight away. */
   scheduledFor: when.optional(),
+  /** Record this session. Counts only when the company's recording policy lets the host choose. */
+  record: z.boolean().optional(),
 });
 
 /** A call to a colleague: it rings on their screen until they answer, turn it down or miss it. */
@@ -18,6 +20,7 @@ export const callSchema = z.object({
   kind: kind.default('voice'),
   leadId: z.uuid().optional(),
   maxMinutes: minutes.default(60),
+  record: z.boolean().optional(),
 });
 
 /** A planned (or immediate) group meeting. Staff are invited by id; outside guests get a link of their own. */
@@ -28,6 +31,7 @@ export const meetingSchema = z.object({
   scheduledFor: when.optional(),
   durationMinutes: minutes.default(60),
   leadId: z.uuid().optional(),
+  record: z.boolean().optional(),
   staffIds: z.array(z.uuid()).max(100).default([]),
   guests: z.array(z.object({ name: z.string().trim().min(1).max(80) })).max(100).default([]),
 });
@@ -36,6 +40,9 @@ export const meetingSchema = z.object({
 export const inviteSchema = z
   .object({ userId: z.uuid().optional(), guestName: z.string().trim().min(1).max(80).optional() })
   .refine((v) => (v.userId === undefined) !== (v.guestName === undefined), { message: 'Give either a colleague (userId) or a guest name, not both' });
+
+/** A staff member joining: whether they agreed to the recording notice, when the session is recorded. */
+export const staffJoinSchema = z.object({ consent: z.boolean().optional() }).default({});
 
 export const respondSchema = z.object({ action: z.enum(['accept', 'decline']) });
 
@@ -48,7 +55,11 @@ export const guestJoinSchema = z.object({
   deviceId: z.string().trim().regex(/^[A-Za-z0-9_-]{24,64}$/, 'not a valid device id'),
   /** The guest may correct how their name is shown. */
   name: z.string().trim().min(1).max(80).optional(),
+  /** The guest agreed to the recording notice. Required when the session is recorded. */
+  consent: z.boolean().optional(),
 });
+/** What the student's page asks before joining, to say hello properly. Only the link is needed. */
+export const guestInfoSchema = z.object({ token: z.string().trim().min(40).max(200) });
 export const guestPresenceSchema = z.object({
   token: z.string().trim().min(40).max(200),
   deviceId: z.string().trim().regex(/^[A-Za-z0-9_-]{24,64}$/),
@@ -63,6 +74,8 @@ export const historyQuerySchema = z.object({
   leadId: z.uuid().optional(),
   /** Sessions this person was invited to. */
   userId: z.uuid().optional(),
+  /** Sessions that have a recording that is ready, or one that failed. */
+  recording: z.enum(['available', 'failed']).optional(),
   from: z.iso.date().optional(),
   to: z.iso.date().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(25),

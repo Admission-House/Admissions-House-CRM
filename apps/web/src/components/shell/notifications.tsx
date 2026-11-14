@@ -10,6 +10,7 @@ import { fromNow } from '@/lib/format';
 import { useRealtime, useRealtimeStatus } from '@/lib/realtime';
 import type { Page } from '@/lib/types';
 import { useApi } from '@/lib/use-api';
+import { useDismiss } from '@/lib/use-dismiss';
 
 export interface Notification {
   id: string;
@@ -41,6 +42,7 @@ export function describeNotification(n: Notification): { title: string; detail?:
     case 'leave_requested': return { title: `${String(p.userName ?? 'Someone')} asked for leave`, detail: `${String(p.leaveType ?? '')}, ${String(p.fromDate ?? '')}${p.toDate && p.toDate !== p.fromDate ? ` to ${String(p.toDate)}` : ''}`, href: '/leave' };
     case 'leave_decided': return { title: `Your leave was ${p.decision === 'approved' ? 'approved' : 'turned down'}`, detail: [typeof p.decidedBy === 'string' ? `By ${p.decidedBy}` : '', typeof p.note === 'string' ? p.note : ''].filter(Boolean).join('. ') || undefined, href: '/leave' };
     case 'idle_logout': return { title: `${String(p.userName ?? 'Someone')} was signed out for inactivity`, detail: `No activity for ${String(p.idleMinutes ?? 30)} minutes`, href: '/attendance' };
+    case 'login_ok': return { title: `${String(p.userName ?? 'Someone')} signed in`, detail: [typeof p.role === 'string' ? p.role : '', p.clientType === 'mobile' ? 'Phone' : 'Web'].filter(Boolean).join(' · '), href: '/settings/sessions' };
     case 'login_refused': return { title: `${String(p.userName ?? 'Someone')} was refused at sign-in`, detail: p.reason === 'device_rooted' ? 'This phone is rooted or jailbroken' : `Not at the office (${REFUSED_REASON[String(p.reason)] ?? String(p.reason ?? 'outside the office')})`, href: '/attendance' };
     case 'forced_logout': return { title: `${String(p.userName ?? 'Someone')} was signed out by an admin`, href: '/settings/sessions' };
     case 'attendance_exception': return { title: `Attendance marked by hand for ${String(p.userName ?? 'someone')}`, detail: [typeof p.date === 'string' ? p.date : '', typeof p.reason === 'string' ? p.reason : ''].filter(Boolean).join(': ') || undefined, href: '/attendance' };
@@ -51,6 +53,8 @@ export function describeNotification(n: Notification): { title: string; detail?:
     case 'comm_meeting_reminder': return { title: `Meeting soon: ${String(p.title ?? 'a meeting')}`, detail: typeof p.scheduledFor === 'string' ? new Date(p.scheduledFor).toLocaleString('en-IN') : undefined, href: typeof p.sessionId === 'string' ? `/video/${p.sessionId}` : '/communications' };
     case 'comm_meeting_started': return { title: `${String(p.title ?? 'A meeting')} has started`, detail: typeof p.fromName === 'string' ? `Hosted by ${p.fromName}` : undefined, href: typeof p.sessionId === 'string' ? `/video/${p.sessionId}` : '/communications' };
     case 'comm_ended': return { title: p.cancelled ? `${String(p.title ?? 'A session')} was cancelled` : `${String(p.title ?? 'A session')} has ended`, detail: typeof p.fromName === 'string' ? `By ${p.fromName}` : undefined, href: '/communications' };
+    case 'comm_recording_ready': return { title: `Recording ready: ${String(p.title ?? (p.kind === 'voice' ? 'voice call' : 'video call'))}`, href: '/communications' };
+    case 'comm_recording_failed': return { title: `Recording failed: ${String(p.title ?? (p.kind === 'voice' ? 'voice call' : 'video call'))}`, detail: typeof p.reason === 'string' ? p.reason : undefined, href: '/communications' };
     case 'download': return { title: `${String(p.userName ?? 'Someone')} downloaded ${String(p.what ?? 'a file')}`, detail: typeof p.fileName === 'string' ? p.fileName : undefined, href: '/settings/audit' };
     default: return { title: n.type.replace(/_/g, ' ') };
   }
@@ -72,17 +76,7 @@ export function NotificationBell() {
     return () => clearInterval(id);
   }, [count.reload, live]);
 
-  useEffect(() => {
-    if (!open) return;
-    const close = (e: MouseEvent) => !box.current?.contains(e.target as Node) && setOpen(false);
-    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
-    document.addEventListener('mousedown', close);
-    document.addEventListener('keydown', esc);
-    return () => {
-      document.removeEventListener('mousedown', close);
-      document.removeEventListener('keydown', esc);
-    };
-  }, [open]);
+  useDismiss(open, box, () => setOpen(false));
 
   async function markAllRead() {
     await api('/notifications/read', { method: 'POST', body: { all: true } });

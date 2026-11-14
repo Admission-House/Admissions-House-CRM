@@ -19,12 +19,12 @@ export function BrandPanel() {
   return (
     <aside className="relative hidden overflow-hidden lg:block" style={{ background: PANEL_GREEN }}>
       <Image
-        src="/brand/login-graduate.jpg"
-        alt="A graduate smiling with her diploma"
+        src="/brand/login-graduates-group.jpg"
+        alt="A group of graduates in red gowns smiling with their diplomas"
         fill
         priority
         sizes="(min-width: 1024px) 50vw, 0px"
-        style={{ objectPosition: '50% 35%' }}
+        style={{ objectPosition: '50% 45%' }}
         className="object-cover"
       />
       {/* One even tint over the whole photo, a little deeper towards the bottom: no bands, and the photo's own colours still show. */}

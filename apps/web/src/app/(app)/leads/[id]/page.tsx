@@ -14,6 +14,8 @@ import { VideoModal } from '@/components/leads/video-modal';
 import { Avatar, Badge, Button, Card, Notice, Panel, Spinner, Tabs } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import { whatsappLink } from '@/lib/communications';
+import { usePhoneReady } from '@/lib/use-phone';
 import { fmtDate, fmtDateTime, fmtPhone, fromNow } from '@/lib/format';
 import { useApi } from '@/lib/use-api';
 
@@ -45,6 +47,7 @@ function Workspace() {
   const router = useRouter();
   const params = useSearchParams();
   const { can } = useAuth();
+  const phoneReady = usePhoneReady();
   const lead = useApi<LeadDetail>(`/leads/${id}`);
   const [version, setVersion] = useState(0);
   const [calling, setCalling] = useState(false);
@@ -109,11 +112,11 @@ function Workspace() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {/* Opened on the person's own phone or computer, so no calling provider is needed. */}
-            <a href={`https://wa.me/${l.phone.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer" className="inline-flex h-10 items-center gap-2 rounded-lg border border-white/80 bg-white/65 px-3.5 text-sm font-medium text-ink shadow-[0_2px_10px_rgb(6_59_57/0.06)] backdrop-blur-sm transition hover:bg-white/95"><MessageCircle className="h-4 w-4 text-ok" aria-hidden /> WhatsApp</a>
+            <a href={whatsappLink(l.phone)} target="_blank" rel="noopener noreferrer" className="inline-flex h-10 items-center gap-2 rounded-lg border border-white/80 bg-white/65 px-3.5 text-sm font-medium text-ink shadow-[0_2px_10px_rgb(6_59_57/0.06)] backdrop-blur-sm transition hover:bg-white/95"><MessageCircle className="h-4 w-4 text-ok" aria-hidden /> WhatsApp</a>
             <a href={`sms:+${l.phone.replace(/\D/g, '')}`} className="inline-flex h-10 items-center gap-2 rounded-lg border border-white/80 bg-white/65 px-3.5 text-sm font-medium text-ink shadow-[0_2px_10px_rgb(6_59_57/0.06)] backdrop-blur-sm transition hover:bg-white/95"><MessageSquareText className="h-4 w-4 text-info" aria-hidden /> SMS</a>
             {l.email && <a href={`mailto:${l.email}`} className="inline-flex h-10 items-center gap-2 rounded-lg border border-white/80 bg-white/65 px-3.5 text-sm font-medium text-ink shadow-[0_2px_10px_rgb(6_59_57/0.06)] backdrop-blur-sm transition hover:bg-white/95"><Mail className="h-4 w-4 text-muted" aria-hidden /> Email</a>}
             {can('video.host') && video.data?.enabled && l.status.isOpen && <Button variant="secondary" onClick={() => setVideoOpen(true)}><Video className="h-4 w-4" aria-hidden /> Video</Button>}
-            {can('call.place') && l.status.isOpen && <Button variant="accent" onClick={() => void call()} loading={calling}><PhoneCall className="h-4 w-4" aria-hidden /> Call</Button>}
+            {can('call.place') && phoneReady && l.status.isOpen && <Button variant="accent" onClick={() => void call()} loading={calling}><PhoneCall className="h-4 w-4" aria-hidden /> Call</Button>}
           </div>
         </div>
         {videoOpen && <VideoModal leadId={id} leadName={l.name} phone={l.phone} onClose={() => setVideoOpen(false)} />}

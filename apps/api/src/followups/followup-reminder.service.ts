@@ -1,9 +1,10 @@
-import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { sql } from 'kysely';
 import { ENV } from '../config/config.module.js';
 import type { Env } from '../config/env.js';
 import { DatabaseService } from '../database/database.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
+import { JobRegistry } from '../jobs/job-registry.service.js';
 
 /**
  * Tells people their follow-ups are coming up. A follow-up is reminded once, a set number of minutes
@@ -12,28 +13,23 @@ import { NotificationsService } from '../notifications/notifications.service.js'
  * lose a reminder or send it twice.
  */
 @Injectable()
-export class FollowUpReminderService implements OnModuleInit, OnModuleDestroy {
+export class FollowUpReminderService implements OnModuleInit {
   private readonly logger = new Logger(FollowUpReminderService.name);
-  private timer?: NodeJS.Timeout;
   private running = false;
 
   constructor(
     private readonly db: DatabaseService,
     private readonly notifications: NotificationsService,
     @Inject(ENV) private readonly env: Env,
+  
+    private readonly jobs: JobRegistry,
   ) {}
 
   onModuleInit(): void {
-    if (this.env.FOLLOWUP_REMINDER_INTERVAL_SEC <= 0) return;
-    this.timer = setInterval(() => void this.runSafely(), this.env.FOLLOWUP_REMINDER_INTERVAL_SEC * 1000);
-    this.timer.unref();
+    this.jobs.register({ name: 'followup-reminder', group: 'quarter', everySec: this.env.FOLLOWUP_REMINDER_INTERVAL_SEC, run: () => this.runSafely() });
   }
 
-  onModuleDestroy(): void {
-    if (this.timer) clearInterval(this.timer);
-  }
-
-  private async runSafely(): Promise<void> {
+  async runSafely(): Promise<void> {
     if (this.running) return;
     this.running = true;
     try {

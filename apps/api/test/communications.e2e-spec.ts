@@ -76,7 +76,7 @@ const inviteOf = async (sessionId: string, who: string) => (await owner.query(`S
 describe('a call with a lead', () => {
   it('is made from the lead\'s page: the counsellor is the host, the lead gets an invitation and a link', async () => {
     const { lead, token, session, guest } = await leadSession('counsellor', { kind: 'voice', maxMinutes: 30 });
-    expect(session).toMatchObject({ type: 'call', kind: 'voice', leadId: lead, phase: 'waiting', status: 'open', maxMinutes: 30, canManage: true, recordingStatus: 'not_enabled' });
+    expect(session).toMatchObject({ type: 'call', kind: 'voice', leadId: lead, phase: 'waiting', status: 'open', maxMinutes: 30, canManage: true, recordingStatus: 'off' });
     expect(session.participants.map((p: { kind: string; role: string; state: string }) => [p.kind, p.role, p.state])).toEqual([['staff', 'host', 'accepted'], ['guest', 'participant', 'invited']]);
     expect(guest.link).toMatch(/^https:\/\/crm\.example\.test\/meet\/[0-9a-f-]{36}\.[0-9a-f-]{36}\.[A-Za-z0-9_-]{43}$/);
     const list = (await call(token, 'GET', `/leads/${lead}/communications`)).json();
@@ -441,7 +441,7 @@ describe('history of calls and meetings', () => {
     expect(await ids(t.sa!, `&userId=${fx.user('mobile').id}`)).toContain(m.id);
 
     const item = ((await call(t.lc!, 'GET', '/communications?limit=100&outcome=completed')).json().items as Record<string, unknown>[]).find((i) => i.id === mine.session.id)!;
-    expect(item).toMatchObject({ type: 'call', kind: 'voice', outcome: 'completed', phase: 'ended', leadId: mine.lead, peopleInvited: 2, peopleJoined: 1, recordingStatus: 'not_enabled' });
+    expect(item).toMatchObject({ type: 'call', kind: 'voice', outcome: 'completed', phase: 'ended', leadId: mine.lead, peopleInvited: 2, peopleJoined: 1, recordingStatus: 'off' });
     expect(item.durationSec).toEqual(expect.any(Number));
     expect(String(item.people)).toContain(',');
   });

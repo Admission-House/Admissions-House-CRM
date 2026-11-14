@@ -1,0 +1,35 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "pnpm install --frozen-lockfile",
+  "buildCommand": "pnpm build",
+  "regions": [
+    "sin1"
+  ],
+  "functions": {
+    "api/index.js": {
+      "maxDuration": 30,
+      "includeFiles": "{dist/**,node_modules/@fontsource/noto-sans/files/*latin-{400,700}-normal.woff,node_modules/@fontsource/noto-sans-devanagari/files/*devanagari-devanagari-{400,700}-normal.woff}"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/api/index"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/v1/internal/jobs/minute",
+      "schedule": "* 4-14 * * 1-6"
+    },
+    {
+      "path": "/api/v1/internal/jobs/quarter",
+      "schedule": "*/15 4-14 * * 1-6"
+    },
+    {
+      "path": "/api/v1/internal/jobs/daily",
+      "schedule": "30 20 * * *"
+    }
+  ]
+}

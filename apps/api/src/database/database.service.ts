@@ -21,7 +21,7 @@ export class DatabaseService implements OnModuleDestroy {
       connectionString: env.DATABASE_URL,
       max: env.DB_POOL_MAX,
       application_name: 'ah-api',
-      connectionTimeoutMillis: 5_000,
+      connectionTimeoutMillis: env.DB_CONNECT_TIMEOUT_MS,
       idleTimeoutMillis: 30_000,
       statement_timeout: env.DB_STATEMENT_TIMEOUT_MS,
       // A request that crashes mid-transaction must not hold locks for long.

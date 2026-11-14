@@ -1,19 +1,9 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import { calendarDate } from '../common/dates.js';
-import { normalizePhone } from '../common/phone.js';
+import { phoneSchema } from '../common/phone-schema.js';
 
-const phone = z
-  .string()
-  .trim()
-  .transform((value, ctx) => {
-    const normalized = normalizePhone(value);
-    if (!normalized) {
-      ctx.addIssue({ code: 'custom', message: 'Enter a valid mobile number' });
-      return z.NEVER;
-    }
-    return normalized;
-  });
+const phone = phoneSchema;
 
 const text = (max: number) => z.string().trim().max(max);
 const unique = <T>(items: T[], key: (item: T) => string, ctx: z.RefinementCtx, what: string) => {

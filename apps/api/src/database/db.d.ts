@@ -702,6 +702,26 @@ export interface PushTokens {
   user_id: string;
 }
 
+export interface RecordingPolicies {
+  created_at: Generated<Timestamp>;
+  mode: Generated<string>;
+  notice_text: string;
+  retention_days: Generated<number>;
+  tenant_id: string;
+  updated_at: Generated<Timestamp>;
+  updated_by: string | null;
+  version: Generated<number>;
+}
+
+export interface RecordingWebhookEvents {
+  detail: string | null;
+  event_type: number;
+  notice_id: string;
+  received_at: Generated<Timestamp>;
+  recording_id: string | null;
+  tenant_id: string;
+}
+
 export interface RolePermissions {
   permission_id: string;
   role_id: string;
@@ -776,6 +796,44 @@ export interface SchemaMigrations {
   applied_at: Generated<Timestamp>;
   checksum: string;
   version: string;
+}
+
+export interface SessionRecordingFiles {
+  created_at: Generated<Timestamp>;
+  file_key: string;
+  format: string;
+  id: Generated<string>;
+  is_playable: Generated<boolean>;
+  kind: string;
+  recording_id: string;
+  size_bytes: Int8 | null;
+  tenant_id: string;
+  verified_at: Timestamp | null;
+}
+
+export interface SessionRecordings {
+  attempts: Generated<number>;
+  available_at: Timestamp | null;
+  bot_uid: number;
+  created_at: Generated<Timestamp>;
+  expires_at: Timestamp | null;
+  failure_reason: string | null;
+  file_prefix: string;
+  id: Generated<string>;
+  last_attempt_at: Timestamp | null;
+  policy_version: number;
+  provider: Generated<string>;
+  resource_id: string | null;
+  retention_days: number;
+  session_id: string;
+  sid: string | null;
+  started_at: Timestamp | null;
+  status: Generated<string>;
+  stop_requested_at: Timestamp | null;
+  stopped_at: Timestamp | null;
+  stream_types: number;
+  tenant_id: string;
+  updated_at: Generated<Timestamp>;
 }
 
 export interface Streams {
@@ -910,6 +968,8 @@ export interface VideoSessionEvents {
 
 export interface VideoSessionInvites {
   agora_uid: number;
+  consent_notice_version: number | null;
+  consented_at: Timestamp | null;
   device_hash: string | null;
   expires_at: Timestamp;
   first_joined_at: Timestamp | null;
@@ -943,6 +1003,9 @@ export interface VideoSessions {
   lead_id: string | null;
   max_minutes: Generated<number>;
   outcome: string | null;
+  recording_enabled: Generated<boolean>;
+  recording_policy_version: number | null;
+  recording_unavailable: Generated<boolean>;
   reminded_at: Timestamp | null;
   scheduled_for: Timestamp | null;
   started_at: Timestamp | null;
@@ -1009,6 +1072,8 @@ export interface DB {
   payslips: Payslips;
   permissions: Permissions;
   push_tokens: PushTokens;
+  recording_policies: RecordingPolicies;
+  recording_webhook_events: RecordingWebhookEvents;
   role_permissions: RolePermissions;
   roles: Roles;
   salary_import_batches: SalaryImportBatches;
@@ -1016,6 +1081,8 @@ export interface DB {
   salary_structure_lines: SalaryStructureLines;
   salary_structures: SalaryStructures;
   schema_migrations: SchemaMigrations;
+  session_recording_files: SessionRecordingFiles;
+  session_recordings: SessionRecordings;
   streams: Streams;
   telephony_connections: TelephonyConnections;
   tenant_counters: TenantCounters;

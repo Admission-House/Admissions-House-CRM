@@ -12,6 +12,7 @@ import { LeadAccess } from '../leads/lead-access.js';
 import { LeadWriter } from '../leads/lead-writer.js';
 import type { CallInput, HistoryQuery, InviteInput, LeadSessionInput, MeetingInput } from './video.dto.js';
 import { inviteToken, LINK_HOURS, PRESENCE_STALE_SECONDS, type Outcome, type SessionKind, standardPerCallMinute } from './video-rules.js';
+import { RecordingService, type SessionRecordingStatus } from '../recording/recording.service.js';
 import { InviteRow, SessionRow, VideoStore } from './video-store.js';
 
 const iso = (d: Date | null): string | null => (d ? new Date(d).toISOString() : null);
@@ -58,8 +59,10 @@ export interface SessionView {
   /** The address for the lead (or the first guest), kept so the lead screen needs no second look. */
   guestUrl: string | null;
   canManage: boolean;
-  /** Recording is not part of this version. Kept in the answer so screens and filters do not change later. */
-  recordingStatus: 'not_enabled';
+  /** off, unavailable (the policy wanted it but the server cannot record), or the state of the latest recording. */
+  recordingStatus: SessionRecordingStatus;
+  /** Whether the people in the session must agree to a recording notice before they join. */
+  recordingEnabled: boolean;
 }
 
 export interface HistoryItem {
@@ -82,7 +85,7 @@ export interface HistoryItem {
   peopleJoined: number;
   /** A few names, for the list. */
   people: string;
-  recordingStatus: 'not_enabled';
+  recordingStatus: SessionRecordingStatus;
 }
 
 interface HistoryRow {
@@ -104,6 +107,7 @@ interface HistoryRow {
   invited: string;
   joined: string;
   people: string | null;
+  recording_status: SessionRecordingStatus;
   sort_key: string;
 }
 
@@ -115,6 +119,7 @@ export class VideoService {
     private readonly access: LeadAccess,
     private readonly writer: LeadWriter,
     private readonly audit: AuditService,
+    private readonly recording: RecordingService,
     @Inject(ENV) private readonly env: Env,
   ) {}
 
@@ -151,7 +156,7 @@ export class VideoService {
     return 'waiting';
   }
 
-  private view(auth: AuthContext, s: SessionRow, invites: InviteRow[]): SessionView {
+  private view(auth: AuthContext, s: SessionRow, invites: InviteRow[], recording: SessionRecordingStatus): SessionView {
     const now = new Date();
     const manage = this.canManage(auth, s);
     const participants = this.store.participants(invites, now).map((p, n): ParticipantView => {
@@ -166,12 +171,13 @@ export class VideoService {
       scheduledFor: iso(s.scheduled_for), expiresAt: iso(s.expires_at)!, maxMinutes: s.max_minutes,
       phase: this.phase(s, invites.some((i) => i.state === 'ringing'), now), status: s.status, outcome: s.outcome,
       startedAt: iso(s.started_at), endedAt: iso(s.ended_at), durationSec: duration,
-      participants, guestUrl: firstGuest?.link ?? null, canManage: manage, recordingStatus: 'not_enabled',
+      participants, guestUrl: firstGuest?.link ?? null, canManage: manage, recordingStatus: recording, recordingEnabled: s.recording_enabled,
     };
   }
 
   private async fullView(trx: Trx, auth: AuthContext, id: string): Promise<SessionView> {
-    return this.view(auth, await this.store.load(trx, id), await this.store.invites(trx, id));
+    const session = await this.store.load(trx, id);
+    return this.view(auth, session, await this.store.invites(trx, id), await this.recording.statusOf(trx, session));
   }
 
   // ---------------------------------------------------------------- creating
@@ -179,7 +185,7 @@ export class VideoService {
   private async insertSession(
     trx: Trx,
     auth: AuthContext,
-    p: { type: 'call' | 'meeting'; kind: SessionKind; title?: string; description?: string; leadId?: string | null; scheduledFor: Date | null; maxMinutes: number },
+    p: { type: 'call' | 'meeting'; kind: SessionKind; title?: string; description?: string; leadId?: string | null; scheduledFor: Date | null; maxMinutes: number; record?: boolean },
   ): Promise<{ id: string; expires: Date }> {
     const now = new Date();
     if (p.scheduledFor && p.scheduledFor.getTime() < now.getTime() - 5 * 60_000) {
@@ -187,9 +193,12 @@ export class VideoService {
     }
     // The link works until a day after the chosen start (or after now when there is none), and at least until the meeting is over.
     const expires = new Date((p.scheduledFor ?? now).getTime() + Math.max(LINK_HOURS * 3_600_000, p.maxMinutes * 60_000));
+    // Whether this session will be recorded is fixed now, from the policy of the moment, and kept with the session.
+    const rec = await this.recording.decideForNewSession(trx, auth.tenantId, p.record);
     const { rows } = await sql<{ id: string }>`
-      INSERT INTO video_sessions (tenant_id, lead_id, created_by, type, kind, title, description, scheduled_for, expires_at, max_minutes)
-      VALUES (${auth.tenantId}, ${p.leadId ?? null}, ${auth.userId}, ${p.type}, ${p.kind}, ${p.title ?? null}, ${p.description ?? null}, ${p.scheduledFor}, ${expires}, ${p.maxMinutes})
+      INSERT INTO video_sessions (tenant_id, lead_id, created_by, type, kind, title, description, scheduled_for, expires_at, max_minutes, recording_enabled, recording_unavailable, recording_policy_version)
+      VALUES (${auth.tenantId}, ${p.leadId ?? null}, ${auth.userId}, ${p.type}, ${p.kind}, ${p.title ?? null}, ${p.description ?? null}, ${p.scheduledFor}, ${expires}, ${p.maxMinutes},
+              ${rec.enabled}, ${rec.note === 'unavailable'}, ${rec.version})
       RETURNING id`.execute(trx);
     const id = rows[0]!.id;
     const host = await this.store.addInvite(trx, { tenantId: auth.tenantId, sessionId: id, invitedBy: auth.userId, expiresAt: expires, role: 'host', state: 'accepted', userId: auth.userId });
@@ -216,7 +225,7 @@ export class VideoService {
     return this.db.withTenant(auth.tenantId, async (trx) => {
       const lead = await this.access.get(trx, auth, leadId);
       const { id, expires } = await this.insertSession(trx, auth, {
-        type: 'call', kind: input.kind, leadId, scheduledFor: input.scheduledFor ? new Date(input.scheduledFor) : null, maxMinutes: input.maxMinutes,
+        type: 'call', kind: input.kind, leadId, scheduledFor: input.scheduledFor ? new Date(input.scheduledFor) : null, maxMinutes: input.maxMinutes, record: input.record,
       });
       const guest = await this.store.addInvite(trx, { tenantId: auth.tenantId, sessionId: id, invitedBy: auth.userId, expiresAt: expires, state: 'invited', guestName: lead.name.split(' ')[0] || 'Student' });
       await this.store.event(trx, auth.tenantId, id, guest, 'invited', 'lead');
@@ -238,7 +247,7 @@ export class VideoService {
       if (!callee) throw AppError.conflict('CALLEE_UNAVAILABLE', 'That person cannot take calls right now.');
       if (input.leadId) await this.access.get(trx, auth, input.leadId);
       const busy = await this.isBusy(trx, input.toUserId);
-      const { id, expires } = await this.insertSession(trx, auth, { type: 'call', kind: input.kind, leadId: input.leadId ?? null, scheduledFor: null, maxMinutes: input.maxMinutes });
+      const { id, expires } = await this.insertSession(trx, auth, { type: 'call', kind: input.kind, leadId: input.leadId ?? null, scheduledFor: null, maxMinutes: input.maxMinutes, record: input.record });
       const invite = await this.store.addInvite(trx, { tenantId: auth.tenantId, sessionId: id, invitedBy: auth.userId, expiresAt: expires, state: busy ? 'busy' : 'ringing', userId: input.toUserId });
       const session = await this.store.load(trx, id);
       if (busy) {
@@ -266,7 +275,7 @@ export class VideoService {
       const staff = await this.allowedStaff(trx, staffIds);
       const scheduled = input.scheduledFor ? new Date(input.scheduledFor) : null;
       const { id, expires } = await this.insertSession(trx, auth, {
-        type: 'meeting', kind: input.kind, title: input.title, description: input.description, leadId: input.leadId ?? null, scheduledFor: scheduled, maxMinutes: input.durationMinutes,
+        type: 'meeting', kind: input.kind, title: input.title, description: input.description, leadId: input.leadId ?? null, scheduledFor: scheduled, maxMinutes: input.durationMinutes, record: input.record,
       });
       for (const person of staff) {
         const invite = await this.store.addInvite(trx, { tenantId: auth.tenantId, sessionId: id, invitedBy: auth.userId, expiresAt: expires, state: 'invited', userId: person.id });
@@ -322,7 +331,7 @@ export class VideoService {
         SELECT e.event, e.occurred_at AS at, COALESCE(u.name, i.guest_name) AS who, e.detail
         FROM video_session_events e LEFT JOIN video_session_invites i ON i.id = e.invite_id LEFT JOIN users u ON u.id = i.user_id
         WHERE e.session_id = ${id}::uuid ORDER BY e.occurred_at, e.id`.execute(trx);
-      return { ...this.view(auth, session, invites), events: rows.map((r) => ({ event: r.event, at: iso(r.at)!, who: r.who, detail: r.detail })) };
+      return { ...this.view(auth, session, invites, await this.recording.statusOf(trx, session)), events: rows.map((r) => ({ event: r.event, at: iso(r.at)!, who: r.who, detail: r.detail })) };
     });
   }
 
@@ -336,6 +345,7 @@ export class VideoService {
       if (q.outcome === 'open') c.push(sql<SqlBool>`v.status = 'open'`);
       else if (q.outcome) c.push(sql<SqlBool>`v.outcome = ${q.outcome}`);
       if (q.leadId) c.push(sql<SqlBool>`v.lead_id = ${q.leadId}::uuid`);
+      if (q.recording) c.push(sql<SqlBool>`EXISTS (SELECT 1 FROM session_recordings rf WHERE rf.session_id = v.id AND rf.status = ${q.recording})`);
       if (q.userId) c.push(sql<SqlBool>`EXISTS (SELECT 1 FROM video_session_invites w WHERE w.session_id = v.id AND w.user_id = ${q.userId}::uuid)`);
       if (q.from) c.push(sql<SqlBool>`v.created_at >= (${q.from}::date::timestamp AT TIME ZONE t.timezone)`);
       if (q.to) c.push(sql<SqlBool>`v.created_at < ((${q.to}::date + 1)::timestamp AT TIME ZONE t.timezone)`);
@@ -344,6 +354,8 @@ export class VideoService {
       const { rows } = await sql<HistoryRow>`
         SELECT v.id, v.type, v.kind, v.title, v.lead_id, l.name AS lead_name, l.lead_no::text AS lead_no, u.name AS creator_name, v.created_at, v.scheduled_for,
                v.started_at, v.ended_at, v.status, v.outcome, v.created_at::text AS sort_key,
+               COALESCE((SELECT rr.status FROM session_recordings rr WHERE rr.session_id = v.id ORDER BY rr.created_at DESC LIMIT 1),
+                        CASE WHEN v.recording_enabled THEN 'pending' WHEN v.recording_unavailable THEN 'unavailable' ELSE 'off' END) AS recording_status,
                EXISTS (SELECT 1 FROM video_session_invites r WHERE r.session_id = v.id AND r.state = 'ringing') AS ringing,
                (SELECT count(*) FROM video_session_invites x WHERE x.session_id = v.id AND (x.state <> 'removed' OR x.first_joined_at IS NOT NULL)) AS invited,
                (SELECT count(*) FROM video_session_invites x WHERE x.session_id = v.id AND x.first_joined_at IS NOT NULL) AS joined,
@@ -362,7 +374,7 @@ export class VideoService {
           createdAt: iso(r.created_at)!, scheduledFor: iso(r.scheduled_for), startedAt: iso(r.started_at), endedAt: iso(r.ended_at),
           durationSec: r.started_at && r.ended_at ? Math.max(0, Math.round((new Date(r.ended_at).getTime() - new Date(r.started_at).getTime()) / 1000)) : null,
           phase: this.phase(r, r.ringing, now),
-          outcome: r.outcome, peopleInvited: Number(r.invited), peopleJoined: Number(r.joined), people: r.people ?? '', recordingStatus: 'not_enabled',
+          outcome: r.outcome, peopleInvited: Number(r.invited), peopleJoined: Number(r.joined), people: r.people ?? '', recordingStatus: r.recording_status,
         })),
       };
     });
@@ -406,8 +418,8 @@ export class VideoService {
   // -------------------------------------------------------------- managing
 
   /** Ends a session for everyone. A session nobody started is cancelled instead. */
-  end(auth: AuthContext, id: string): Promise<SessionView> {
-    return this.db.withTenant(auth.tenantId, async (trx) => {
+  async end(auth: AuthContext, id: string): Promise<SessionView> {
+    const view = await this.db.withTenant(auth.tenantId, async (trx) => {
       const session = await this.store.load(trx, id, { auth, lock: true });
       this.requireManage(auth, session);
       if (session.status === 'open') {
@@ -421,6 +433,8 @@ export class VideoService {
       }
       return this.fullView(trx, auth, id);
     });
+    this.recording.kick(auth.tenantId); // a running recording is stopped now, not at the next check
+    return view;
   }
 
   /** Adds a colleague or an outside guest to a meeting. */

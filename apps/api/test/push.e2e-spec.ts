@@ -37,7 +37,9 @@ const pushedAt = async (id: string) => (await owner.query(`SELECT pushed_at FROM
 const tokensOf = async (who: string) => (await owner.query(`SELECT token FROM push_tokens WHERE user_id = $1 ORDER BY token`, [fx.user(who).id])).rows.map((r) => r.token as string);
 const clearAll = async () => {
   await owner.query(`DELETE FROM push_tokens WHERE tenant_id = $1`, [fx.tenantId]);
-  await owner.query(`UPDATE notifications SET pushed_at = now() WHERE tenant_id = $1 AND pushed_at IS NULL`, [fx.tenantId]);
+  // The dispatcher takes every company's waiting alerts, so rows left by an interrupted run of another test must not be counted here.
+  // These files run one at a time, so nothing else is waiting on them.
+  await owner.query(`UPDATE notifications SET pushed_at = now() WHERE pushed_at IS NULL`);
 };
 
 beforeAll(async () => {

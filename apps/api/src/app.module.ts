@@ -25,6 +25,7 @@ import { FollowUpsModule } from './followups/followups.module.js';
 import { HealthModule } from './health/health.module.js';
 import { IntegrationsModule } from './integrations/integrations.module.js';
 import { IntakeModule } from './intake/intake.module.js';
+import { JobsModule } from './jobs/jobs.module.js';
 import { RetentionModule } from './retention/retention.module.js';
 import { VideoModule } from './video/video.module.js';
 import { LeadsModule } from './leads/leads.module.js';
@@ -38,6 +39,7 @@ import { RealtimeModule } from './realtime/realtime.module.js';
 import { RolesModule } from './roles/roles.module.js';
 import { StorageModule } from './storage/storage.module.js';
 import { UsersModule } from './users/users.module.js';
+import { PreferencesModule } from './preferences/preferences.module.js';
 
 /** Provider callbacks carry the company's webhook key (and customers' numbers) in the address; neither belongs in a log. */
 export const safeUrl = (url: string): string => url.replace(/(\/telephony\/hooks\/[^/?]+\/)[^/?]+/, '$1[redacted]').replace(/(\/telephony\/hooks\/[^?]*)\?.*/, '$1');
@@ -80,6 +82,7 @@ export const safeUrl = (url: string): string => url.replace(/(\/telephony\/hooks
     RealtimeModule,
     LeaveModule,
     IntakeModule,
+    JobsModule,
     IntegrationsModule,
     LeadConfigModule,
     LeadsModule,
@@ -96,6 +99,7 @@ export const safeUrl = (url: string): string => url.replace(/(\/telephony\/hooks
     FollowUpsModule,
     RolesModule,
     UsersModule,
+    PreferencesModule,
     BranchesModule,
     DevicesModule,
     HealthModule,

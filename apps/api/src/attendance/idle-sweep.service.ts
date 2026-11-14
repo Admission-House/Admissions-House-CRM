@@ -1,9 +1,10 @@
-import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { sql } from 'kysely';
 import { ENV } from '../config/config.module.js';
 import type { Env } from '../config/env.js';
 import { DatabaseService, Trx } from '../database/database.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
+import { JobRegistry } from '../jobs/job-registry.service.js';
 
 export interface SweepResult {
   /** Days closed because the shift ended. */
@@ -22,28 +23,23 @@ export interface SweepResult {
  * that a person who simply walked away is checked out on time, and so that someone is told.
  */
 @Injectable()
-export class IdleSweepService implements OnModuleInit, OnModuleDestroy {
+export class IdleSweepService implements OnModuleInit {
   private readonly logger = new Logger(IdleSweepService.name);
-  private timer?: NodeJS.Timeout;
   private running = false;
 
   constructor(
     private readonly db: DatabaseService,
     @Inject(ENV) private readonly env: Env,
     private readonly notifications: NotificationsService,
+  
+    private readonly jobs: JobRegistry,
   ) {}
 
   onModuleInit(): void {
-    if (this.env.SWEEP_INTERVAL_SEC <= 0) return;
-    this.timer = setInterval(() => void this.runSafely(), this.env.SWEEP_INTERVAL_SEC * 1000);
-    this.timer.unref();
+    this.jobs.register({ name: 'idle-sweep', group: 'quarter', everySec: this.env.SWEEP_INTERVAL_SEC, run: () => this.runSafely() });
   }
 
-  onModuleDestroy(): void {
-    if (this.timer) clearInterval(this.timer);
-  }
-
-  private async runSafely(): Promise<void> {
+  async runSafely(): Promise<void> {
     if (this.running) return; // the previous sweep is still going
     this.running = true;
     try {

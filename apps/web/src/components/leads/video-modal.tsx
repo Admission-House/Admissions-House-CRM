@@ -7,7 +7,8 @@ import { createPortal } from 'react-dom';
 import { Badge, Button, Field, Input, Notice, Select, Spinner } from '@/components/ui';
 import { Modal } from '@/components/ui/modal';
 import { api, ApiError } from '@/lib/api';
-import { OUTCOME_TEXT, PHASE_TEXT, type SessionView } from '@/lib/communications';
+import { useAuth } from '@/lib/auth';
+import { joinMessage, OUTCOME_TEXT, whatsappLink, PHASE_TEXT, type SessionView } from '@/lib/communications';
 import { fmtDateTime } from '@/lib/format';
 import { useApi } from '@/lib/use-api';
 
@@ -71,8 +72,9 @@ export function VideoModal({ leadId, leadName, phone, onClose }: { leadId: strin
     }
   }
 
+  const { me } = useAuth();
   const share = (s: SessionView) =>
-    `https://wa.me/${phone.replace(/\D/g, '')}?text=${encodeURIComponent(`Hello ${leadName.split(' ')[0]}, please join our ${s.kind === 'voice' ? 'voice' : 'video'} session using this link: ${s.guestUrl}`)}`;
+    whatsappLink(phone, joinMessage({ guest: leadName, host: me?.user.name ?? '', company: me?.company.name ?? '', kind: s.kind, link: s.guestUrl ?? '' }));
 
   const u = usage.data;
   const nearLimit = u?.limitStandardMinutes ? u.usedStandardMinutes >= u.limitStandardMinutes * 0.8 : false;
