@@ -92,6 +92,13 @@ describe('previewing a file', () => {
     expect((await api.call('GET', '/leads/import', t.admin!)).json()).toEqual([]);
   });
 
+  it('says so plainly when the file has column names but no leads under them', async () => {
+    const r = await preview(t.admin!, file(csv('Name,Phone')));
+    expect(r.statusCode).toBe(400);
+    expect(r.json().error.code).toBe('NO_ROWS');
+    expect(r.json().error.message).toMatch(/no leads/i);
+  });
+
   it('asks for a column the file does not have, and accepts the person naming it', async () => {
     const data = csv('Candidate,Number', `Riya,${phone()}`);
     const first = await preview(t.admin!, file(data));
@@ -176,6 +183,14 @@ describe('importing leads', () => {
     expect(mine[0].payload).toMatchObject({ event: 'import_finished', created: 6, attached: 0, failed: 0 });
     const perLead = (await owner.query(`SELECT count(*) FROM notifications WHERE tenant_id = $1 AND payload->>'event' = 'lead_assigned' AND payload->>'name' LIKE 'Bulk %'`, [fx.tenantId])).rows[0].count;
     expect(Number(perLead)).toBe(0);
+  });
+
+  it('has a small sheet filed by the time the answer comes back, without waiting for a later sweep', async () => {
+    const phones = [phone(), phone()];
+    const res = await start(t.admin!, file(csv('Name,Phone', ...phones.map((p, i) => `Quick ${i},${p}`))), { assign: 'none' });
+    expect(res.statusCode, res.body).toBe(202);
+    expect(res.json().status).toBe('done');
+    expect(res.json().totals.created).toBe(2);
   });
 
   it('can leave leads in the unassigned pool', async () => {

@@ -1,5 +1,5 @@
 import { parse } from 'csv-parse/sync';
-import { readSheet } from 'read-excel-file/node';
+import readExcelFile from 'read-excel-file/node';
 import { AppError } from '../common/app-error.js';
 
 export interface Table {
@@ -20,11 +20,27 @@ const bad = (code: string, message: string, status = 400) => new AppError(code, 
  * Reads an uploaded spreadsheet (.xlsx or CSV) into text cells. What it is comes from its bytes, not
  * its name. Size limits keep one upload from using up the server: at most 5,000 rows and 40 columns.
  */
-export async function readTable(data: Buffer): Promise<Table> {
+export interface ReadOptions {
+  /**
+   * Says whether a row looks like the column names. Used to skip a title or a blank banner above them. When no
+   * row in the first few lines qualifies, the first filled row is the header, as before.
+   */
+  looksLikeHeader?: (cells: string[]) => boolean;
+}
+
+const HEADER_SEARCH_ROWS = 15;
+
+export async function readTable(data: Buffer, options: ReadOptions = {}): Promise<Table> {
   const grid = data.subarray(0, 4).equals(ZIP) ? await fromXlsx(data) : data.subarray(0, 4).equals(OLE) ? oldExcel() : fromCsv(data);
 
-  const firstFilled = grid.findIndex((row) => row.some((c) => c !== ''));
+  const filled = (row: string[]) => row.some((c) => c !== '');
+  let firstFilled = grid.findIndex(filled);
   if (firstFilled < 0) throw bad('EMPTY_SHEET', 'The file has no data');
+  if (options.looksLikeHeader) {
+    const test = options.looksLikeHeader;
+    const at = grid.slice(0, firstFilled + HEADER_SEARCH_ROWS).findIndex((row) => filled(row) && test(row.map((c) => c.trim())));
+    if (at >= 0) firstFilled = at;
+  }
   const header = grid[firstFilled]!.map((c) => c.trim());
   while (header.length > 0 && header.at(-1) === '') header.pop();
   if (header.length === 0) throw bad('NO_HEADER', 'The first row must name the columns');
@@ -62,10 +78,16 @@ function fromCsv(data: Buffer): string[][] {
   }
 }
 
+/**
+ * A workbook can have several sheets, and the leads are not always on the first one. Reads the first sheet that has
+ * a header and at least one row under it; if none has, the first sheet with anything on it.
+ */
 async function fromXlsx(data: Buffer): Promise<string[][]> {
   try {
-    const sheet = await readSheet(data);
-    return (sheet as unknown[][]).map((r) => r.map(cell));
+    const sheets = (await readExcelFile(data)) as { sheet: string; data: unknown[][] }[];
+    const grids = sheets.map((s) => s.data.map((r) => r.map(cell)));
+    const rowsWithData = (g: string[][]) => g.filter((r) => r.some((c) => c !== '')).length;
+    return grids.find((g) => rowsWithData(g) >= 2) ?? grids.find((g) => rowsWithData(g) >= 1) ?? grids[0] ?? [];
   } catch (err) {
     const code = (err as { code?: string }).code;
     if (code === 'XLS_FILE_NOT_SUPPORTED') return oldExcel();

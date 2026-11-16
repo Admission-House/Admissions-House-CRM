@@ -44,6 +44,9 @@ export function detectMapping(header: readonly string[]): { mapping: Mapping; un
   return { mapping, unmapped: header.filter((_h, i) => !used.has(i) && header[i] !== '') };
 }
 
+/** A row that names a phone column is taken as the header, so a title or blank banner above it is skipped. */
+export const leadHeaderRow = (cells: readonly string[]): boolean => detectMapping(cells).mapping.phone !== undefined;
+
 /** Lets a person say "the phone is in column Mobile No." when the guess is wrong or missing. */
 export function applyColumnOverride<F extends string>(
   header: readonly string[], base: Partial<Record<F, number>>, override: Partial<Record<F, string>> | undefined, allowed: readonly F[],

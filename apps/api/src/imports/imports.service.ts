@@ -11,12 +11,14 @@ import { displayName } from '../documents/file-rules.js';
 import { AssignChoice, LeadIngestService } from '../intake/lead-ingest.service.js';
 import { Assignees } from '../leads/assignees.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
-import { applyOverride, detectMapping, Field, InvalidRow, Mapping, repeatsInFile, toRecords, validateRecords, ValidRow } from './import-rules.js';
+import { applyOverride, detectMapping, Field, InvalidRow, leadHeaderRow, Mapping, repeatsInFile, toRecords, validateRecords, ValidRow } from './import-rules.js';
 import { readTable } from './spreadsheet.js';
 import { JobRegistry } from '../jobs/job-registry.service.js';
 
 /** Rows handled in one transaction. Small enough that a lock is held briefly, large enough to be quick. */
 const CHUNK = 25;
+/** How long a request may spend filing leads before it answers. The function limit on the hosted version is 30 seconds. */
+const INLINE_MS = 12_000;
 /** How many problem rows are kept on a batch. The count of all of them is always kept. */
 const MAX_STORED_ERRORS = 1000;
 
@@ -89,9 +91,10 @@ export class ImportsService implements OnModuleInit {
 
   /** Reads the file and reports what an import would do, without saving anything. */
   async preview(auth: AuthContext, input: ImportInput): Promise<PreviewView> {
-    const table = await readTable(input.data);
+    const table = await readTable(input.data, { looksLikeHeader: leadHeaderRow });
     const mapping = applyOverride(table.header, detectMapping(table.header).mapping, input.mapping);
     const records = toRecords(table, mapping);
+    if (table.rows.length === 0) throw AppError.badRequest('NO_ROWS', 'The file has column names but no leads under them. If the leads are on another sheet, move that sheet first or save it as a CSV.');
     const { valid, invalid } = validateRecords(records, 'import');
 
     const existing = await this.db.withTenant(auth.tenantId, (trx) => this.existingPhones(trx, valid.map((v) => v.lead.phone)));
@@ -113,7 +116,7 @@ export class ImportsService implements OnModuleInit {
 
   /** Checks the file and queues it. The leads are filed in the background, a few at a time. */
   async create(auth: AuthContext, input: ImportInput & { sourceId: string; assign: AssignInput }): Promise<BatchView> {
-    const table = await readTable(input.data);
+    const table = await readTable(input.data, { looksLikeHeader: leadHeaderRow });
     const mapping = applyOverride(table.header, detectMapping(table.header).mapping, input.mapping);
     const missing = missingFields(mapping);
     if (missing.length > 0) {
@@ -147,7 +150,9 @@ export class ImportsService implements OnModuleInit {
       return row.id;
     });
 
-    this.kick(auth.tenantId, id);
+    // File what fits in a few seconds before answering, so a small sheet is finished when the person sees the result.
+    // On the hosted version nothing runs once the answer is sent, so the rest waits for the next sweep of the job.
+    await this.process(auth.tenantId, id, INLINE_MS).catch((err) => this.logger.error(`import ${id} stopped: ${err instanceof Error ? err.message : String(err)}`));
     return this.get(auth, id);
   }
 
@@ -203,19 +208,16 @@ export class ImportsService implements OnModuleInit {
 
   // ------------------------------------------------------------- processing
 
-  /** Starts working on a batch right away, without making the caller wait for it. */
-  private kick(tenantId: string, batchId: string): void {
-    setImmediate(() => {
-      this.process(tenantId, batchId).catch((err) => this.logger.error(`import ${batchId} stopped: ${err instanceof Error ? err.message : String(err)}`));
-    });
-  }
-
-  /** Files the rows of one batch, chunk by chunk, until it is done. Safe to call from several places at once. */
-  async process(tenantId: string, batchId: string): Promise<void> {
+  /**
+   * Files the rows of one batch, chunk by chunk, until it is done or `maxMs` has passed (the rest is picked up by the
+   * next sweep). Safe to call from several places at once.
+   */
+  async process(tenantId: string, batchId: string, maxMs = Number.POSITIVE_INFINITY): Promise<void> {
     if (this.running.has(batchId)) return;
     this.running.add(batchId);
+    const stopAt = Date.now() + maxMs;
     try {
-      while (await this.processChunk(tenantId, batchId)) {
+      while (Date.now() < stopAt && (await this.processChunk(tenantId, batchId))) {
         // keep going until a chunk reports that there is nothing left or the batch is held by someone else
       }
     } finally {

@@ -2,7 +2,7 @@ import { parse } from 'csv-parse/sync';
 import writeXlsxFile from 'write-excel-file/node';
 import { AppError } from '../common/app-error.js';
 import { csvCell, csvRow, neutralizeFormula } from '../common/csv.js';
-import { applyOverride, detectMapping, repeatsInFile, toRecords, validateRecords } from './import-rules.js';
+import { applyOverride, detectMapping, leadHeaderRow, repeatsInFile, toRecords, validateRecords } from './import-rules.js';
 import { MAX_COLUMNS, MAX_ROWS, readTable } from './spreadsheet.js';
 
 const codeOf = async (fn: () => unknown): Promise<string | undefined> => {
@@ -189,5 +189,40 @@ describe('toRecords and validateRecords', () => {
   it('counts repeats of a phone number within the file', () => {
     const { valid } = validateRecords(toRecords(table, mapping), 'x');
     expect(repeatsInFile(valid)).toBe(1);
+  });
+});
+
+describe('readTable: workbooks as people really make them', () => {
+  const cells = (rows: string[][]) => rows.map((r) => r.map((value) => ({ value, type: String })));
+  const book = (sheets: { name: string; rows: string[][] }[]) => writeXlsxFile(sheets.map((s) => ({ data: cells(s.rows), sheet: s.name }))).toBuffer();
+
+  it('reads the sheet that holds the leads when the first sheet is empty or only has a header', async () => {
+    const buf = await book([
+      { name: 'Sheet1', rows: [['Name', 'Phone']] },
+      { name: 'Data', rows: [['Student Name', 'Mobile No.'], ['Riya', '9811100001'], ['Asha', '9811100002']] },
+    ]);
+    const t = await readTable(buf, { looksLikeHeader: leadHeaderRow });
+    expect(t.header).toEqual(['Student Name', 'Mobile No.']);
+    expect(t.rows).toHaveLength(2);
+  });
+
+  it('keeps the first sheet when it has the leads', async () => {
+    const buf = await book([
+      { name: 'Leads', rows: [['Name', 'Phone'], ['Riya', '9811100001']] },
+      { name: 'Other', rows: [['Name', 'Phone'], ['Someone', '9811100003']] },
+    ]);
+    expect((await readTable(buf)).rows).toEqual([['Riya', '9811100001']]);
+  });
+
+  it('skips a title or blank banner above the column names', async () => {
+    const buf = await book([{ name: 'Sheet1', rows: [['October enquiries', ''], ['', ''], ['Student Name', 'Mobile No.', 'City'], ['Riya', '9811100001', 'Noida']] }]);
+    const t = await readTable(buf, { looksLikeHeader: leadHeaderRow });
+    expect(t.header).toEqual(['Student Name', 'Mobile No.', 'City']);
+    expect(t.rows).toEqual([['Riya', '9811100001', 'Noida']]);
+  });
+
+  it('still takes the first filled row as the header when nothing looks like one', async () => {
+    const buf = await book([{ name: 'Sheet1', rows: [['Alpha', 'Beta'], ['1', '2']] }]);
+    expect((await readTable(buf, { looksLikeHeader: leadHeaderRow })).header).toEqual(['Alpha', 'Beta']);
   });
 });
