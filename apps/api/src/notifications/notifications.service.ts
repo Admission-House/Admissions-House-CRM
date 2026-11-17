@@ -106,7 +106,7 @@ export class NotificationsService {
         LIMIT ${query.limit + 1}`.execute(trx);
       const page = toPage(rows, query.limit, (last) => ({ t: last.created_text, i: last.id }));
       return {
-        items: page.items.map((r) => ({ id: r.id, type: r.type, payload: r.payload, readAt: r.read_at, createdAt: r.created_at })),
+        items: page.items.map((r) => ({ id: r.id, type: r.type, payload: forPerson(auth, r.payload), readAt: r.read_at, createdAt: r.created_at })),
         nextCursor: page.nextCursor,
       };
     });
@@ -130,4 +130,12 @@ export class NotificationsService {
       return { marked: Number(result.numAffectedRows ?? 0) };
     });
   }
+}
+
+/** A notice as this person may read it: the lead's source is left out for someone who may not see where leads come from. */
+function forPerson(auth: AuthContext, payload: unknown): unknown {
+  if (auth.permissions.has('lead.source') || typeof payload !== 'object' || payload === null || !('source' in payload)) return payload;
+  const rest = { ...(payload as Record<string, unknown>) };
+  delete rest.source;
+  return rest;
 }

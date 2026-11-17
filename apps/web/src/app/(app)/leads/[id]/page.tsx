@@ -135,7 +135,7 @@ function Workspace() {
             <AssignPanel lead={l} onChanged={changed} />
             <Panel title="Details">
               <dl className="-my-2 divide-y divide-line">
-                <Row label="Source">{l.source.name}</Row>
+                {l.source && <Row label="Source">{l.source.name}</Row>}
                 <Row label="Study mode">{l.studyMode ? l.studyMode[0]!.toUpperCase() + l.studyMode.slice(1) : ''}</Row>
                 <Row label="Expected closure">{fmtDate(l.expectedClosureOn)}</Row>
                 <Row label="Next follow-up">{l.nextFollowupAt ? `${fmtDateTime(l.nextFollowupAt)} (${fromNow(l.nextFollowupAt)})` : ''}</Row>

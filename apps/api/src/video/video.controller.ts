@@ -3,7 +3,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { FastifyRequest } from 'fastify';
 import { createZodDto } from 'nestjs-zod';
 import type { AuthContext } from '../auth/auth-context.js';
-import { CurrentAuth, Public, RequirePermissions } from '../auth/decorators.js';
+import { Background, CurrentAuth, Public, RequirePermissions } from '../auth/decorators.js';
 import { callSchema, guestInfoSchema, guestJoinSchema, guestPresenceSchema, historyQuerySchema, inviteSchema, leadSessionSchema, meetingSchema, presenceSchema, respondSchema, staffJoinSchema } from './video.dto.js';
 import { VideoAccessService } from './video-access.service.js';
 import { VideoService } from './video.service.js';
@@ -57,6 +57,7 @@ export class VideoController {
 
   /** What is ringing for me right now. */
   @RequirePermissions('video.host')
+  @Background()
   @Get('communications/incoming')
   incoming(@CurrentAuth() auth: AuthContext) {
     return this.access.incoming(auth);

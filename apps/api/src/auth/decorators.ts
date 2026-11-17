@@ -8,6 +8,7 @@ export const PERMISSIONS_ANY = 'auth:permissions-any';
 export const ALLOW_PASSWORD_CHANGE = 'auth:allow-password-change';
 export const ALLOW_MFA_SETUP = 'auth:allow-mfa-setup';
 export const HEAVY = 'auth:heavy';
+export const BACKGROUND = 'auth:background';
 
 /** The route needs no sign-in. Every other route requires one by default. */
 export const Public = () => SetMetadata(IS_PUBLIC, true);
@@ -24,6 +25,13 @@ export const RequireAnyPermission = (...codes: string[]) => SetMetadata(PERMISSI
  * session) cannot use them to slow everyone else down or copy the data out in bulk.
  */
 export const Heavy = () => SetMetadata(HEAVY, true);
+
+/**
+ * A screen asking again by itself (a counter, a live list, the "is anything new" check). It is not the person doing
+ * something, so it must not count as activity: otherwise a tab left open at an empty desk would keep the sign-in
+ * alive for ever and the inactivity sign-out would never happen.
+ */
+export const Background = () => SetMetadata(BACKGROUND, true);
 
 /** Usable even while the account still has to choose a new password (sign out, change password). */
 export const AllowPasswordChange = () => SetMetadata(ALLOW_PASSWORD_CHANGE, true);

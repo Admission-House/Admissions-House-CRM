@@ -6,7 +6,7 @@ import { SlidingWindowLimiter } from '../common/rate-limiter.js';
 import { ENV } from '../config/config.module.js';
 import type { Env } from '../config/env.js';
 import { AuthService } from './auth.service.js';
-import { ALLOW_MFA_SETUP, ALLOW_PASSWORD_CHANGE, HEAVY, IS_PUBLIC, PERMISSIONS, PERMISSIONS_ANY } from './decorators.js';
+import { ALLOW_MFA_SETUP, ALLOW_PASSWORD_CHANGE, BACKGROUND, HEAVY, IS_PUBLIC, PERMISSIONS, PERMISSIONS_ANY } from './decorators.js';
 
 /**
  * Applied to every route. A route is closed unless it is marked @Public(). For the rest it checks,
@@ -37,11 +37,12 @@ export class AuthGuard implements CanActivate {
     const match = typeof header === 'string' ? /^Bearer ([\w-]+\.[\w-]+\.[\w-]+)$/.exec(header) : null;
     if (!match) throw AppError.unauthorized('Please sign in');
 
-    const auth = await this.auth.authenticate(match[1]!, {
-      ip: request.ip,
-      userAgent: request.headers['user-agent'] ?? null,
-      requestId: request.id,
-    });
+    const background = this.reflector.getAllAndOverride<boolean>(BACKGROUND, targets) === true;
+    const auth = await this.auth.authenticate(
+      match[1]!,
+      { ip: request.ip, userAgent: request.headers['user-agent'] ?? null, requestId: request.id },
+      { touch: !background },
+    );
     request.auth = auth;
 
     // Every request counts against the user's allowance; expensive ones count against a second,

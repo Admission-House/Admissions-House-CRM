@@ -96,6 +96,7 @@ function Leads() {
   const router = useRouter();
   const params = useSearchParams();
   const { can } = useAuth();
+  const showSource = can('lead.source');
   const phoneReady = usePhoneReady();
   const filters = useMemo(() => Object.fromEntries(FILTER_KEYS.map((k) => [k, params.get(k) ?? ''])) as Record<FilterKey, string>, [params]);
 
@@ -250,10 +251,12 @@ function Leads() {
               <option value="">Any status</option>
               {statuses.data?.filter((s) => s.isActive !== false).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </Select>
-            <Select aria-label="Source" value={filters.sourceId} onChange={(e) => set({ sourceId: e.target.value })}>
-              <option value="">Any source</option>
-              {sources.data?.filter((s) => s.isActive !== false).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </Select>
+            {showSource && (
+              <Select aria-label="Source" value={filters.sourceId} onChange={(e) => set({ sourceId: e.target.value })}>
+                <option value="">Any source</option>
+                {sources.data?.filter((s) => s.isActive !== false).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </Select>
+            )}
             <Select aria-label="Assigned to" value={filters.assignedTo} onChange={(e) => set({ assignedTo: e.target.value })}>
               <option value="">Anyone</option>
               <option value="me">Me</option>
@@ -319,7 +322,7 @@ function Leads() {
                   <th className="px-3 py-3 font-medium">Course</th>
                   <th className="px-3 py-3 font-medium">Region</th>
                   <th className="px-3 py-3 font-medium">Status</th>
-                  <th className="px-3 py-3 font-medium">Source</th>
+                  {showSource && <th className="px-3 py-3 font-medium">Source</th>}
                   <th className="px-3 py-3 font-medium">Assigned to</th>
                   <th className="px-3 py-3 font-medium">Next follow-up</th>
                   <th className="px-3 py-3 font-medium">Updated</th>
@@ -347,7 +350,7 @@ function Leads() {
                       <td className="max-w-[12rem] truncate px-3 py-2.5" title={l.course ?? undefined}>{l.course ?? <span className="text-subtle">&mdash;</span>}</td>
                       <td className="max-w-[10rem] truncate px-3 py-2.5" title={l.region ?? undefined}>{l.region ?? <span className="text-subtle">&mdash;</span>}</td>
                       <td className="px-3 py-2.5"><Badge tone={queueTone(l.queue)}>{l.status.name}</Badge></td>
-                      <td className="px-3 py-2.5 text-muted">{l.source.name}</td>
+                      {showSource && <td className="px-3 py-2.5 text-muted">{l.source?.name}</td>}
                       <td className="px-3 py-2.5">{l.assignedTo?.name ?? <span className="text-subtle">Unassigned</span>}</td>
                       <td className="px-3 py-2.5">
                         {l.nextFollowupAt ? <span className={cx('tabular', late ? 'font-medium text-bad' : 'text-ink')} title={fmtDate(l.nextFollowupAt)}>{fromNow(l.nextFollowupAt)}</span> : <span className="text-subtle">&mdash;</span>}
@@ -381,7 +384,7 @@ function Leads() {
                     <Badge tone={queueTone(l.queue)}>{l.status.name}</Badge>
                   </div>
                   <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
-                    <span>{l.source.name}</span>
+                    {showSource && <span>{l.source?.name}</span>}
                     {l.course && <span>{l.course}</span>}
                     {l.region && <span>{l.region}</span>}
                     {l.email && <span className="max-w-full truncate">{l.email}</span>}

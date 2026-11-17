@@ -75,3 +75,56 @@ describe('the sign-in alert to the Super Admins', () => {
     expect((await loginAlerts('counsellor2')).length).toBe(first.length);
   });
 });
+
+describe('making a person inactive', () => {
+  it('signs them out at once, closes their day, and keeps them out', async () => {
+    const who = 'att1';
+    const id = fx.user(who).id;
+    const first = await api.login({ ...api.credentials(who), location: { lat: 28.6021, lng: 77.4309, accuracy: 20 } }, '10.20.0.5');
+    expect(first.statusCode, first.body).toBe(200);
+    const token = first.json().accessToken as string;
+    const cookie = (first.headers['set-cookie'] as string | string[]).toString().split(';')[0]!;
+    expect((await api.call('GET', '/auth/me', token, undefined, '10.20.0.5')).statusCode).toBe(200);
+    const open = (await owner.query(`SELECT check_out_at FROM attendance_records WHERE user_id = $1 AND check_out_at IS NULL`, [id])).rowCount;
+    expect(open).toBeGreaterThan(0);
+
+    const sa = await api.signIn('super');
+    const off = await api.call('PATCH', `/users/${id}`, sa, { status: 'inactive' });
+    expect(off.statusCode, off.body).toBe(200);
+
+    // The very next request with the old token is refused, and the sign-in cannot be renewed.
+    const after = await api.call('GET', '/auth/me', token, undefined, '10.20.0.5');
+    expect(after.statusCode).toBe(401);
+    const renewed = await app.inject({ method: 'POST', url: '/api/v1/auth/refresh', payload: {}, headers: { cookie }, remoteAddress: '10.20.0.5' });
+    expect(renewed.statusCode).toBe(401);
+    expect((await owner.query(`SELECT count(*)::int AS n FROM user_sessions WHERE user_id = $1 AND ended_at IS NULL`, [id])).rows[0].n).toBe(0);
+    expect((await owner.query(`SELECT count(*)::int AS n FROM attendance_records WHERE user_id = $1 AND check_out_at IS NULL`, [id])).rows[0].n).toBe(0);
+    const again = await api.login({ ...api.credentials(who), location: { lat: 28.6021, lng: 77.4309, accuracy: 20 } }, '10.20.0.5');
+    expect([401, 403]).toContain(again.statusCode);
+    expect(again.json().accessToken).toBeUndefined();
+
+    await api.call('PATCH', `/users/${id}`, sa, { status: 'active' });
+  });
+});
+
+describe('a screen left open at an empty desk', () => {
+  it('does not keep the sign-in alive: only what the person does counts as activity', async () => {
+    const id = fx.user('att2').id;
+    const res = await api.login({ ...api.credentials('att2'), location: { lat: 28.6021, lng: 77.4309, accuracy: 20 } }, '10.20.0.5');
+    expect(res.statusCode, res.body).toBe(200);
+    const token = res.json().accessToken as string;
+    const idleFor = async () => Number((await owner.query(`SELECT extract(epoch FROM now() - last_active_at) AS s FROM user_sessions WHERE user_id = $1 AND ended_at IS NULL`, [id])).rows[0].s);
+    await owner.query(`UPDATE user_sessions SET last_active_at = now() - interval '20 minutes' WHERE user_id = $1 AND ended_at IS NULL`, [id]);
+
+    // The things a screen asks again by itself, every few seconds, are not the person doing anything.
+    for (const path of ['/realtime/pulse', '/notifications/unread-count', '/leads/queues', '/communications/incoming']) {
+      const r = await api.call('GET', path, token, undefined, '10.20.0.5');
+      expect(r.statusCode, `${path}: ${r.body}`).toBe(200);
+    }
+    expect(await idleFor()).toBeGreaterThan(19 * 60);
+
+    // Opening a lead list is the person at work.
+    expect((await api.call('GET', '/leads?limit=5', token, undefined, '10.20.0.5')).statusCode).toBe(200);
+    expect(await idleFor()).toBeLessThan(60);
+  });
+});

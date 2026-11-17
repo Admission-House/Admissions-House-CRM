@@ -21,7 +21,7 @@ export interface LeadDetail {
   interestNote: string | null;
   status: { id: string; name: string; queue: string; isOpen: boolean; requiresFollowup: boolean };
   substatus: { id: string; name: string } | null;
-  source: { id: string; name: string };
+  source: { id: string; name: string } | null;
   assignedTo: { id: string; name: string } | null;
   assignedAt: string | null;
   nextFollowupAt: string | null;

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { PageHeader, Select, Tabs, Input } from '@/components/ui';
+import { useAuth } from '@/lib/auth';
 import { ReportView } from '@/components/reports/report-view';
 import { TeamNow } from '@/components/reports/team-now';
 
@@ -29,11 +30,13 @@ const LEAD_GROUPS = [
 ];
 
 export default function ReportsPage() {
+  const { can } = useAuth();
+  const showSource = can('lead.source');
   const [tab, setTab] = useState<Tab>('team');
   const [from, setFrom] = useState(daysAgo(29));
   const [to, setTo] = useState(today());
   const [month, setMonth] = useState(today().slice(0, 7));
-  const [leadGroup, setLeadGroup] = useState('source');
+  const [leadGroup, setLeadGroup] = useState(showSource ? 'source' : 'status');
   const [tatGroup, setTatGroup] = useState('user');
 
   const range = useMemo(() => ({ from, to }), [from, to]);
@@ -61,8 +64,8 @@ export default function ReportsPage() {
             <label className="flex items-center gap-2 text-sm text-muted">To<Input type="date" value={to} min={from} max={today()} onChange={(e) => e.target.value && setTo(e.target.value)} className="w-40" /></label>
           </>
         )}
-        {tab === 'leads' && <Select aria-label="Group leads" value={leadGroup} onChange={(e) => setLeadGroup(e.target.value)} className="w-44">{LEAD_GROUPS.map((g) => <option key={g.key} value={g.key}>{g.label}</option>)}</Select>}
-        {tab === 'tat' && <Select aria-label="Group by" value={tatGroup} onChange={(e) => setTatGroup(e.target.value)} className="w-44"><option value="user">By counsellor</option><option value="source">By source</option></Select>}
+        {tab === 'leads' && <Select aria-label="Group leads" value={leadGroup} onChange={(e) => setLeadGroup(e.target.value)} className="w-44">{LEAD_GROUPS.filter((g) => showSource || g.key !== 'source').map((g) => <option key={g.key} value={g.key}>{g.label}</option>)}</Select>}
+        {tab === 'tat' && <Select aria-label="Group by" value={tatGroup} onChange={(e) => setTatGroup(e.target.value)} className="w-44"><option value="user">By counsellor</option>{showSource && <option value="source">By source</option>}</Select>}
       </div>
 
       <ReportView key={`${tab}-${JSON.stringify(query)}`} path={`/reports/${tab}`} query={query} chartFirst={tab === 'leads' ? 'leads' : undefined} />

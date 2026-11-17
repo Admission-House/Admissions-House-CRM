@@ -6,7 +6,7 @@
 export const SUPER_ADMIN = 'ALL';
 
 export const ADMIN = [
-  'lead.read', 'lead.create', 'lead.update', 'lead.assign', 'lead.import', 'lead.export',
+  'lead.read', 'lead.create', 'lead.update', 'lead.assign', 'lead.import', 'lead.export', 'lead.source',
   'followup.manage', 'document.manage', 'shortlist.manage',
   'call.place', 'call.read', 'call.listen', 'dialer.use',
   'master.read', 'master.create', 'master.review',

@@ -22,7 +22,8 @@ export interface LeadListItem {
   studyMode: 'online' | 'regular' | null;
   status: StatusRef;
   queue: string;
-  source: { id: string; name: string };
+  /** Missing for someone who may not see where leads come from. */
+  source: { id: string; name: string } | null;
   assignedTo: { id: string; name: string } | null;
   nextFollowupAt: string | null;
   expectedClosureOn: string | null;

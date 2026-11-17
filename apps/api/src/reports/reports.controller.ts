@@ -5,7 +5,7 @@ import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import type { AuthContext } from '../auth/auth-context.js';
 import { DownloadAlerts } from '../notifications/download-alerts.service.js';
-import { CurrentAuth, RequirePermissions } from '../auth/decorators.js';
+import { Background, CurrentAuth, RequirePermissions } from '../auth/decorators.js';
 import { AppError } from '../common/app-error.js';
 import { calendarDate } from '../common/dates.js';
 import { fileName, Report, toCsv, toXlsx } from './report-file.js';
@@ -29,12 +29,14 @@ export class ReportsController {
   ) {}
 
   /** Lead counts, follow-ups due, today's calls and, for those who manage people, the team. */
+  @Background()
   @RequirePermissions('dashboard.read')
   @Get('dashboard')
   dashboard(@CurrentAuth() auth: AuthContext) {
     return this.reports.dashboard(auth);
   }
 
+  @Background()
   @RequirePermissions('report.read')
   @Get('reports/team-status')
   teamStatus(@CurrentAuth() auth: AuthContext, @Query() q: FormatDto, @Res({ passthrough: true }) reply: FastifyReply) {

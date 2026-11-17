@@ -82,7 +82,7 @@ export default function DashboardPage() {
   const reports = can('report.read');
   const range = reports && dates ? dates : undefined;
   const perDay = useApi<Report<{ name: string; leads: number }>>(range ? '/reports/leads' : null, { groupBy: 'day', ...range });
-  const bySource = useApi<Report<{ name: string; leads: number }>>(range ? '/reports/leads' : null, { groupBy: 'source', ...range });
+  const bySource = useApi<Report<{ name: string; leads: number }>>(range && can('lead.source') ? '/reports/leads' : null, { groupBy: 'source', ...range });
   const calls = useApi<Report<{ name: string; total: number; connected: number; missed: number }>>(range ? '/reports/calls' : null, range);
   const tat = useApi<Report<{ name: string; avgMin: number | null; leads: number }>>(range ? '/reports/tat' : null, { groupBy: 'user', ...range });
   const followups = useApi<{ overdue: number; today: number; upcoming: number }>(can('followup.manage') ? '/followups/summary' : null);
@@ -141,7 +141,7 @@ export default function DashboardPage() {
           <DonutChart data={d.byStatus.map((s, i) => ({ name: s.status, value: s.leads, color: colorAt(i) }))} centerLabel="leads" height={200} />
         </Panel>
 
-        {reports && (
+        {reports && can('lead.source') && (
           <ChartCard title="Leads by source" caption="Where the leads in this period came from" rows={(bySource.data?.rows ?? []).map((r) => ({ name: r.name, leads: r.leads }))} xKey="name" series={[{ key: 'leads', label: 'Leads' }]} height={260} />
         )}
         <ChartCard title="Leads by queue" caption="Where every lead sits right now" rows={Object.entries(d.queues).map(([k, n]) => ({ name: QUEUE_LABEL[k] ?? k, leads: n }))} xKey="name" series={[{ key: 'leads', label: 'Leads', color: '#0f625e' }]} height={260} />

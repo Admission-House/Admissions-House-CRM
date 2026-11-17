@@ -80,7 +80,7 @@ describe('adding a lead by hand', () => {
     const l = res.json();
     expect(l).toMatchObject({
       name: 'Riya Sharma', phone: '919876511111', email: 'riya@example.com', studyMode: 'online', intent: 'hot',
-      expectedClosureOn: '2026-12-15', status: { name: 'New', queue: 'fresh' }, queue: 'fresh', source: { name: 'Website' },
+      expectedClosureOn: '2026-12-15', status: { name: 'New', queue: 'fresh' }, queue: 'fresh', source: null, // a counsellor does not see where a lead came from
       assignedTo: { name: 'lc1' }, createdBy: 'lc1', openFollowUps: 1,
     });
     expect(Number(l.leadNo)).toBeGreaterThan(0);
@@ -231,7 +231,11 @@ describe('the lead list', () => {
 
   it('filters by status, source, intent, study mode and owner', async () => {
     const only = async (query: string) => (await everything(t.lc3!, query)).map((l) => l.id);
-    expect(await only(`sourceId=${fx.sourceId('Meta Ads')}`)).toEqual([ids.a]);
+    // The source filter is for those who may see sources; for a counsellor it is ignored rather than answered.
+    expect((await only(`sourceId=${fx.sourceId('Meta Ads')}`)).length).toBeGreaterThanOrEqual(3);
+    const bySource = (await everything(t.sa!, `sourceId=${fx.sourceId('Meta Ads')}`)).map((l) => l.id);
+    expect(bySource).toContain(ids.a);
+    expect(bySource).not.toContain(ids.b);
     expect(await only('intent=cold')).toEqual([ids.b]);
     expect(await only('studyMode=regular')).toEqual([ids.b]);
     expect((await only('assignedTo=me')).length).toBeGreaterThanOrEqual(3);

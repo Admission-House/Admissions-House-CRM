@@ -2,7 +2,7 @@ import { Controller, Get, Inject } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { sql } from 'kysely';
 import type { AuthContext } from '../auth/auth-context.js';
-import { CurrentAuth } from '../auth/decorators.js';
+import { Background, CurrentAuth } from '../auth/decorators.js';
 import { ENV } from '../config/config.module.js';
 import type { Env } from '../config/env.js';
 import { DatabaseService } from '../database/database.service.js';
@@ -28,6 +28,7 @@ export class PulseController {
     @Inject(ENV) private readonly env: Env,
   ) {}
 
+  @Background()
   @Get('pulse')
   pulse(@CurrentAuth() auth: AuthContext): Promise<Pulse> {
     return this.db.withTenant(auth.tenantId, async (trx) => {

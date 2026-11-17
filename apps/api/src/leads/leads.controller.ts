@@ -5,7 +5,7 @@ import { createZodDto } from 'nestjs-zod';
 import { pageQuerySchema } from '../common/pagination.js';
 import type { AuthContext } from '../auth/auth-context.js';
 import { DownloadAlerts } from '../notifications/download-alerts.service.js';
-import { CurrentAuth, Heavy, RequirePermissions } from '../auth/decorators.js';
+import { Background, CurrentAuth, Heavy, RequirePermissions } from '../auth/decorators.js';
 import {
   AssignDto, BulkAssignDto, BulkStatusDto, ChangeStatusDto, CreateLeadDto, ExportLeadsDto, ListLeadsDto, NoteDto, TransferLeadsDto, UpdateLeadDto,
 } from './leads.dto.js';
@@ -41,6 +41,7 @@ export class LeadsController {
 
   /** Counts for the queue tabs. */
   @RequirePermissions('lead.read')
+  @Background()
   @Get('queues')
   queues(@CurrentAuth() auth: AuthContext) {
     return this.leads.queues(auth);

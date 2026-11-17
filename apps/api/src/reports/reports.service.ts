@@ -102,6 +102,7 @@ export class ReportsService {
 
   /** Time from a lead arriving to the first outgoing call, by counsellor or by source. */
   tat(auth: AuthContext, q: Range & { groupBy: 'user' | 'source' }): Promise<Report> {
+    if (q.groupBy === 'source') assertMaySeeSources(auth);
     return this.db.withTenant(auth.tenantId, async (trx) => {
       const r = await this.range(trx, q);
       const v = leadVisibility(auth);
@@ -167,6 +168,7 @@ export class ReportsService {
   // ------------------------------------------------------------------ leads
 
   leadsBy(auth: AuthContext, q: Range & { groupBy: 'source' | 'status' | 'assignee' | 'day' }): Promise<Report> {
+    if (q.groupBy === 'source') assertMaySeeSources(auth);
     return this.db.withTenant(auth.tenantId, async (trx) => {
       const r = await this.range(trx, q);
       const v = leadVisibility(auth);
@@ -330,4 +332,9 @@ export class ReportsService {
       SELECT (${from}::date::timestamp AT TIME ZONE ${tz})::text AS f, ((${to}::date + 1)::timestamp AT TIME ZONE ${tz})::text AS t`.execute(trx);
     return { tz, from, to, fromTs: bounds.rows[0]!.f, toTs: bounds.rows[0]!.t, todayStart };
   }
+}
+
+/** A report that groups leads by where they came from is for those who may see sources. */
+function assertMaySeeSources(auth: AuthContext): void {
+  if (!auth.permissions.has('lead.source')) throw AppError.forbidden();
 }

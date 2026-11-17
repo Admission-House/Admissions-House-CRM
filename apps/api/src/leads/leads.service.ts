@@ -62,7 +62,8 @@ export interface LeadListItem {
   studyMode: string | null;
   status: { id: string; name: string; queue: string; isOpen: boolean };
   queue: string;
-  source: { id: string; name: string };
+  /** Null for someone who may not see where leads come from (see the permission `lead.source`). */
+  source: { id: string; name: string } | null;
   assignedTo: { id: string; name: string } | null;
   nextFollowupAt: Date | null;
   expectedClosureOn: string | null;
@@ -191,7 +192,8 @@ export class LeadsService {
         LIMIT ${query.limit + 1}`.execute(trx);
 
       const page = toPage(rows, query.limit, (last) => ({ t: last.sort_key, i: last.id }));
-      return { items: page.items.map(toListItem), nextCursor: page.nextCursor };
+      const showSource = canSeeSource(auth);
+      return { items: page.items.map((r) => toListItem(r, showSource)), nextCursor: page.nextCursor };
     });
   }
 
@@ -349,7 +351,7 @@ export class LeadsService {
           field: r.field,
           oldValue: r.old_value,
           newValue: r.new_value,
-          remark: r.remark,
+          remark: canSeeSource(auth) ? r.remark : withoutSource(r.remark),
           user: r.user_id ? { id: r.user_id, name: r.user_name ?? '' } : null,
           createdAt: r.created_at,
         })),
@@ -808,7 +810,7 @@ export class LeadsService {
 
     if (q.queue) c.push(sql<SqlBool>`${EFFECTIVE_QUEUE} = ${q.queue}`);
     if (q.statusId) c.push(sql<SqlBool>`l.status_id = ${q.statusId}::uuid`);
-    if (q.sourceId) c.push(sql<SqlBool>`l.source_id = ${q.sourceId}::uuid`);
+    if (q.sourceId && canSeeSource(auth)) c.push(sql<SqlBool>`l.source_id = ${q.sourceId}::uuid`);
     if (q.intent) c.push(sql<SqlBool>`l.intent = ${q.intent}`);
     if (q.studyMode) c.push(sql<SqlBool>`l.study_mode = ${q.studyMode}`);
     if (q.assignedTo === 'me') c.push(sql<SqlBool>`l.assigned_to = ${auth.userId}::uuid`);
@@ -931,7 +933,7 @@ export class LeadsService {
       },
       substatus: r.substatus_id ? { id: r.substatus_id, name: r.substatus_name! } : null,
       queue: r.queue,
-      source: { id: r.source_id, name: r.source_name },
+      source: canSeeSource(auth) ? { id: r.source_id, name: r.source_name } : null,
       assignedTo: r.assigned_to ? { id: r.assigned_to, name: r.assignee_name ?? '' } : null,
       assignedAt: r.assigned_at,
       interestedCourse: r.course_id ? { id: r.course_id, name: r.course_name! } : null,
@@ -945,13 +947,11 @@ export class LeadsService {
       createdAt: r.created_at,
       updatedAt: r.updated_at,
       extraPhones: phones.map((p) => ({ id: p.id, phone: p.phone, label: p.label })),
-      enquiries: enquiries.map((e) => ({
-        source: e.source,
-        formName: e.form_name,
-        page: e.page_path,
-        utm: { source: e.utm_source, medium: e.utm_medium, campaign: e.utm_campaign },
-        at: e.created_at,
-      })),
+      enquiries: enquiries.map((e) =>
+        canSeeSource(auth)
+          ? { source: e.source, formName: e.form_name, page: e.page_path, utm: { source: e.utm_source, medium: e.utm_medium, campaign: e.utm_campaign }, at: e.created_at }
+          : { source: null, formName: null, page: null, utm: { source: null, medium: null, campaign: null }, at: e.created_at },
+      ),
     };
   }
 
@@ -1159,12 +1159,18 @@ function leadCore(r: {
   };
 }
 
-function toListItem(r: ListRow): LeadListItem {
+/** Whether the person may see where leads come from: the source, the form and the campaign. */
+const canSeeSource = (auth: AuthContext): boolean => auth.permissions.has('lead.source');
+
+/** The history line that says where a lead came from, without the source: "New lead" or "Enquired again". */
+const withoutSource = (remark: string | null): string | null => (remark ? remark.replace(/^(New lead) from .*$/s, '$1').replace(/^(Enquired again) through .*$/s, '$1') : remark);
+
+function toListItem(r: ListRow, showSource: boolean): LeadListItem {
   return {
     ...leadCore(r),
     status: { id: r.status_id, name: r.status_name, queue: r.status_queue, isOpen: r.status_open },
     queue: r.queue,
-    source: { id: r.source_id, name: r.source_name },
+    source: showSource ? { id: r.source_id, name: r.source_name } : null,
     assignedTo: r.assigned_to ? { id: r.assigned_to, name: r.assignee_name ?? '' } : null,
     nextFollowupAt: r.next_followup_at,
     course: r.course,

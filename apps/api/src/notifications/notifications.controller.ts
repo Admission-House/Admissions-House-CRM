@@ -3,7 +3,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import type { AuthContext } from '../auth/auth-context.js';
-import { CurrentAuth } from '../auth/decorators.js';
+import { Background, CurrentAuth } from '../auth/decorators.js';
 import { pageQuerySchema } from '../common/pagination.js';
 import { NotificationsService } from './notifications.service.js';
 
@@ -32,6 +32,7 @@ export class NotificationsController {
     return this.notifications.list(auth, query);
   }
 
+  @Background()
   @Get('unread-count')
   unread(@CurrentAuth() auth: AuthContext) {
     return this.notifications.unreadCount(auth);
