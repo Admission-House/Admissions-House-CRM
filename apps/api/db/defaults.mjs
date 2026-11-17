@@ -44,7 +44,7 @@ export const LEAD_SOURCES = [
 // Proposed starting values; the Super Admin changes them in settings.
 export const BREAK_TYPES = [
   { name: 'Lunch', minutes: 45 },
-  { name: 'Tea', minutes: 15 },
+  { name: 'Snacks', minutes: 15 },
   { name: 'Other', minutes: 15 },
 ];
 

@@ -1,5 +1,7 @@
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import pg from 'pg';
+import { DatabaseService } from '../src/database/database.service.js';
+import { Assignees } from '../src/leads/assignees.js';
 import { MailerService } from '../src/mail/mailer.service.js';
 import { startApp } from './helpers/app.js';
 import { Client, makeClient } from './helpers/client.js';
@@ -209,6 +211,47 @@ describe('asking for leave', () => {
     const monday = await plusDays(await nextSunday(20), 1);
     const res = await request(token, { leaveTypeId: await typeId('Casual Leave'), fromDate: monday, halfDay: true }, OFFICE_IP);
     expect(res.json()).toMatchObject({ days: 0.5, fromDate: monday, toDate: monday });
+  });
+
+  it('records which half of the day a half day is, the first half unless the second is asked for', async () => {
+    const token = await asOffice('lv5');
+    const monday = await plusDays(await nextSunday(21), 1);
+    const second = await request(token, { leaveTypeId: await typeId('Casual Leave'), fromDate: monday, half: 'second' }, OFFICE_IP);
+    expect(second.json()).toMatchObject({ days: 0.5, half: 'second' });
+    const tuesday = await plusDays(monday, 1);
+    const plain = await request(token, { leaveTypeId: await typeId('Casual Leave'), fromDate: tuesday, halfDay: true }, OFFICE_IP);
+    expect(plain.json()).toMatchObject({ days: 0.5, half: 'first' });
+    const whole = await request(token, { leaveTypeId: await typeId('Casual Leave'), fromDate: await plusDays(tuesday, 1) }, OFFICE_IP);
+    expect(whole.json()).toMatchObject({ days: 1, half: null });
+    const several = await request(token, { leaveTypeId: await typeId('Casual Leave'), fromDate: await plusDays(tuesday, 3), toDate: await plusDays(tuesday, 4), half: 'first' }, OFFICE_IP);
+    expect(errorCode(several)).toBe('HALF_DAY_SINGLE');
+    expect(errorCode(await request(token, { leaveTypeId: await typeId('Casual Leave'), fromDate: await plusDays(tuesday, 5), half: 'evening' }, OFFICE_IP))).toBe('VALIDATION_FAILED');
+    const mine = (await api.call('GET', '/leave/requests/mine?limit=50', token, undefined, OFFICE_IP)).json().items as { half: string | null; days: number }[];
+    expect(mine.filter((r) => r.half === 'second')).toHaveLength(1);
+  });
+
+  it('keeps a person off the hand-out only during the half of the day they are on leave', async () => {
+    const token = await asOffice('lv9');
+    const who = fx.user('lv9').id;
+    // A shift from midnight to the end of the day puts the middle at noon, so which half it is now is known.
+    await owner.query(`UPDATE attendance_settings SET shift_start = '00:00', shift_end = '23:58' WHERE tenant_id = $1`, [fx.tenantId]);
+    const now = (await owner.query(`SELECT CASE WHEN (now() AT TIME ZONE t.timezone)::time < '11:59' THEN 'first' ELSE 'second' END AS half FROM tenants t WHERE t.id = $1`, [fx.tenantId])).rows[0].half as 'first' | 'second';
+    const other = now === 'first' ? 'second' : 'first';
+    const insert = (half: string) =>
+      owner.query(
+        `INSERT INTO leave_requests (tenant_id, user_id, leave_type_id, from_date, to_date, days, half, status)
+         SELECT $1, $2, lt.id, (now() AT TIME ZONE t.timezone)::date, (now() AT TIME ZONE t.timezone)::date, 0.5, $3, 'approved'
+         FROM leave_types lt, tenants t WHERE lt.tenant_id = $1 AND lt.name = 'Casual Leave' AND t.id = $1`,
+        [fx.tenantId, who, half],
+      );
+    const reason = () => app.get(DatabaseService).withTenant(fx.tenantId, (trx) => app.get(Assignees).unavailableReason(trx, who));
+    void token;
+
+    await insert(other);
+    expect(await reason()).toBeNull(); // on leave for the other half, so they can be given leads now
+    await owner.query(`DELETE FROM leave_requests WHERE user_id = $1`, [who]);
+    await insert(now);
+    expect(await reason()).toBe('on_leave');
   });
 
   it('refuses leave that overlaps leave already asked for', async () => {

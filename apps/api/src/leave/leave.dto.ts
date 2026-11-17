@@ -34,10 +34,15 @@ export const createRequestSchema = z
     fromDate: calendarDate,
     /** Defaults to the first day. */
     toDate: calendarDate.optional(),
+    /** A half day. Which half is `half`; "halfDay" alone means the first half. */
     halfDay: z.boolean().default(false),
+    half: z.enum(['first', 'second']).optional(),
     reason: z.string().trim().max(300).optional(),
   })
-  .transform((v) => ({ ...v, toDate: v.toDate ?? v.fromDate }));
+  .transform((v) => {
+    const halfDay = v.halfDay || v.half !== undefined;
+    return { ...v, toDate: v.toDate ?? v.fromDate, halfDay, half: halfDay ? (v.half ?? ('first' as const)) : undefined };
+  });
 export class CreateLeaveRequestDto extends createZodDto(createRequestSchema) {}
 
 export const decisionSchema = z

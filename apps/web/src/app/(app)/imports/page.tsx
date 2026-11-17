@@ -7,6 +7,7 @@ import { Badge, Button, Card, Empty, Field, Notice, PageHeader, Panel, Select, S
 import { api, apiRaw, ApiError, download } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { fmtDateTime } from '@/lib/format';
+import { PART_ROWS, splitCsv } from '@/lib/split-csv';
 import type { SourceOption, StatusOption } from '@/lib/types';
 import { useApi } from '@/lib/use-api';
 
@@ -99,7 +100,23 @@ function ImportLeads({ onImported }: { onImported: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [batchId, setBatchId] = useState<string | null>(null);
+  // A big CSV is cut into parts and sent one after the other; `sent` counts the parts the server has taken.
+  const [big, setBig] = useState<{ parts: string[]; rows: number } | null>(null);
+  const [sent, setSent] = useState(0);
   const input = useRef<HTMLInputElement>(null);
+
+  async function choose(f: File) {
+    setBig(null);
+    if (/\.csv$/i.test(f.name) && f.size > 1_000_000) {
+      const cut = splitCsv(await f.text());
+      if (cut.parts.length > 1) {
+        setBig(cut);
+        await read(new File([cut.parts[0]!], f.name, { type: 'text/csv' }));
+        return;
+      }
+    }
+    await read(f);
+  }
 
   async function read(f: File, m?: Mapping) {
     setBusy(true);
@@ -124,15 +141,22 @@ function ImportLeads({ onImported }: { onImported: () => void }) {
     if (!file || !preview) return;
     setBusy(true);
     setError(null);
+    setSent(0);
     try {
-      const form = new FormData();
-      form.set('file', file);
-      form.set('sourceId', sourceId);
-      form.set('assign', assign);
-      if (assign === 'user') form.set('userId', userId);
-      form.set('mapping', JSON.stringify(mapping));
-      const res = await apiRaw('/leads/import', { method: 'POST', body: form });
-      setBatchId(((await res.json()) as Batch).id);
+      const pieces = big ? big.parts.map((text, i) => new File([text], `${file.name.replace(/\.csv$/i, '')} (part ${i + 1} of ${big.parts.length}).csv`, { type: 'text/csv' })) : [file];
+      let first: string | null = null;
+      for (const piece of pieces) {
+        const form = new FormData();
+        form.set('file', piece);
+        form.set('sourceId', sourceId);
+        form.set('assign', assign);
+        if (assign === 'user') form.set('userId', userId);
+        form.set('mapping', JSON.stringify(mapping));
+        const res = await apiRaw('/leads/import', { method: 'POST', body: form });
+        first ??= ((await res.json()) as Batch).id;
+        setSent((n) => n + 1);
+      }
+      setBatchId(first);
     } catch (e) {
       setError(errorText(e));
     } finally {
@@ -141,13 +165,14 @@ function ImportLeads({ onImported }: { onImported: () => void }) {
   }
 
   function reset() {
-    setFile(null); setPreview(null); setMapping({}); setBatchId(null); setError(null);
+    setFile(null); setPreview(null); setMapping({}); setBatchId(null); setError(null); setBig(null); setSent(0);
     if (input.current) input.current.value = '';
   }
 
   if (batchId) {
     return (
       <Panel title="Importing">
+        {big && <Notice>Your file was sent in {big.parts.length} parts of up to {PART_ROWS.toLocaleString('en-IN')} rows. They are filed one after the other in the background: open the History tab to follow each part. The first part is shown below.</Notice>}
         <BatchProgress id={batchId} onDone={onImported} />
         <div className="mt-4"><Button variant="secondary" onClick={reset}>Import another file</Button></div>
       </Panel>
@@ -160,7 +185,7 @@ function ImportLeads({ onImported }: { onImported: () => void }) {
       <Panel title="1. Choose a file">
         <div className="space-y-3">
           <p className="text-sm text-muted">A CSV or Excel file with one lead on each row. You will see exactly what will happen before anything is saved.</p>
-          <input ref={input} type="file" accept=".csv,.xlsx,.xls" className="sr-only" aria-label="Leads file" onChange={(e) => { const f = e.target.files?.[0] ?? null; setFile(f); setPreview(null); if (f) void read(f); }} />
+          <input ref={input} type="file" accept=".csv,.xlsx,.xls" className="sr-only" aria-label="Leads file" onChange={(e) => { const f = e.target.files?.[0] ?? null; setFile(f); setPreview(null); setBig(null); if (f) void choose(f); }} />
           <Button variant="secondary" onClick={() => input.current?.click()} loading={busy && !preview}><FileUp className="h-3.5 w-3.5" aria-hidden /> {file ? file.name : 'Choose a CSV or Excel file'}</Button>
           {error && <Notice tone="bad">{error}</Notice>}
         </div>
@@ -171,6 +196,7 @@ function ImportLeads({ onImported }: { onImported: () => void }) {
           <Panel title="2. Check the columns">
             <div className="space-y-4">
               <Totals items={[{ label: 'Rows in the file', value: preview.totals.rows }, { label: 'Ready to import', value: preview.totals.valid, tone: 'text-ok' }, { label: 'Have problems', value: preview.totals.invalid, tone: preview.totals.invalid ? 'text-bad' : undefined }, { label: 'Repeated in the file', value: preview.totals.repeatedInFile }, { label: 'Already in the CRM', value: preview.totals.alreadyInCrm }]} />
+              {big && <Notice>This file has {big.rows.toLocaleString('en-IN')} rows, so it is sent in {big.parts.length} parts of up to {PART_ROWS.toLocaleString('en-IN')}. The numbers below are for the first part; the same columns are used for all parts.</Notice>}
               {preview.unmappedColumns.length > 0 && preview.missing.length === 0 && <Notice>These columns have no field of their own, so they are saved in the notes of each lead and nothing is lost: {preview.unmappedColumns.join(', ')}.</Notice>}
               {preview.missing.length > 0 && <Notice tone="bad">Match a column for {preview.missing.map((m) => FIELD_LABEL[m] ?? m).join(' and ')} to continue.</Notice>}
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -203,6 +229,7 @@ function ImportLeads({ onImported }: { onImported: () => void }) {
               <Field label="Give them to" htmlFor="ia"><Select id="ia" value={assign} onChange={(e) => setAssign(e.target.value as typeof assign)}><option value="auto">Counsellors automatically</option><option value="user">One person</option><option value="none">Nobody for now</option></Select></Field>
               {assign === 'user' && <Field label="Person" htmlFor="iu" required><Select id="iu" value={userId} onChange={(e) => setUserId(e.target.value)}><option value="">Choose a person</option>{people.data?.items.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.role.name})</option>)}</Select></Field>}
             </div>
+            {busy && big && <p className="mt-4 text-sm text-muted" role="status">Sending part {Math.min(sent + 1, big.parts.length)} of {big.parts.length}. Keep this page open until it finishes.</p>}
             <div className="mt-5 flex gap-2"><Button onClick={() => void start()} loading={busy} disabled={!canStart}>Import {preview.totals.valid.toLocaleString("en-IN")} {preview.totals.valid === 1 ? "lead" : "leads"}</Button><Button variant="secondary" onClick={reset}>Start over</Button></div>
           </Panel>
         </>

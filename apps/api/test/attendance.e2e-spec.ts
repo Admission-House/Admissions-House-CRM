@@ -172,13 +172,14 @@ describe('attendance starts when someone signs in from the office', () => {
     expect(await records('att5')).toHaveLength(0);
   });
 
-  it('tells every Super Admin about a refused office sign-in, once for repeated tries', async () => {
+  it('tells every Super Admin and the team Admin about a refused office sign-in, once for repeated tries', async () => {
     const tryOutside = () => api.login({ ...api.credentials('att6'), location: { ...inOffice, lat: inOffice.lat + 0.05 } }, OFFICE_IP);
     expect(errorCode(await tryOutside())).toBe('OUTSIDE_OFFICE');
     expect(errorCode(await tryOutside())).toBe('OUTSIDE_OFFICE');
     const superAdmins = Number((await owner.query(`SELECT count(*) FROM users u JOIN roles r ON r.id = u.role_id WHERE u.tenant_id = $1 AND r.system_key = 'super_admin' AND u.status = 'active'`, [fx.tenantId])).rows[0].count);
     const alerts = (await owner.query(`SELECT user_id, type, payload FROM notifications WHERE tenant_id = $1 AND payload->>'event' = 'login_refused' AND payload->>'userName' = 'att6'`, [fx.tenantId])).rows;
-    expect(alerts).toHaveLength(superAdmins);
+    expect(alerts).toHaveLength(superAdmins + 1); // and the Admin the person reports to
+    expect(alerts.map((a) => a.user_id)).toContain(fx.user('admin').id);
     expect(alerts[0]).toMatchObject({ type: 'security', payload: { event: 'login_refused', userName: 'att6' } });
   });
 });
@@ -237,7 +238,7 @@ describe('the idle sweep', () => {
       )).rows[0].count,
     );
     const alerts = await notificationsAbout('att8');
-    expect(alerts).toHaveLength(activeSuperAdmins);
+    expect(alerts).toHaveLength(activeSuperAdmins + 1); // the Super Admins and the Admin the person reports to
     expect(alerts[0]).toMatchObject({ type: 'security', payload: { event: 'idle_logout', idleMinutes: 30 } });
   });
 
@@ -353,6 +354,79 @@ describe('breaks', () => {
     const brk = (await owner.query(`SELECT ended_at FROM break_logs WHERE id = $1`, [started.json().id])).rows[0];
     expect(brk.ended_at).not.toBeNull();
     expect(brk.ended_at).toEqual(r.check_out_at);
+  });
+
+  describe('the allowance for each kind of break, per day', () => {
+    const who = 'att14';
+    const backdate = (id: string, minutes: number) =>
+      owner.query(`UPDATE break_logs SET started_at = now() - make_interval(mins => $2) WHERE id = $1`, [id, minutes]);
+
+    /** A clean start: no open sign-ins and no breaks left from an earlier test. */
+    const reset = async () => {
+      await owner.query(`UPDATE user_sessions SET ended_at = now(), ended_reason = 'revoked' WHERE user_id = $1 AND ended_at IS NULL`, [fx.user(who).id]);
+      await owner.query(`DELETE FROM break_logs WHERE attendance_id IN (SELECT id FROM attendance_records WHERE user_id = $1)`, [fx.user(who).id]);
+    };
+
+    beforeAll(async () => {
+      await owner.query(`DELETE FROM attendance_records WHERE user_id = $1`, [fx.user(who).id]);
+    });
+
+    it('is one 45 minute lunch and one 15 minute snack a day, shown with what is left', async () => {
+      const token = await checkIn(who);
+      const lunch = await typeId('Lunch');
+      const first = await start(token, lunch);
+      expect(first.statusCode, first.body).toBe(200);
+      await backdate(first.json().id, 30);
+      await api.call('POST', '/attendance/breaks/end', token, undefined, OFFICE_IP);
+
+      const mid = (await api.call('GET', '/attendance/me/today', token, undefined, OFFICE_IP)).json().breaks as { name: string; allowedMinutes: number; usedMinutes: number }[];
+      expect(mid.find((b) => b.name === 'Lunch')).toMatchObject({ allowedMinutes: 45, usedMinutes: 30 });
+
+      // Lunch can be taken in two parts until the 45 minutes are used, and then not again.
+      const second = await start(token, lunch);
+      expect(second.statusCode, second.body).toBe(200);
+      await backdate(second.json().id, 15);
+      await api.call('POST', '/attendance/breaks/end', token, undefined, OFFICE_IP);
+      const again = await start(token, lunch);
+      expect(again.statusCode).toBe(409);
+      expect(errorCode(again)).toBe('BREAK_ALLOWANCE_USED');
+
+      // The snack is a separate allowance.
+      const snack = await start(token, await typeId('Tea'));
+      expect(snack.statusCode, snack.body).toBe(200);
+      await api.call('POST', '/attendance/breaks/end', token, undefined, OFFICE_IP);
+    });
+
+    it('does not sign someone out for being quiet while they are on a break', async () => {
+      await reset();
+      const token = await checkIn(who);
+      const lunch = await typeId('Lunch');
+      await owner.query(`DELETE FROM break_logs WHERE attendance_id IN (SELECT id FROM attendance_records WHERE user_id = $1)`, [fx.user(who).id]);
+      const started = await start(token, lunch);
+      expect(started.statusCode, started.body).toBe(200);
+      const quiet = (minutes: number) => owner.query(`UPDATE user_sessions SET last_active_at = now() - make_interval(mins => $2) WHERE user_id = $1 AND ended_at IS NULL`, [fx.user(who).id, minutes]);
+      const alive = async () => (await owner.query(`SELECT count(*)::int AS n FROM user_sessions WHERE user_id = $1 AND ended_at IS NULL`, [fx.user(who).id])).rows[0].n as number;
+
+      // Forty minutes quiet is past the 30 minute limit, but fine in the middle of a 45 minute lunch.
+      await quiet(40);
+      await sweep.sweepOnce();
+      expect(await alive()).toBe(1);
+      expect((await api.call('GET', '/attendance/me/today', token, undefined, OFFICE_IP)).statusCode).toBe(200);
+
+      // Long after the break should have ended, the usual limit applies again.
+      await quiet(70);
+      await sweep.sweepOnce();
+      expect(await alive()).toBe(0);
+    });
+
+    it('still signs someone out after the usual quiet time when they are not on a break', async () => {
+      await reset();
+      const token = await checkIn(who);
+      await owner.query(`UPDATE user_sessions SET last_active_at = now() - interval '40 minutes' WHERE user_id = $1 AND ended_at IS NULL`, [fx.user(who).id]);
+      const res = await api.call('GET', '/auth/me', token, undefined, OFFICE_IP);
+      expect(res.statusCode).toBe(401);
+      expect(errorCode(res)).toBe('SESSION_IDLE');
+    });
   });
 
   it('is not available to someone whose attendance is not recorded', async () => {

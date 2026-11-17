@@ -2,7 +2,7 @@
 
 import { Coffee, LogIn } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { Button, Select, cx } from '@/components/ui';
+import { Button, cx } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { fmtDateTime } from '@/lib/format';
@@ -14,6 +14,7 @@ interface Today {
   record?: { checkInAt: string; checkOutAt: string | null; lateMinutes: number } | null;
   onBreak?: { startedAt: string; type: { name: string; allowedMinutes: number } } | null;
   breakMinutesToday?: number;
+  breaks?: { id: string; name: string; allowedMinutes: number; usedMinutes: number }[];
   shift?: { start: string; end: string; idleTimeoutMin: number } | null;
 }
 
@@ -26,9 +27,7 @@ const clock = (iso: string) => new Date(iso).toLocaleTimeString('en-IN', { hour:
 export function WorkStatus() {
   const { can } = useAuth();
   const today = useApi<Today>(can('attendance.self') ? '/attendance/me/today' : null);
-  const types = useApi<{ id: string; name: string; allowedMinutes: number }[]>(can('attendance.self') ? '/attendance/break-types' : null);
   const [open, setOpen] = useState(false);
-  const [typeId, setTypeId] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -96,19 +95,26 @@ export function WorkStatus() {
               {t.shift && <div className="flex justify-between"><dt className="text-muted">Shift</dt><dd className="font-medium">{t.shift.start} to {t.shift.end}</dd></div>}
             </dl>
           )}
-          {t.shift && <p className="mt-3 text-xs text-subtle">You are signed out after {t.shift.idleTimeoutMin} minutes without activity. A break does not pause this.</p>}
+          {t.shift && <p className="mt-3 text-xs text-subtle">You are signed out after {t.shift.idleTimeoutMin} minutes without activity. On a break you are kept signed in until the break is over, plus 10 minutes.</p>}
           {error && <p role="alert" className="mt-3 text-xs text-bad">{error}</p>}
           <div className="mt-4 border-t border-line pt-4">
             {onBreak ? (
               <Button className="w-full" loading={busy} onClick={() => void act('/attendance/breaks/end')}>End break</Button>
             ) : t.checkedIn ? (
-              <div className="flex gap-2">
-                <Select aria-label="Kind of break" value={typeId} onChange={(e) => setTypeId(e.target.value)}>
-                  <option value="">Choose a break</option>
-                  {types.data?.map((b) => <option key={b.id} value={b.id}>{b.name} ({b.allowedMinutes} min)</option>)}
-                </Select>
-                <Button variant="secondary" disabled={!typeId} loading={busy} onClick={() => void act('/attendance/breaks/start', { breakTypeId: typeId })}>Start</Button>
-              </div>
+              <ul className="space-y-2" aria-label="Breaks">
+                {(t.breaks ?? []).map((b) => {
+                  const left = Math.max(0, b.allowedMinutes - b.usedMinutes);
+                  return (
+                    <li key={b.id} className="flex items-center justify-between gap-3 rounded-md border border-line px-3 py-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-ink">{b.name}</p>
+                        <p className="text-xs text-muted">{left > 0 ? `${left} of ${b.allowedMinutes} min left` : `All ${b.allowedMinutes} min used`}</p>
+                      </div>
+                      <Button variant="secondary" size="sm" disabled={left === 0} loading={busy} onClick={() => void act('/attendance/breaks/start', { breakTypeId: b.id })}>Start</Button>
+                    </li>
+                  );
+                })}
+              </ul>
             ) : (
               <p className="text-xs text-muted">Sign in from the office to start your day.</p>
             )}

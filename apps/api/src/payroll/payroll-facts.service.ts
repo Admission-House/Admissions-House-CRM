@@ -45,10 +45,11 @@ export class PayrollFactsService {
                coalesce(b.over, 0)::int AS over_minutes
         FROM attendance_records a
         LEFT JOIN LATERAL (
-          SELECT sum(floor(extract(epoch FROM l.ended_at - l.started_at) / 60)) AS taken,
-                 sum(greatest(0, floor(extract(epoch FROM l.ended_at - l.started_at) / 60) - t.allowed_minutes)) AS over
-          FROM break_logs l JOIN break_types t ON t.id = l.break_type_id
-          WHERE l.attendance_id = a.id AND l.ended_at IS NOT NULL) b ON true
+          -- The allowance is for the day, for each kind of break (45 minutes of lunch, 15 of snacks), however many times it is taken.
+          SELECT sum(per_kind.minutes) AS taken, sum(greatest(0, per_kind.minutes - per_kind.allowed)) AS over
+          FROM (SELECT t.allowed_minutes AS allowed, sum(floor(extract(epoch FROM l.ended_at - l.started_at) / 60)) AS minutes
+                FROM break_logs l JOIN break_types t ON t.id = l.break_type_id
+                WHERE l.attendance_id = a.id AND l.ended_at IS NOT NULL GROUP BY t.id, t.allowed_minutes) per_kind) b ON true
         WHERE a.user_id = ANY(${ids}::uuid[]) AND a.work_date BETWEEN ${first}::date AND ${last}::date`.execute(trx);
 
     // A request's days are spread over its working dates (a half day is one date at 0.5), then cut to this month.

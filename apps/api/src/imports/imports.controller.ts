@@ -86,7 +86,7 @@ export class ImportsController {
   }
 
   private async read(req: FastifyRequest) {
-    const { fields, file } = await readForm(req, this.env.MAX_UPLOAD_BYTES);
+    const { fields, file } = await readForm(req, this.env.MAX_IMPORT_BYTES);
     if (!file) throw AppError.badRequest('NO_FILE', 'No file was sent', [{ field: 'file', message: 'Attach the file' }]);
     return { fields, file };
   }

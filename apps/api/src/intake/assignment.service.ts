@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { onLeaveNow } from '../leave/on-leave-now.js';
 import { sql } from 'kysely';
 import type { Trx } from '../database/database.service.js';
 import { Candidate, firstMatchingRule, LeadFacts, pickAssignee, RuleLike } from './intake-rules.js';
@@ -68,6 +69,7 @@ export class AssignmentService {
               WHERE l.assigned_to = u.id AND l.deleted_at IS NULL AND s.is_open) AS open_leads
       FROM users u
       JOIN roles r ON r.id = u.role_id
+      CROSS JOIN tenants t
       WHERE u.status = 'active'
         AND r.system_key = 'counsellor'
         AND u.receives_auto_leads
@@ -75,10 +77,7 @@ export class AssignmentService {
         AND EXISTS (
           SELECT 1 FROM attendance_records a, tenants t
           WHERE a.user_id = u.id AND a.work_date = (now() AT TIME ZONE t.timezone)::date AND a.check_out_at IS NULL)
-        AND NOT EXISTS (
-          SELECT 1 FROM leave_requests lr, tenants t
-          WHERE lr.user_id = u.id AND lr.status = 'approved'
-            AND (now() AT TIME ZONE t.timezone)::date BETWEEN lr.from_date AND lr.to_date)
+        AND NOT ${onLeaveNow}
         AND NOT EXISTS (
           SELECT 1 FROM break_logs b JOIN attendance_records a ON a.id = b.attendance_id
           WHERE a.user_id = u.id AND b.ended_at IS NULL)`.execute(trx);

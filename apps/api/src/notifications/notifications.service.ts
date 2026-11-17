@@ -52,11 +52,12 @@ export class NotificationsService {
   }
 
   /**
-   * Tells every active Super Admin about a security event, except the person who caused it. A repeat of
-   * the same event about the same person inside `quietMinutes` is not sent again, so one stubborn
-   * login attempt does not fill the bell.
+   * Tells the people who oversee a security or attendance event about it: every active Super Admin, and the Admin who
+   * manages the person it is about (so an Admin hears about their own team, not about other teams). The person it is
+   * about, and `exceptUserId`, are not told. A repeat of the same event about the same person inside `quietMinutes` is
+   * not sent again, so one stubborn login attempt does not fill the bell.
    */
-  async notifySuperAdmins(
+  async notifyOversight(
     trx: Trx,
     n: { tenantId: string; payload: { event: string; userId?: string } & Record<string, unknown>; exceptUserId?: string; quietMinutes?: number },
   ): Promise<number> {
@@ -67,10 +68,15 @@ export class NotificationsService {
           AND created_at > now() - make_interval(mins => ${n.quietMinutes}) LIMIT 1`.execute(trx);
       if (rows.length > 0) return 0;
     }
-    const { rows: admins } = await sql<{ id: string }>`
+    const { rows: overseers } = await sql<{ id: string }>`
       SELECT x.id FROM users x JOIN roles r ON r.id = x.role_id
-      WHERE r.system_key = 'super_admin' AND x.status = 'active'`.execute(trx);
-    return this.notify(trx, { tenantId: n.tenantId, userIds: admins.map((a) => a.id).filter((id) => id !== n.exceptUserId), type: 'security', payload: n.payload });
+      WHERE r.system_key = 'super_admin' AND x.status = 'active'
+      UNION
+      SELECT m.id FROM users u JOIN users m ON m.id = u.manager_id AND m.status = 'active'
+      JOIN roles mr ON mr.id = m.role_id AND mr.system_key IN ('admin', 'super_admin')
+      WHERE u.id = ${n.payload.userId ?? null}::uuid`.execute(trx);
+    const skip = new Set([n.exceptUserId, n.payload.userId]);
+    return this.notify(trx, { tenantId: n.tenantId, userIds: overseers.map((o) => o.id).filter((id) => !skip.has(id)), type: 'security', payload: n.payload });
   }
 
   /** Work email addresses of active users, for the few events that are also sent by email. */

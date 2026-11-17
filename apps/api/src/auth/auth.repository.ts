@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { onBreakQuietMinutes } from './idle-rules.js';
 import { sql } from 'kysely';
 import type { Trx } from '../database/database.service.js';
 import type { DataScope, RoleKey } from './auth-context.js';
@@ -249,10 +250,10 @@ export class AuthRepository {
              (s.ended_at IS NOT NULL) AS ended,
              (s.expires_at <= now()) AS expired,
              EXTRACT(EPOCH FROM now() - s.last_active_at)::float8 AS idle_seconds,
-             COALESCE((SELECT a.idle_timeout_min FROM attendance_settings a
+             GREATEST(COALESCE((SELECT a.idle_timeout_min FROM attendance_settings a
                        WHERE a.tenant_id = s.tenant_id
                          AND a.effective_from <= (now() AT TIME ZONE t.timezone)::date
-                       ORDER BY a.effective_from DESC LIMIT 1), ${DEFAULT_IDLE_MIN}) AS idle_limit_min,
+                       ORDER BY a.effective_from DESC LIMIT 1), ${DEFAULT_IDLE_MIN}), ${onBreakQuietMinutes}) AS idle_limit_min,
              u.status AS user_status, t.status AS tenant_status,
              u.name, u.email, u.must_change_password, u.role_id,
              t.settings->>'require_two_step' AS require_two_step,
@@ -305,10 +306,10 @@ export class AuthRepository {
              (s.ended_at IS NOT NULL) AS ended,
              (s.expires_at <= now()) AS expired,
              EXTRACT(EPOCH FROM now() - s.last_active_at)::float8 AS idle_seconds,
-             COALESCE((SELECT a.idle_timeout_min FROM attendance_settings a
+             GREATEST(COALESCE((SELECT a.idle_timeout_min FROM attendance_settings a
                        WHERE a.tenant_id = s.tenant_id
                          AND a.effective_from <= (now() AT TIME ZONE t.timezone)::date
-                       ORDER BY a.effective_from DESC LIMIT 1), ${DEFAULT_IDLE_MIN}) AS idle_limit_min,
+                       ORDER BY a.effective_from DESC LIMIT 1), ${DEFAULT_IDLE_MIN}), ${onBreakQuietMinutes}) AS idle_limit_min,
              u.status AS user_status, t.status AS tenant_status
       FROM user_sessions s
       JOIN users u   ON u.id = s.user_id AND u.tenant_id = s.tenant_id

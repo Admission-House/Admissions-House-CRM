@@ -19,6 +19,8 @@ import { JobRegistry } from '../jobs/job-registry.service.js';
 const CHUNK = 25;
 /** How long a request may spend filing leads before it answers. The function limit on the hosted version is 30 seconds. */
 const INLINE_MS = 12_000;
+/** How long one run of the job files leads when jobs are started from outside (the hosted version has a 30 second limit). */
+const CRON_BUDGET_MS = 22_000;
 /** How many problem rows are kept on a batch. The count of all of them is always kept. */
 const MAX_STORED_ERRORS = 1000;
 
@@ -308,7 +310,9 @@ export class ImportsService implements OnModuleInit {
           const { rows } = await sql<{ id: string }>`SELECT id FROM lead_import_batches WHERE status IN ('queued', 'processing') ORDER BY created_at LIMIT 10`.execute(trx);
           return rows;
         });
-        for (const { id } of batches) await this.process(tenantId, id);
+        // On the hosted version one run of the job may last 30 seconds at most, so it stops filing before that and the
+        // next run carries on from where this one got to.
+        for (const { id } of batches) await this.process(tenantId, id, this.env.JOBS_MODE === 'cron' ? CRON_BUDGET_MS : Number.POSITIVE_INFINITY);
       }
     } catch (err) {
       this.logger.error(`import sweep failed: ${err instanceof Error ? err.message : String(err)}`);

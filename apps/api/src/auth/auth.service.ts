@@ -174,7 +174,7 @@ export class AuthService {
       if (!office.ok) {
         await attempt(user.id, 'outside_office');
         // The Super Admin hears about it (once in ten minutes for the same person).
-        await this.notifications.notifySuperAdmins(trx, {
+        await this.notifications.notifyOversight(trx, {
           tenantId: tenant.id, quietMinutes: 10,
           payload: { event: 'login_refused', userId: user.id, userName: user.name, reason: office.error.details?.reason ?? 'outside_office', ip },
         });
@@ -185,7 +185,7 @@ export class AuthService {
         if (!device.ok) {
           await attempt(user.id, 'device_blocked');
           if (device.error.code === 'DEVICE_ROOTED') {
-            await this.notifications.notifySuperAdmins(trx, {
+            await this.notifications.notifyOversight(trx, {
               tenantId: tenant.id, quietMinutes: 10,
               payload: { event: 'login_refused', userId: user.id, userName: user.name, reason: 'device_rooted', ip },
             });
@@ -212,7 +212,7 @@ export class AuthService {
     await this.repo.registerSuccess(trx, user.id);
     await attempt(user.id, 'success');
     // The Super Admins are told who signed in (a repeat within 30 minutes is not sent again, so the bell stays readable).
-    await this.notifications.notifySuperAdmins(trx, {
+    await this.notifications.notifyOversight(trx, {
       tenantId: tenant.id, exceptUserId: user.id, quietMinutes: 30,
       payload: { event: 'login_ok', userId: user.id, userName: user.name, role: user.role_name, ip, clientType: input.clientType },
     });
@@ -529,7 +529,7 @@ export class AuthService {
         requestId: auth.requestId,
       });
       if (target) {
-        await this.notifications.notifySuperAdmins(trx, {
+        await this.notifications.notifyOversight(trx, {
           tenantId: auth.tenantId, exceptUserId: auth.userId,
           payload: { event: 'forced_logout', userId: target.userId, userName: target.userName, byUserId: auth.userId },
         });

@@ -25,7 +25,7 @@ export class DownloadAlerts {
   async record(auth: AuthContext, kind: DownloadKind, what: string, fileName?: string): Promise<void> {
     try {
       await this.db.withTenant(auth.tenantId, (trx) =>
-        this.notifications.notifySuperAdmins(trx, {
+        this.notifications.notifyOversight(trx, {
           tenantId: auth.tenantId,
           exceptUserId: auth.userId,
           payload: { event: 'download', userId: auth.userId, userName: auth.name, kind, what, fileName: fileName ?? null, ip: auth.ip ?? null },

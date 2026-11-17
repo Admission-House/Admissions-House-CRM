@@ -39,6 +39,8 @@ export interface LeaveRequestView {
   fromDate: string;
   toDate: string;
   days: number;
+  /** For a half day: which half of the working day. */
+  half: 'first' | 'second' | null;
   reason: string | null;
   status: 'pending' | 'approved' | 'rejected' | 'cancelled';
   decidedBy: string | null;
@@ -57,6 +59,7 @@ interface RequestRow {
   from_date: string;
   to_date: string;
   days: number;
+  half: 'first' | 'second' | null;
   reason: string | null;
   status: LeaveRequestView['status'];
   decided_by_name: string | null;
@@ -217,7 +220,7 @@ export class LeaveService {
             .insertInto('leave_requests')
             .values({
               tenant_id: auth.tenantId, user_id: auth.userId, leave_type_id: type.id,
-              from_date: dto.fromDate, to_date: dto.toDate, days, reason: dto.reason ?? null,
+              from_date: dto.fromDate, to_date: dto.toDate, days, half: dto.half ?? null, reason: dto.reason ?? null,
             })
             .returning('id')
             .executeTakeFirstOrThrow()
@@ -235,7 +238,7 @@ export class LeaveService {
           subject: `Leave request from ${auth.name}`,
           text: `Hello ${a.name},
 
-${auth.name} has asked for ${type.name} from ${dto.fromDate} to ${dto.toDate} (${days} day${days === 1 ? '' : 's'}).${dto.reason ? `
+${auth.name} has asked for ${type.name} from ${dto.fromDate} to ${dto.toDate} (${dto.half ? `half day, ${dto.half} half` : `${days} day${days === 1 ? '' : 's'}`}).${dto.reason ? `
 Reason: ${dto.reason}` : ''}
 
 Open the request to approve or reject it:
@@ -247,7 +250,7 @@ ${this.leaveLink()}
         tenantId: auth.tenantId,
         userIds: approvers,
         type: 'approval',
-        payload: { event: 'leave_requested', requestId: id, userId: auth.userId, userName: auth.name, leaveType: type.name, fromDate: dto.fromDate, toDate: dto.toDate, days },
+        payload: { event: 'leave_requested', requestId: id, userId: auth.userId, userName: auth.name, leaveType: type.name, fromDate: dto.fromDate, toDate: dto.toDate, days, half: dto.half ?? null },
       });
       await this.record(trx, auth, 'leave.request', 'leave_request', id, undefined, { type: type.name, from: dto.fromDate, to: dto.toDate, days });
       return this.one(trx, id);
@@ -448,7 +451,7 @@ ${this.leaveLink()}
 
 const REQUEST_SELECT = sql`
   SELECT lr.id, lr.user_id, u.name AS user_name, lt.id AS type_id, lt.name AS type_name, lt.is_paid,
-         lr.from_date::text AS from_date, lr.to_date::text AS to_date, lr.days::float8 AS days, lr.reason, lr.status,
+         lr.from_date::text AS from_date, lr.to_date::text AS to_date, lr.days::float8 AS days, lr.half, lr.reason, lr.status,
          d.name AS decided_by_name, lr.decided_at, lr.decision_note, lr.created_at
   FROM leave_requests lr
   JOIN users u ON u.id = lr.user_id
@@ -469,6 +472,7 @@ function toRequest(r: RequestRow): LeaveRequestView {
     fromDate: r.from_date,
     toDate: r.to_date,
     days: r.days,
+    half: r.half,
     reason: r.reason,
     status: r.status,
     decidedBy: r.decided_by_name,

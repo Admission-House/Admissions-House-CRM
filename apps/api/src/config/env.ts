@@ -116,6 +116,8 @@ const schema = z.object({
   CLAMAV_TIMEOUT_MS: z.coerce.number().int().min(1000).max(120_000).default(15_000),
   /** Largest upload, in bytes. 2 MB, as agreed for documents. */
   MAX_UPLOAD_BYTES: z.coerce.number().int().min(1024).max(26_214_400).default(2_097_152),
+  /** The biggest lead sheet one request may carry. The hosted version cannot take more than 4.5 MB in one request. */
+  MAX_IMPORT_BYTES: z.coerce.number().int().min(1024).max(26_214_400).default(4_194_304),
   /** Largest call recording that will be downloaded from the provider, in bytes. */
   RECORDING_MAX_BYTES: z.coerce.number().int().min(1024).max(209_715_200).default(52_428_800),
   /** How often waiting recordings are downloaded, in seconds. 0 turns it off. */

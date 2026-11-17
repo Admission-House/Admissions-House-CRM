@@ -47,7 +47,7 @@ export async function readTable(data: Buffer, options: ReadOptions = {}): Promis
   if (header.length > MAX_COLUMNS) throw bad('TOO_MANY_COLUMNS', `The file has more than ${MAX_COLUMNS} columns`);
 
   const rows = grid.slice(firstFilled + 1).map((row) => header.map((_h, i) => row[i] ?? ''));
-  if (rows.length > MAX_ROWS) throw bad('TOO_MANY_ROWS', `The file has more than ${MAX_ROWS} rows. Split it and import in parts.`, 413);
+  if (rows.length > MAX_ROWS) throw bad('TOO_MANY_ROWS', `The file has more than ${MAX_ROWS.toLocaleString('en-IN')} rows. Save it as a CSV file and upload that: a CSV is split into parts of ${MAX_ROWS.toLocaleString('en-IN')} automatically.`, 413);
   return { header, rows };
 }
 

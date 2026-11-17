@@ -93,6 +93,12 @@ export class AttendanceService {
         LEFT JOIN break_types bt ON bt.id = ob.break_type_id
         WHERE a.user_id = ${auth.userId} AND a.work_date = ${today}::date`.execute(trx);
       const r = rows[0];
+      const { rows: kinds } = await sql<{ id: string; name: string; allowed_minutes: number; used: number }>`
+        SELECT bt.id, bt.name, bt.allowed_minutes,
+               COALESCE(floor(sum(EXTRACT(EPOCH FROM COALESCE(b.ended_at, now()) - b.started_at)) / 60)::int, 0) AS used
+        FROM break_types bt
+        LEFT JOIN break_logs b ON b.break_type_id = bt.id AND b.attendance_id = ${r?.id ?? null}
+        WHERE bt.is_active GROUP BY bt.id ORDER BY bt.allowed_minutes DESC, bt.name`.execute(trx);
 
       const checkedIn = !!r && r.check_out_at === null;
       return {
@@ -109,6 +115,8 @@ export class AttendanceService {
           ? { id: r.break_id, startedAt: r.break_started_at, type: { id: r.break_type_id, name: r.break_name, allowedMinutes: r.allowed_minutes } }
           : null,
         breakMinutesToday: r?.break_minutes ?? 0,
+        /** Each kind of break with the minutes of it used today, so a screen can show what is left. */
+        breaks: kinds.map((k) => ({ id: k.id, name: k.name, allowedMinutes: k.allowed_minutes, usedMinutes: k.used })),
         shift: settings && {
           start: settings.shift_start.slice(0, 5),
           end: settings.shift_end.slice(0, 5),
@@ -130,6 +138,9 @@ export class AttendanceService {
 
       const running = await trx.selectFrom('break_logs').select('id').where('attendance_id', '=', open.id).where('ended_at', 'is', null).executeTakeFirst();
       if (running) throw AppError.conflict('BREAK_ALREADY_OPEN', 'You are already on a break. End it first.');
+      if ((await this.minutesUsed(trx, open.id, type.id)) >= type.allowed_minutes) {
+        throw AppError.conflict('BREAK_ALLOWANCE_USED', `You have already taken your ${type.allowed_minutes} minutes of ${type.name.toLowerCase()} today.`);
+      }
 
       const row = await trx
         .insertInto('break_logs')
@@ -159,6 +170,13 @@ export class AttendanceService {
 
       const type = await trx.selectFrom('break_types').select(['id', 'name', 'allowed_minutes']).where('id', '=', ended.break_type_id).executeTakeFirstOrThrow();
       const used = await this.minutesUsed(trx, open.id, type.id);
+      // Going over the day's allowance is told to the people who oversee attendance, once, when the break ends.
+      if (used > type.allowed_minutes) {
+        await this.notifications.notifyOversight(trx, {
+          tenantId: auth.tenantId,
+          payload: { event: 'break_over', userId: auth.userId, userName: auth.name, breakName: type.name, allowedMinutes: type.allowed_minutes, usedMinutes: used },
+        });
+      }
       return {
         id: ended.id,
         startedAt: ended.started_at,
@@ -265,7 +283,7 @@ export class AttendanceService {
         ip: auth.ip, requestId: auth.requestId,
       });
       const { rows: who } = await sql<{ name: string }>`SELECT name FROM users WHERE id = ${dto.userId}::uuid`.execute(trx);
-      await this.notifications.notifySuperAdmins(trx, {
+      await this.notifications.notifyOversight(trx, {
         tenantId: auth.tenantId, exceptUserId: auth.userId,
         payload: { event: 'attendance_exception', userId: dto.userId, userName: who[0]?.name ?? '', date: dto.date, reason: dto.reason, byUserId: auth.userId },
       });

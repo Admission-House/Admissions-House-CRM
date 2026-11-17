@@ -18,6 +18,7 @@ interface LeaveRequest {
   fromDate: string;
   toDate: string;
   days: number;
+  half?: 'first' | 'second' | null;
   reason: string | null;
   status: Status;
   decidedBy: string | null;
@@ -31,7 +32,7 @@ const errorText = (e: unknown) => (e instanceof ApiError ? e.message : 'Cannot r
 const ymd = (d: Date) => d.toLocaleDateString('en-CA');
 const nice = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 const span = (r: LeaveRequest) => (r.fromDate === r.toDate ? nice(r.fromDate) : `${nice(r.fromDate)} to ${nice(r.toDate)}`);
-const days = (n: number) => `${n} ${n === 1 ? 'day' : 'days'}`;
+const days = (n: number, half?: 'first' | 'second' | null) => (half ? `Half day (${half} half)` : `${n} ${n === 1 ? 'day' : 'days'}`);
 
 function RequestsTable({ rows, showPerson, actions }: { rows: LeaveRequest[]; showPerson?: boolean; actions?: (r: LeaveRequest) => React.ReactNode }) {
   if (rows.length === 0) return <Empty title="No leave requests" />;
@@ -46,7 +47,7 @@ function RequestsTable({ rows, showPerson, actions }: { rows: LeaveRequest[]; sh
             <tr key={r.id} className="hover:bg-mint-50">
               {showPerson && <td className="px-4 py-3 font-medium">{r.user.name}</td>}
               <td className={`${showPerson ? 'px-3' : 'px-4'} py-3`}>{r.leaveType.name}{!r.leaveType.isPaid && <span className="ml-1.5 text-xs text-muted">(unpaid)</span>}</td>
-              <td className="px-3 py-3">{span(r)}<span className="block text-xs text-muted">{days(r.days)}</span></td>
+              <td className="px-3 py-3">{span(r)}<span className="block text-xs text-muted">{days(r.days, r.half)}</span></td>
               <td className="max-w-64 truncate px-3 py-3 text-muted" title={r.reason ?? ''}>{r.reason ?? '—'}</td>
               <td className="px-3 py-3"><Badge tone={STATUS[r.status].tone}>{STATUS[r.status].label}</Badge>{r.decisionNote && <span className="block text-xs text-muted" title={r.decisionNote}>{r.decidedBy ? `${r.decidedBy}: ` : ''}{r.decisionNote}</span>}</td>
               {actions && <td className="px-4 py-3"><div className="flex justify-end gap-2">{actions(r)}</div></td>}
@@ -64,7 +65,8 @@ function RequestForm({ types, onClose, onSaved }: { types: LeaveType[]; onClose:
   const [typeId, setTypeId] = useState('');
   const [from, setFrom] = useState(ymd(new Date()));
   const [to, setTo] = useState('');
-  const [half, setHalf] = useState(false);
+  const [part, setPart] = useState<'whole' | 'first' | 'second'>('whole');
+  const half = part !== 'whole';
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
@@ -74,7 +76,7 @@ function RequestForm({ types, onClose, onSaved }: { types: LeaveType[]; onClose:
     setBusy(true);
     setError(null);
     try {
-      await api('/leave/requests', { method: 'POST', body: { leaveTypeId: typeId, fromDate: from, ...(to && !half && { toDate: to }), halfDay: half, ...(reason.trim() && { reason: reason.trim() }) } });
+      await api('/leave/requests', { method: 'POST', body: { leaveTypeId: typeId, fromDate: from, ...(to && !half && { toDate: to }), ...(half && { halfDay: true, half: part }), ...(reason.trim() && { reason: reason.trim() }) } });
       onSaved();
     } catch (err) {
       setError(err instanceof ApiError ? err : new ApiError(0, 'NETWORK', 'Cannot reach the server. Try again.'));
@@ -86,7 +88,13 @@ function RequestForm({ types, onClose, onSaved }: { types: LeaveType[]; onClose:
       <form onSubmit={save} className="space-y-4">
         {error && <Notice tone="bad">{error.message}</Notice>}
         <Field label="Kind of leave" htmlFor="lt" required error={fe('leaveTypeId')}><Select id="lt" value={typeId} onChange={(e) => setTypeId(e.target.value)} required><option value="">Choose</option>{types.filter((t) => t.isActive).map((t) => <option key={t.id} value={t.id}>{t.name}{t.isPaid ? '' : ' (unpaid)'}</option>)}</Select></Field>
-        <label className="flex items-center gap-2.5 text-sm"><input type="checkbox" checked={half} onChange={(e) => setHalf(e.target.checked)} className="h-4 w-4 accent-[#0f625e]" /> Half day</label>
+        <Field label="How much" htmlFor="lp" hint={half ? 'A half day counts as 0.5 day' : undefined}>
+          <Select id="lp" value={part} onChange={(e) => setPart(e.target.value as 'whole' | 'first' | 'second')}>
+            <option value="whole">Full day (or more)</option>
+            <option value="first">Half day: first half</option>
+            <option value="second">Half day: second half</option>
+          </Select>
+        </Field>
         <div className="grid grid-cols-2 gap-4">
           <Field label={half ? 'Day' : 'From'} htmlFor="lf" required error={fe('fromDate')}><Input id="lf" type="date" value={from} onChange={(e) => setFrom(e.target.value)} required /></Field>
           {!half && <Field label="To" htmlFor="ll" hint="Leave empty for one day" error={fe('toDate')}><Input id="ll" type="date" min={from} value={to} onChange={(e) => setTo(e.target.value)} /></Field>}
@@ -171,7 +179,7 @@ function DecisionModal({ request, onClose, onSaved }: { request: LeaveRequest; o
     <Modal title={`${request.user.name}: ${request.leaveType.name}`} onClose={onClose}>
       <form onSubmit={save} className="space-y-4">
         {error && <Notice tone="bad">{error.message}</Notice>}
-        <p className="text-sm text-muted">{span(request)} · {days(request.days)}{request.reason ? ` · ${request.reason}` : ''}</p>
+        <p className="text-sm text-muted">{span(request)} · {days(request.days, request.half)}{request.reason ? ` · ${request.reason}` : ''}</p>
         <div role="radiogroup" aria-label="Decision" className="grid grid-cols-2 gap-2">
           {(['approved', 'rejected'] as const).map((d) => <button type="button" role="radio" aria-checked={decision === d} key={d} onClick={() => setDecision(d)} className={`rounded-lg border px-3 py-2 text-sm font-semibold ${decision === d ? (d === 'approved' ? 'border-ok bg-ok-50 text-ok' : 'border-bad bg-bad-50 text-bad') : 'border-line-strong text-muted hover:bg-head'}`}>{d === 'approved' ? 'Approve' : 'Turn down'}</button>)}
         </div>

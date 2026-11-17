@@ -555,6 +555,7 @@ export interface LeaveBalances {
 
 export interface LeaveRequests {
   created_at: Generated<Timestamp>;
+  half: string | null;
   days: Numeric;
   decided_at: Timestamp | null;
   decided_by: string | null;

@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { onBreakQuietMinutes } from '../auth/idle-rules.js';
 import { sql } from 'kysely';
 import { ENV } from '../config/config.module.js';
 import type { Env } from '../config/env.js';
@@ -81,9 +82,9 @@ export class IdleSweepService implements OnModuleInit {
     const idleMin = limits[0]!.idle_min;
 
     const { rows: idle } = await sql<{ user_id: string; last_active_at: Date }>`
-      UPDATE user_sessions SET ended_at = now(), ended_reason = 'inactivity'
-      WHERE ended_at IS NULL AND last_active_at < now() - make_interval(mins => ${idleMin})
-      RETURNING user_id, last_active_at`.execute(trx);
+      UPDATE user_sessions s SET ended_at = now(), ended_reason = 'inactivity'
+      WHERE s.ended_at IS NULL AND s.last_active_at < now() - make_interval(mins => GREATEST(${idleMin}, ${onBreakQuietMinutes}))
+      RETURNING s.user_id, s.last_active_at`.execute(trx);
 
     const { rows: expired } = await sql<{ id: string }>`
       UPDATE user_sessions SET ended_at = now(), ended_reason = 'expired'
@@ -101,7 +102,7 @@ export class IdleSweepService implements OnModuleInit {
         if (!seen || row.last_active_at > seen) lastActive.set(row.user_id, row.last_active_at);
       }
       for (const [userId, at] of lastActive) {
-        const { rowCount } = await this.notifySuperAdmins(trx, tenantId, userId, at, idleMin);
+        const { rowCount } = await this.notifyIdleLogout(trx, tenantId, userId, at, idleMin);
         notified += rowCount;
       }
     }
@@ -143,20 +144,14 @@ export class IdleSweepService implements OnModuleInit {
     return rows.length;
   }
 
-  /** Tells every active Super Admin that a person in the office was signed out for inactivity. */
-  private async notifySuperAdmins(trx: Trx, tenantId: string, userId: string, lastActiveAt: Date, idleMin: number) {
+  /** Tells the Super Admins, and the Admin who manages the person, that someone in the office was signed out for inactivity. */
+  private async notifyIdleLogout(trx: Trx, tenantId: string, userId: string, lastActiveAt: Date, idleMin: number) {
     const { rows } = await sql<{ name: string; office: boolean }>`
       SELECT u.name, r.requires_office AS office FROM users u JOIN roles r ON r.id = u.role_id WHERE u.id = ${userId}`.execute(trx);
     // Only people who work from the office are reported; a Super Admin stepping away is not news.
     if (!rows[0]?.office) return { rowCount: 0 };
-
-    const { rows: admins } = await sql<{ id: string }>`
-      SELECT x.id FROM users x JOIN roles xr ON xr.id = x.role_id
-      WHERE xr.system_key = 'super_admin' AND x.status = 'active'`.execute(trx);
-    const rowCount = await this.notifications.notify(trx, {
+    const rowCount = await this.notifications.notifyOversight(trx, {
       tenantId,
-      userIds: admins.map((a) => a.id),
-      type: 'security',
       payload: { event: 'idle_logout', userId, userName: rows[0].name, lastActiveAt: lastActiveAt.toISOString(), idleMinutes: idleMin },
     });
     return { rowCount };

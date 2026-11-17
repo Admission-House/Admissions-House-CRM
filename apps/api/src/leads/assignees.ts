@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { onLeaveNow } from '../leave/on-leave-now.js';
 import { sql } from 'kysely';
 import { scopeCondition } from '../access/scope.js';
 import type { AuthContext } from '../auth/auth-context.js';
@@ -50,8 +51,7 @@ export class Assignees {
       SELECT (r.system_key = 'counsellor') AS tracked,
              EXISTS (SELECT 1 FROM attendance_records a WHERE a.user_id = u.id AND a.work_date = (now() AT TIME ZONE t.timezone)::date) AS checked_in,
              EXISTS (SELECT 1 FROM attendance_records a WHERE a.user_id = u.id AND a.work_date = (now() AT TIME ZONE t.timezone)::date AND a.check_out_at IS NULL) AS open_day,
-             EXISTS (SELECT 1 FROM leave_requests lr WHERE lr.user_id = u.id AND lr.status = 'approved'
-                     AND (now() AT TIME ZONE t.timezone)::date BETWEEN lr.from_date AND lr.to_date) AS on_leave,
+             ${onLeaveNow} AS on_leave,
              EXISTS (SELECT 1 FROM break_logs b JOIN attendance_records a ON a.id = b.attendance_id
                      WHERE a.user_id = u.id AND b.ended_at IS NULL) AS on_break
       FROM users u JOIN roles r ON r.id = u.role_id, tenants t

@@ -134,7 +134,7 @@ describe('previewing a file', () => {
   });
 
   it('refuses a file over the size limit', async () => {
-    const big = Buffer.from('Name,Mobile\n' + 'x'.repeat(2 * 1024 * 1024 + 10));
+    const big = Buffer.from('Name,Mobile\n' + 'x'.repeat(4 * 1024 * 1024 + 10));
     const res = await preview(t.admin!, file(big));
     expect(res.statusCode).toBe(413);
     expect(errorCode(res)).toBe('FILE_TOO_LARGE');
