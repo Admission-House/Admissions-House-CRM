@@ -50,7 +50,7 @@ describe('who hears about a counsellor signing in and taking a long break', () =
     expect(await eventsFor('admin2', 'login_refused', 'att2')).toHaveLength(0);
   });
 
-  it('says nothing about a break that stays inside its allowance, and refuses a new one once the allowance is used', async () => {
+  it('says nothing about a break that stays inside its allowance', async () => {
     const lunch = (await owner.query(`SELECT id FROM break_types WHERE tenant_id = $1 AND name = 'Lunch'`, [fx.tenantId])).rows[0].id as string;
     const started = await api.call('POST', '/attendance/breaks/start', t.att1!, { breakTypeId: lunch }, OFFICE_IP);
     expect(started.statusCode, started.body).toBe(200);
@@ -58,8 +58,8 @@ describe('who hears about a counsellor signing in and taking a long break', () =
     const ended = await api.call('POST', '/attendance/breaks/end', t.att1!, undefined, OFFICE_IP);
     expect(ended.json().overByMinutes).toBe(0);
     expect(await eventsFor('admin', 'break_over', 'att1')).toHaveLength(0);
-    // All 45 minutes are used, so another lunch is refused instead of being recorded.
-    expect((await api.call('POST', '/attendance/breaks/start', t.att1!, { breakTypeId: lunch }, OFFICE_IP)).statusCode).toBe(409);
+    // The allowance is used up but the day's hard limit is not, so another break may still be started.
+    expect((await api.call('POST', '/attendance/breaks/start', t.att1!, { breakTypeId: lunch }, OFFICE_IP)).statusCode).toBe(200);
   });
 
   it('tells them when one long break goes over, to the Super Admin and the team Admin only', async () => {

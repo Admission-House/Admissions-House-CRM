@@ -7,7 +7,7 @@ import { CurrentAuth, RequireAnyPermission, RequirePermissions } from '../auth/d
 import { LeadStatusesService } from './lead-statuses.service.js';
 import { CreateStatusDto, CreateSubstatusDto, UpdateStatusDto } from './leads.dto.js';
 
-class RenameSubstatusDto extends createZodDto(z.object({ name: z.string().trim().min(2).max(60) })) {}
+class UpdateSubstatusDto extends createZodDto(z.object({ name: z.string().trim().min(2).max(60).optional(), requiresComment: z.boolean().optional() }).refine((v) => v.name !== undefined || v.requiresComment !== undefined, 'Send at least one field to change')) {}
 
 @ApiTags('lead statuses')
 @ApiBearerAuth()
@@ -42,8 +42,8 @@ export class LeadStatusesController {
 
   @RequirePermissions('settings.manage')
   @Patch('lead-substatuses/:id')
-  renameSubstatus(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: RenameSubstatusDto) {
-    return this.statuses.renameSubstatus(auth, id, body.name);
+  updateSubstatus(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: UpdateSubstatusDto) {
+    return this.statuses.updateSubstatus(auth, id, body);
   }
 
   @RequirePermissions('settings.manage')

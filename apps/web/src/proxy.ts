@@ -20,5 +20,5 @@ export function proxy(request: NextRequest): NextResponse {
 
 // Only the screens that need a sign-in. The sign-in, password reset and guest meeting pages are left alone.
 export const config = {
-  matcher: ['/', '/dashboard/:path*', '/leads/:path*', '/followups/:path*', '/calls/:path*', '/dialer/:path*', '/communications/:path*', '/video/:path*', '/attendance/:path*', '/leave/:path*', '/salary/:path*', '/reports/:path*', '/imports/:path*', '/notifications/:path*', '/account/:path*', '/settings/:path*'],
+  matcher: ['/', '/dashboard/:path*', '/leads/:path*', '/calls/:path*', '/dialer/:path*', '/communications/:path*', '/video/:path*', '/attendance/:path*', '/leave/:path*', '/salary/:path*', '/reports/:path*', '/imports/:path*', '/notifications/:path*', '/account/:path*', '/settings/:path*'],
 };

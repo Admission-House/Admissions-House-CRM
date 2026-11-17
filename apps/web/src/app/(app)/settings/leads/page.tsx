@@ -15,7 +15,7 @@ const QUEUES: Record<string, string> = { fresh: 'Fresh', missed: 'Missed', follo
 const CHANNELS: Record<string, string> = { website: 'Website', ads: 'Ads', portal: 'Portal', call: 'Phone call', referral: 'Referral', walk_in: 'Walk-in', import: 'Import', other: 'Other' };
 const STRATEGY: Record<string, string> = { round_robin: 'Take turns', least_busy: 'Least busy first', fixed: 'Always the first person' };
 
-interface Status { id: string; name: string; queue: string; isOpen: boolean; requiresFollowup: boolean; sortOrder: number; isActive: boolean; substatuses: { id: string; name: string }[] }
+interface Status { id: string; name: string; queue: string; isOpen: boolean; requiresFollowup: boolean; requiresSubstatus: boolean; sortOrder: number; isActive: boolean; substatuses: { id: string; name: string; requiresComment: boolean }[] }
 interface Source { id: string; name: string; channelType: string; isActive: boolean }
 interface Rule { id: string; name: string; priority: number; sourceId: string | null; courseId: string | null; locationId: string | null; studyMode: string | null; strategy: string; isActive: boolean; users: { id: string; name: string }[] }
 interface Policy { duplicateAction: 'attach' | 'reject'; autoAssign: boolean; downloadForms: string[] }
@@ -71,11 +71,13 @@ function StatusForm({ status, onClose, onSaved }: { status?: Status; onClose: ()
 function SubstatusAdd({ status, onDone }: { status: Status; onDone: () => void }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
-  const { busy, error, run } = useSave(() => { setName(''); setOpen(false); onDone(); });
+  const [comment, setComment] = useState(false);
+  const { busy, error, run } = useSave(() => { setName(''); setComment(false); setOpen(false); onDone(); });
   if (!open) return <button onClick={() => setOpen(true)} className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:underline"><Plus className="h-3 w-3" aria-hidden /> Add a reason</button>;
   return (
-    <form onSubmit={(e) => { e.preventDefault(); void run(() => api(`/lead-statuses/${status.id}/substatuses`, { method: 'POST', body: { name: name.trim() } })); }} className="mt-2 flex items-center gap-2">
+    <form onSubmit={(e) => { e.preventDefault(); void run(() => api(`/lead-statuses/${status.id}/substatuses`, { method: 'POST', body: { name: name.trim(), requiresComment: comment } })); }} className="mt-2 flex flex-wrap items-center gap-2">
       <Input aria-label={`New reason under ${status.name}`} autoFocus placeholder="Reason" value={name} onChange={(e) => setName(e.target.value)} minLength={2} required className="h-8 max-w-56" />
+      <label className="flex items-center gap-1.5 text-xs text-muted"><input type="checkbox" checked={comment} onChange={(e) => setComment(e.target.checked)} className="h-3.5 w-3.5 accent-[#0f625e]" /> Comments required</label>
       <Button size="sm" variant="secondary" type="submit" loading={busy}>Add</Button>
       <Button size="sm" variant="ghost" type="button" onClick={() => setOpen(false)}>Cancel</Button>
       {error && <span role="alert" className="text-xs text-bad">{error.message}</span>}
@@ -88,6 +90,10 @@ function StatusesTab() {
   const [form, setForm] = useState<Status | 'new' | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
+  async function toggle(path: string, body: object) {
+    setNotice(null);
+    try { await api(path, { method: 'PATCH', body }); statuses.reload(); } catch (e) { setNotice(errorText(e)); }
+  }
   async function dropSub(id: string) {
     setNotice(null);
     try { await api(`/lead-substatuses/${id}`, { method: 'DELETE' }); statuses.reload(); } catch (e) { setNotice(errorText(e)); }
@@ -103,11 +109,14 @@ function StatusesTab() {
                 <div>
                   <p className="flex flex-wrap items-center gap-2 text-[15px] font-semibold">{s.name}<Badge tone="brand">{QUEUES[s.queue] ?? s.queue}</Badge>{!s.isOpen && <Badge>Final</Badge>}{s.requiresFollowup && <Badge tone="info">Asks for follow-up</Badge>}{!s.isActive && <Badge tone="warn">Not in use</Badge>}</p>
                 </div>
-                <Button size="sm" variant="secondary" onClick={() => setForm(s)}>Edit</Button>
+                <div className="flex items-center gap-2">
+                  <label className="flex items-center gap-1.5 text-xs text-muted"><input type="checkbox" checked={s.requiresSubstatus} disabled={s.substatuses.length === 0} onChange={(e) => void toggle(`/lead-statuses/${s.id}`, { requiresSubstatus: e.target.checked })} className="h-3.5 w-3.5 accent-[#0f625e]" /> Reason required</label>
+                  <Button size="sm" variant="secondary" onClick={() => setForm(s)}>Edit</Button>
+                </div>
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-1.5">
                 {s.substatuses.map((x) => (
-                  <span key={x.id} className="inline-flex items-center gap-1 rounded-md bg-head px-2 py-1 text-xs text-ink">{x.name}<button onClick={() => void dropSub(x.id)} aria-label={`Remove ${x.name}`} className="text-muted hover:text-bad"><Trash2 className="h-3 w-3" /></button></span>
+                  <span key={x.id} className="inline-flex items-center gap-1 rounded-md bg-head px-2 py-1 text-xs text-ink">{x.name}<button onClick={() => void toggle(`/lead-substatuses/${x.id}`, { requiresComment: !x.requiresComment })} aria-pressed={x.requiresComment} title="Whether a comment must be written for this reason" className={x.requiresComment ? 'rounded bg-brand-50 px-1 text-[11px] font-medium text-brand-700' : 'rounded px-1 text-[11px] text-subtle hover:text-ink'}>{x.requiresComment ? 'comments required' : 'comments optional'}</button><button onClick={() => void dropSub(x.id)} aria-label={`Remove ${x.name}`} className="text-muted hover:text-bad"><Trash2 className="h-3 w-3" /></button></span>
                 ))}
               </div>
               <SubstatusAdd status={s} onDone={statuses.reload} />

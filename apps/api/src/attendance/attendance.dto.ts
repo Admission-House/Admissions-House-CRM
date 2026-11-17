@@ -47,6 +47,8 @@ export const settingsSchema = z
     halfDayBelowHours: z.number().min(0.5).max(24),
     /** Minutes without activity before a person is signed out. */
     idleTimeoutMin: z.number().int().min(5).max(480),
+    /** Minutes of break in a day after which the person is signed out. The allowance of each kind of break is when supervisors are told. */
+    breakHardLimitMinutes: z.number().int().min(10).max(480).default(100),
     /** 0 is Sunday, 6 is Saturday. */
     weeklyOffDays: z
       .array(z.number().int().min(0).max(6))

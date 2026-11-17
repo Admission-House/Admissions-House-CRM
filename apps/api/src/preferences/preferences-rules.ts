@@ -6,7 +6,6 @@
 export const START_PAGES = {
   dashboard: ['dashboard.read'],
   leads: ['lead.read'],
-  followups: ['followup.manage'],
   communications: ['video.host'],
   reports: ['report.read'],
   attendance: ['attendance.self', 'attendance.read'],

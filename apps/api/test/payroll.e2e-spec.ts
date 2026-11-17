@@ -47,13 +47,13 @@ function sheet(token: string, path: string, month: string, csv: string) {
 
 describe('entering a salary', () => {
   it('saves it, with net pay worked out by the database', async () => {
-    const res = await put(t.admin!, pay('lc1'));
+    const res = await put(t.sa!, pay('lc1'));
     expect(res.statusCode, res.body).toBe(200);
-    expect(res.json()).toMatchObject({ month: MONTH, basePay: 30000, allowances: 2500.5, deductions: 1200.25, netPay: 31300.25, user: { name: 'lc1' }, enteredBy: 'admin' });
+    expect(res.json()).toMatchObject({ month: MONTH, basePay: 30000, allowances: 2500.5, deductions: 1200.25, netPay: 31300.25, user: { name: 'lc1' }, enteredBy: 'super' });
   });
 
   it('changes the same month again instead of adding a second record, and logs who changed what', async () => {
-    const first = (await put(t.admin!, pay('lc2'))).json();
+    const first = (await put(t.sa!, pay('lc2'))).json();
     const second = await put(t.sa!, pay('lc2', MONTH, { basePay: 35000, notes: 'Raise' }));
     expect(second.json().id).toBe(first.id);
     expect(second.json()).toMatchObject({ basePay: 35000, netPay: 36300.25, notes: 'Raise', enteredBy: 'super' });
@@ -65,17 +65,18 @@ describe('entering a salary', () => {
   });
 
   it('refuses amounts that make no sense', async () => {
-    expect(errorCode(await put(t.admin!, pay('lc1', MONTH, { deductions: 99999 })))).toBe('NET_NEGATIVE');
-    expect(errorCode(await put(t.admin!, pay('lc1', MONTH, { basePay: -1 })))).toBe('VALIDATION_FAILED');
-    expect(errorCode(await put(t.admin!, pay('lc1', MONTH, { basePay: 100.123 })))).toBe('VALIDATION_FAILED');
-    expect(errorCode(await put(t.admin!, pay('lc1', 'October')))).toBe('MONTH_INVALID');
-    expect(errorCode(await put(t.admin!, pay('lc1', '2090-01')))).toBe('MONTH_IN_FUTURE');
+    expect(errorCode(await put(t.sa!, pay('lc1', MONTH, { deductions: 99999 })))).toBe('NET_NEGATIVE');
+    expect(errorCode(await put(t.sa!, pay('lc1', MONTH, { basePay: -1 })))).toBe('VALIDATION_FAILED');
+    expect(errorCode(await put(t.sa!, pay('lc1', MONTH, { basePay: 100.123 })))).toBe('VALIDATION_FAILED');
+    expect(errorCode(await put(t.sa!, pay('lc1', 'October')))).toBe('MONTH_INVALID');
+    expect(errorCode(await put(t.sa!, pay('lc1', '2090-01')))).toBe('MONTH_IN_FUTURE');
   });
 
-  it('stays within the Admin\'s team, and never for oneself', async () => {
-    expect((await put(t.admin2!, pay('lc1'))).statusCode).toBe(404);
-    expect((await put(t.admin!, { ...pay('lc1'), userId: fx.user('admin2').id })).statusCode).toBe(404);
-    const own = await put(t.admin!, pay('admin'));
+  it('is a Super Admin action: an Admin cannot enter a salary directly, and nobody enters their own', async () => {
+    // An Admin prepares salaries through the monthly run, which the Super Admin approves; a direct entry has no such step.
+    expect((await put(t.admin!, pay('lc1'))).statusCode).toBe(403);
+    expect((await api.call('POST', '/salaries/bulk', t.admin!, { month: PREVIOUS, rows: [{ userId: fx.user('lc1').id, basePay: 1 }] })).statusCode).toBe(403);
+    const own = await put(t.sa!, pay('super'));
     expect(own.statusCode).toBe(403);
     expect(errorCode(own)).toBe('OWN_SALARY');
     expect((await put(t.lc1!, pay('lc2'))).statusCode).toBe(403);
@@ -83,18 +84,18 @@ describe('entering a salary', () => {
   });
 
   it('saves several employees together or none at all', async () => {
-    const ok = await api.call('POST', '/salaries/bulk', t.admin!, { month: PREVIOUS, rows: [{ userId: fx.user('lc1').id, basePay: 20000 }, { userId: fx.user('lc2').id, basePay: 22000, deductions: 500 }] });
+    const ok = await api.call('POST', '/salaries/bulk', t.sa!, { month: PREVIOUS, rows: [{ userId: fx.user('lc1').id, basePay: 20000 }, { userId: fx.user('lc2').id, basePay: 22000, deductions: 500 }] });
     expect(ok.statusCode, ok.body).toBe(200);
     expect(ok.json().saved.map((s: { netPay: number }) => s.netPay)).toEqual([20000, 21500]);
 
     const before = Number((await owner.query(`SELECT count(*) FROM salary_records WHERE tenant_id = $1`, [fx.tenantId])).rows[0].count);
-    const bad = await api.call('POST', '/salaries/bulk', t.admin!, {
+    const bad = await api.call('POST', '/salaries/bulk', t.sa!, {
       month: '2026-01',
-      rows: [{ userId: fx.user('lc1').id, basePay: 1000 }, { userId: fx.user('lc2').id, basePay: 100, deductions: 900 }, { userId: fx.user('admin2').id, basePay: 5 }, { userId: fx.user('lc1').id, basePay: 2 }],
+      rows: [{ userId: fx.user('lc1').id, basePay: 1000 }, { userId: fx.user('lc2').id, basePay: 100, deductions: 900 }, { userId: fx.user('super').id, basePay: 5 }, { userId: fx.user('lc1').id, basePay: 2 }],
     });
     expect(bad.statusCode).toBe(422);
     expect(errorCode(bad)).toBe('BULK_REJECTED');
-    expect(bad.json().error.details.problems.map((p: { index: number }) => p.index)).toEqual([1, 2, 3]);
+    expect(bad.json().error.details.problems.map((p: { index: number }) => p.index)).toEqual([1, 2, 3]); // net below zero, nobody's own, and a repeat
     expect(Number((await owner.query(`SELECT count(*) FROM salary_records WHERE tenant_id = $1`, [fx.tenantId])).rows[0].count)).toBe(before);
   });
 });
@@ -149,7 +150,7 @@ describe('seeing salaries', () => {
   });
 
   it('shows the month\'s attendance beside a record, for reference only', async () => {
-    const id = (await put(t.admin!, pay('lc1'))).json().id;
+    const id = (await put(t.sa!, pay('lc1'))).json().id;
     const d = await api.call('GET', `/salaries/${id}`, t.admin!);
     expect(d.json().attendance).toMatchObject({ userId: fx.user('lc1').id });
     const a = d.json().attendance;
@@ -177,29 +178,30 @@ describe('seeing salaries', () => {
 
 describe('importing a salary sheet', () => {
   it('previews, then saves the good rows and reports the rest', async () => {
-    const csv = ['Email,Basic Salary,Allowances,Deductions,Remarks', `${await emailOf('lc1')},"₹ 40,000",1000,500,Oct`, `${await emailOf('lc2')},25000,,,`, 'nobody@example.com,100,,,', `${await emailOf('admin2')},100,,,`, `${await emailOf('admin')},100,,,`, 'bad,x,,,'].join('\n');
+    const csv = ['Email,Basic Salary,Allowances,Deductions,Remarks', `${await emailOf('lc1')},"₹ 40,000",1000,500,Oct`, `${await emailOf('lc2')},25000,,,`, 'nobody@example.com,100,,,', `${await emailOf('admin2')},100,,,`, `${await emailOf('super')},100,,,`, 'bad,x,,,'].join('\n');
     const month = '2026-02';
-    const preview = await sheet(t.admin!, '/preview', month, csv);
+    const preview = await sheet(t.sa!, '/preview', month, csv);
     expect(preview.statusCode, preview.body).toBe(200);
-    expect(preview.json()).toMatchObject({ month, rows: 6, toAdd: 2, toChange: 0, applied: false });
-    expect(preview.json().problems.map((p: { row: number }) => p.row)).toEqual([4, 5, 6, 7]);
+    expect(preview.json()).toMatchObject({ month, rows: 6, toAdd: 3, toChange: 0, applied: false });
+    expect(preview.json().problems.map((p: { row: number }) => p.row)).toEqual([4, 6, 7]); // nobody, one's own, and a row that is not a person
     expect(Number((await owner.query(`SELECT count(*) FROM salary_records WHERE month = '2026-02-01'`)).rows[0].count)).toBe(0);
 
-    const done = await sheet(t.admin!, '', month, csv);
-    expect(done.json()).toMatchObject({ applied: true, toAdd: 2, problems: expect.any(Array) });
+    const done = await sheet(t.sa!, '', month, csv);
+    expect(done.json()).toMatchObject({ applied: true, toAdd: 3, problems: expect.any(Array) });
     const saved = (await owner.query(`SELECT u.name, s.net_pay::float AS net, s.batch_id FROM salary_records s JOIN users u ON u.id = s.user_id WHERE s.month = '2026-02-01' ORDER BY u.name`)).rows;
-    expect(saved).toEqual([{ name: 'lc1', net: 40500, batch_id: done.json().batchId }, { name: 'lc2', net: 25000, batch_id: done.json().batchId }]);
-    expect((await owner.query(`SELECT rows_total, rows_ok, rows_failed FROM salary_import_batches WHERE id = $1`, [done.json().batchId])).rows[0]).toEqual({ rows_total: 6, rows_ok: 2, rows_failed: 4 });
+    expect(saved).toEqual([{ name: 'admin2', net: 100, batch_id: done.json().batchId }, { name: 'lc1', net: 40500, batch_id: done.json().batchId }, { name: 'lc2', net: 25000, batch_id: done.json().batchId }]);
+    expect((await owner.query(`SELECT rows_total, rows_ok, rows_failed FROM salary_import_batches WHERE id = $1`, [done.json().batchId])).rows[0]).toEqual({ rows_total: 6, rows_ok: 3, rows_failed: 3 });
 
-    const again = await sheet(t.admin!, '/preview', month, csv);
-    expect(again.json()).toMatchObject({ toAdd: 0, toChange: 2 });
+    const again = await sheet(t.sa!, '/preview', month, csv);
+    expect(again.json()).toMatchObject({ toAdd: 0, toChange: 3 });
   });
 
   it('asks for the columns it needs, and checks the month and the permission', async () => {
-    const noCols = await sheet(t.admin!, '', MONTH, 'Name,Pay\na,1\n');
+    const noCols = await sheet(t.sa!, '', MONTH, 'Name,Pay\na,1\n');
     expect(noCols.statusCode).toBe(422);
     expect(errorCode(noCols)).toBe('MAPPING_INCOMPLETE');
-    expect(errorCode(await sheet(t.admin!, '', 'soon', 'Email,Base Pay\n'))).toBe('MONTH_INVALID');
+    expect(errorCode(await sheet(t.sa!, '', 'soon', 'Email,Base Pay\n'))).toBe('MONTH_INVALID');
     expect((await sheet(t.lc1!, '', MONTH, 'Email,Base Pay\n')).statusCode).toBe(403);
+    expect((await sheet(t.admin!, '', MONTH, 'Email,Base Pay\n')).statusCode).toBe(403); // an Admin cannot import salaries directly either
   });
 });

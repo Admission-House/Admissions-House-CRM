@@ -135,6 +135,8 @@ export const createStatusSchema = z.object({
   isOpen: z.boolean(),
   /** Ask for the next follow-up whenever a lead is moved to this status. */
   requiresFollowup: z.boolean(),
+  /** Ask for a sub-status (the reason) whenever a lead is moved to this status. */
+  requiresSubstatus: z.boolean().optional(),
   sortOrder: z.number().int().min(0).max(10_000).optional(),
 });
 export class CreateStatusDto extends createZodDto(createStatusSchema) {}
@@ -145,5 +147,10 @@ export const updateStatusSchema = createStatusSchema
   .refine((v) => Object.keys(v).length > 0, 'Send at least one field to change');
 export class UpdateStatusDto extends createZodDto(updateStatusSchema) {}
 
-export const createSubstatusSchema = z.object({ name: z.string().trim().min(2).max(60), sortOrder: z.number().int().min(0).max(10_000).optional() });
+export const createSubstatusSchema = z.object({
+  name: z.string().trim().min(2).max(60),
+  /** A comment must be written whenever this sub-status is chosen, as for "Other reasons". */
+  requiresComment: z.boolean().optional(),
+  sortOrder: z.number().int().min(0).max(10_000).optional(),
+});
 export class CreateSubstatusDto extends createZodDto(createSubstatusSchema) {}

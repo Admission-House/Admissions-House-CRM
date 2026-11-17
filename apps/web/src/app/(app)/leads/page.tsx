@@ -143,7 +143,11 @@ function Leads() {
     return () => clearTimeout(t);
   }, [typed, set]);
 
-  const query = useMemo(() => ({ ...Object.fromEntries(Object.entries(filters).filter(([, v]) => v)), limit: PAGE_SIZE }), [filters]);
+  // The Follow-up queue is a list of calls to make: the one due soonest comes first, unless the person chose another order.
+  const query = useMemo(
+    () => ({ ...Object.fromEntries(Object.entries(filters).filter(([, v]) => v)), ...(filters.queue === 'followup' && !filters.sort && { sort: 'followup' }), limit: PAGE_SIZE }),
+    [filters],
+  );
   const queryKey = JSON.stringify(query);
   const first = useApi<Page<LeadListItem>>('/leads', query);
   const loading = first.loading && !first.data;
@@ -228,6 +232,23 @@ function Leads() {
           );
         })}
       </div>
+
+      {filters.queue === 'followup' && (
+        <div className="mb-3 flex flex-wrap items-center gap-2 text-sm" role="group" aria-label="When the call is due">
+          {([['', 'All'], ['today', 'Due today'], ['upcoming', 'Later']] as const).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              aria-pressed={filters.followup === key}
+              onClick={() => set({ followup: key })}
+              className={cx('rounded-full border px-3 py-1 text-xs font-medium', filters.followup === key ? 'border-brand bg-brand text-white' : 'border-line bg-white/70 text-muted hover:text-ink')}
+            >
+              {label}
+            </button>
+          ))}
+          <span className="text-xs text-subtle">A call whose time has passed moves to Missed leads.</span>
+        </div>
+      )}
 
       <Card className="mb-3">
         <div className="flex flex-wrap items-center gap-2 p-3">

@@ -40,14 +40,14 @@ export class PayrollController {
   ) {}
 
   /** Adds or changes one employee's salary for a month. */
-  @RequirePermissions('salary.write')
+  @RequirePermissions('payroll.manage')
   @Put()
   save(@CurrentAuth() auth: AuthContext, @Body() body: SaveDto) {
     return this.payroll.save(auth, body);
   }
 
   /** Several employees for one month. All are saved, or none. */
-  @RequirePermissions('salary.write')
+  @RequirePermissions('payroll.manage')
   @Post('bulk')
   @HttpCode(200)
   bulk(@CurrentAuth() auth: AuthContext, @Body() body: BulkDto) {
@@ -55,7 +55,7 @@ export class PayrollController {
   }
 
   /** What importing a salary sheet would do. Nothing is saved. */
-  @RequirePermissions('salary.import')
+  @RequirePermissions('payroll.manage')
   @ApiConsumes('multipart/form-data')
   @Heavy()
   @Post('import/preview')
@@ -64,7 +64,7 @@ export class PayrollController {
     return this.payroll.importSheet(auth, await this.read(req), false);
   }
 
-  @RequirePermissions('salary.import')
+  @RequirePermissions('payroll.manage')
   @ApiConsumes('multipart/form-data')
   @Heavy()
   @Post('import')

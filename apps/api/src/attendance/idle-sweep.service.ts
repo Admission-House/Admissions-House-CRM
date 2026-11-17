@@ -13,6 +13,9 @@ export interface SweepResult {
   idleEnded: number;
   expiredEnded: number;
   notified: number;
+  /** People told that a break ran over its allowance, and people whose break reached the day's limit and were signed out. */
+  breaksWarned?: number;
+  breaksStopped?: number;
 }
 
 /**
@@ -58,9 +61,11 @@ export class IdleSweepService implements OnModuleInit {
   /** One pass over every active company. Safe to run on several servers at once. */
   async sweepOnce(): Promise<SweepResult> {
     const { rows } = await sql<{ id: string }>`SELECT list_active_tenant_ids() AS id`.execute(this.db.unscoped());
-    const total: SweepResult = { idleEnded: 0, expiredEnded: 0, notified: 0, shiftEndClosed: 0 };
+    const total: SweepResult = { idleEnded: 0, expiredEnded: 0, notified: 0, shiftEndClosed: 0, breaksWarned: 0, breaksStopped: 0 };
     for (const { id } of rows) {
       const result = await this.db.withTenant(id, (trx) => this.sweepTenant(trx, id));
+      total.breaksWarned = (total.breaksWarned ?? 0) + (result.breaksWarned ?? 0);
+      total.breaksStopped = (total.breaksStopped ?? 0) + (result.breaksStopped ?? 0);
       total.idleEnded += result.idleEnded;
       total.expiredEnded += result.expiredEnded;
       total.notified += result.notified;
@@ -83,7 +88,7 @@ export class IdleSweepService implements OnModuleInit {
 
     const { rows: idle } = await sql<{ user_id: string; last_active_at: Date }>`
       UPDATE user_sessions s SET ended_at = now(), ended_reason = 'inactivity'
-      WHERE s.ended_at IS NULL AND s.last_active_at < now() - make_interval(mins => GREATEST(${idleMin}, ${onBreakQuietMinutes}))
+      WHERE s.ended_at IS NULL AND s.last_active_at < now() - make_interval(mins => GREATEST(${idleMin}, COALESCE(${onBreakQuietMinutes}, 0)))
       RETURNING s.user_id, s.last_active_at`.execute(trx);
 
     const { rows: expired } = await sql<{ id: string }>`
@@ -92,6 +97,7 @@ export class IdleSweepService implements OnModuleInit {
       RETURNING id`.execute(trx);
 
     const shiftEndClosed = await this.closeDaysAtShiftEnd(trx);
+    const breaks = await this.sweepBreaks(trx, tenantId);
 
     let notified = 0;
     if (idle.length > 0) {
@@ -106,7 +112,52 @@ export class IdleSweepService implements OnModuleInit {
         notified += rowCount;
       }
     }
-    return { idleEnded: idle.length, expiredEnded: expired.length, notified, shiftEndClosed };
+    return { idleEnded: idle.length, expiredEnded: expired.length, notified, shiftEndClosed, breaksWarned: breaks.warned, breaksStopped: breaks.stopped };
+  }
+
+  /**
+   * Breaks that are running right now. One that has gone past the allowance of its kind is told to the supervisors, once a
+   * day, without waiting for it to end. One that has brought the day's break time to the hard limit is ended and its
+   * person is signed out. The sign-out closes their attendance through the database trigger, like any other.
+   */
+  private async sweepBreaks(trx: Trx, tenantId: string): Promise<{ warned: number; stopped: number }> {
+    const { rows } = await sql<{ attendance_id: string; user_id: string; user_name: string; break_id: string; break_name: string; allowed: number; kind_used: number; day_used: number; warned: boolean; hard: number }>`
+      WITH limit_now AS (
+        SELECT COALESCE((SELECT a.break_hard_limit_minutes FROM attendance_settings a, tenants t
+                         WHERE a.effective_from <= (now() AT TIME ZONE t.timezone)::date ORDER BY a.effective_from DESC LIMIT 1), 100) AS hard)
+      SELECT a.id AS attendance_id, a.user_id, u.name AS user_name, b.id AS break_id, bt.name AS break_name, bt.allowed_minutes AS allowed,
+             (SELECT COALESCE(floor(sum(EXTRACT(EPOCH FROM COALESCE(x.ended_at, now()) - x.started_at)) / 60)::int, 0)
+                FROM break_logs x WHERE x.attendance_id = a.id AND x.break_type_id = b.break_type_id) AS kind_used,
+             (SELECT COALESCE(floor(sum(EXTRACT(EPOCH FROM COALESCE(x.ended_at, now()) - x.started_at)) / 60)::int, 0)
+                FROM break_logs x WHERE x.attendance_id = a.id) AS day_used,
+             (a.break_warned_at IS NOT NULL) AS warned, (SELECT hard FROM limit_now) AS hard
+      FROM break_logs b
+      JOIN attendance_records a ON a.id = b.attendance_id
+      JOIN users u ON u.id = a.user_id
+      JOIN break_types bt ON bt.id = b.break_type_id
+      WHERE b.ended_at IS NULL`.execute(trx);
+
+    let warned = 0;
+    let stopped = 0;
+    for (const r of rows) {
+      if (r.day_used >= r.hard) {
+        await sql`UPDATE break_logs SET ended_at = now() WHERE id = ${r.break_id} AND ended_at IS NULL`.execute(trx);
+        await sql`UPDATE user_sessions SET ended_at = now(), ended_reason = 'revoked' WHERE user_id = ${r.user_id} AND ended_at IS NULL`.execute(trx);
+        await this.notifications.notifyOversight(trx, {
+          tenantId,
+          payload: { event: 'break_limit_signout', userId: r.user_id, userName: r.user_name, usedMinutes: r.day_used, limitMinutes: r.hard },
+        });
+        stopped++;
+      } else if (r.kind_used > r.allowed && !r.warned) {
+        await sql`UPDATE attendance_records SET break_warned_at = now() WHERE id = ${r.attendance_id}`.execute(trx);
+        await this.notifications.notifyOversight(trx, {
+          tenantId,
+          payload: { event: 'break_over', userId: r.user_id, userName: r.user_name, breakName: r.break_name, allowedMinutes: r.allowed, usedMinutes: r.kind_used },
+        });
+        warned++;
+      }
+    }
+    return { warned, stopped };
   }
 
   /**

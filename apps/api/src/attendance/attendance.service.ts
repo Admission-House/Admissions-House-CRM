@@ -116,6 +116,7 @@ export class AttendanceService {
           : null,
         breakMinutesToday: r?.break_minutes ?? 0,
         /** Each kind of break with the minutes of it used today, so a screen can show what is left. */
+        hardLimitMinutes: settings?.break_hard_limit_minutes ?? 100,
         breaks: kinds.map((k) => ({ id: k.id, name: k.name, allowedMinutes: k.allowed_minutes, usedMinutes: k.used })),
         shift: settings && {
           start: settings.shift_start.slice(0, 5),
@@ -138,8 +139,10 @@ export class AttendanceService {
 
       const running = await trx.selectFrom('break_logs').select('id').where('attendance_id', '=', open.id).where('ended_at', 'is', null).executeTakeFirst();
       if (running) throw AppError.conflict('BREAK_ALREADY_OPEN', 'You are already on a break. End it first.');
-      if ((await this.minutesUsed(trx, open.id, type.id)) >= type.allowed_minutes) {
-        throw AppError.conflict('BREAK_ALLOWANCE_USED', `You have already taken your ${type.allowed_minutes} minutes of ${type.name.toLowerCase()} today.`);
+      // The day's break time has a hard limit; past the allowance of a kind the supervisors are told, but it is not refused.
+      const limit = (await this.repo.currentSettings(trx))?.break_hard_limit_minutes ?? 100;
+      if ((await this.dayBreakMinutes(trx, open.id)) >= limit) {
+        throw AppError.conflict('BREAK_LIMIT_REACHED', `You have used all ${limit} minutes of break time for today.`);
       }
 
       const row = await trx
@@ -172,10 +175,14 @@ export class AttendanceService {
       const used = await this.minutesUsed(trx, open.id, type.id);
       // Going over the day's allowance is told to the people who oversee attendance, once, when the break ends.
       if (used > type.allowed_minutes) {
-        await this.notifications.notifyOversight(trx, {
-          tenantId: auth.tenantId,
-          payload: { event: 'break_over', userId: auth.userId, userName: auth.name, breakName: type.name, allowedMinutes: type.allowed_minutes, usedMinutes: used },
-        });
+        // Once a day: the sweep may already have told them while the break was still running.
+        const { rows: first } = await sql<{ id: string }>`UPDATE attendance_records SET break_warned_at = now() WHERE id = ${open.id} AND break_warned_at IS NULL RETURNING id`.execute(trx);
+        if (first.length > 0) {
+          await this.notifications.notifyOversight(trx, {
+            tenantId: auth.tenantId,
+            payload: { event: 'break_over', userId: auth.userId, userName: auth.name, breakName: type.name, allowedMinutes: type.allowed_minutes, usedMinutes: used },
+          });
+        }
       }
       return {
         id: ended.id,
@@ -308,6 +315,14 @@ export class AttendanceService {
       .executeTakeFirst();
     if (!open) throw AppError.conflict('NOT_CHECKED_IN', 'You are not checked in. Sign in from the office first.');
     return open;
+  }
+
+  /** Minutes of break taken so far today, of every kind, counting one that is still running. */
+  private async dayBreakMinutes(trx: Trx, attendanceId: string): Promise<number> {
+    const { rows } = await sql<{ m: number }>`
+      SELECT COALESCE(floor(sum(EXTRACT(EPOCH FROM COALESCE(ended_at, now()) - started_at)) / 60)::int, 0) AS m
+      FROM break_logs WHERE attendance_id = ${attendanceId}`.execute(trx);
+    return rows[0]!.m;
   }
 
   private async minutesUsed(trx: Trx, attendanceId: string, breakTypeId: string): Promise<number> {

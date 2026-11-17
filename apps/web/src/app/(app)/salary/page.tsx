@@ -271,8 +271,8 @@ export default function SalaryPage() {
     can('salary.read') && { key: 'structures' as const, label: 'Salary structures' },
     can('salary.read') && { key: 'policy' as const, label: 'Payroll rules' },
     can('salary.read') && { key: 'report' as const, label: 'Monthly report' },
-    can('salary.write') && { key: 'bulk' as const, label: 'Type in a month' },
-    can('salary.import') && { key: 'import' as const, label: 'Upload sheet' },
+    can('payroll.manage') && { key: 'bulk' as const, label: 'Type in a month' },
+    can('payroll.manage') && { key: 'import' as const, label: 'Upload sheet' },
   ].filter(Boolean) as { key: TabKey; label: string }[];
   const [tab, setTab] = useState<TabKey>(tabs[0]?.key ?? 'mine');
   const active = tabs.some((t) => t.key === tab) ? tab : tabs[0]?.key;

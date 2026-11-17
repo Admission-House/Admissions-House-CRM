@@ -19,17 +19,12 @@
     }
   ],
   "crons": [
-    {
-      "path": "/api/v1/internal/jobs/minute",
-      "schedule": "* 4-14 * * 1-6"
-    },
-    {
-      "path": "/api/v1/internal/jobs/quarter",
-      "schedule": "*/15 4-14 * * 1-6"
-    },
-    {
-      "path": "/api/v1/internal/jobs/daily",
-      "schedule": "30 20 * * *"
-    }
+    { "path": "/api/v1/internal/jobs/minute", "schedule": "30-59 4 * * 1-6" },
+    { "path": "/api/v1/internal/jobs/minute", "schedule": "* 5-12 * * 1-6" },
+    { "path": "/api/v1/internal/jobs/minute", "schedule": "0-30 13 * * 1-6" },
+    { "path": "/api/v1/internal/jobs/quarter", "schedule": "30,45 4 * * 1-6" },
+    { "path": "/api/v1/internal/jobs/quarter", "schedule": "*/15 5-12 * * 1-6" },
+    { "path": "/api/v1/internal/jobs/quarter", "schedule": "0,15,30 13 * * 1-6" },
+    { "path": "/api/v1/internal/jobs/daily", "schedule": "30 20 * * *" }
   ]
 }

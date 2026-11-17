@@ -2,7 +2,6 @@
 export const START_PAGE_PATHS = {
   dashboard: '/dashboard',
   leads: '/leads',
-  followups: '/followups',
   communications: '/communications',
   reports: '/reports',
   attendance: '/attendance',
@@ -13,7 +12,6 @@ export type StartPageKey = keyof typeof START_PAGE_PATHS;
 export const START_PAGE_LABELS: Record<StartPageKey, string> = {
   dashboard: 'Dashboard',
   leads: 'All leads',
-  followups: 'Follow-ups',
   communications: 'Calls and meetings',
   reports: 'Reports',
   attendance: 'Attendance',

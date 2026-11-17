@@ -82,7 +82,7 @@ describe('start page', () => {
 
   it('refuses a page the person may not open, and a made-up one', async () => {
     const view = (await api.call('GET', '/me/preferences', t.lc!)).json();
-    const missing = ['dashboard', 'leads', 'followups', 'communications', 'reports', 'attendance'].find((p) => !view.startPages.includes(p));
+    const missing = ['dashboard', 'leads', 'communications', 'reports', 'attendance'].find((p) => !view.startPages.includes(p));
     if (missing) {
       const r = await api.call('PUT', '/me/preferences', t.lc!, { startPage: missing });
       expect(r.statusCode).toBe(400);

@@ -11,6 +11,7 @@ export interface SettingsRow {
   half_day_below_hours: string;
   idle_timeout_min: number;
   weekly_off_days: number[];
+  break_hard_limit_minutes: number;
 }
 
 /**
@@ -30,7 +31,7 @@ export class AttendanceRepository {
     const { rows } = await sql<SettingsRow>`
       SELECT a.id, a.effective_from::text AS effective_from, a.shift_start::text AS shift_start,
              a.shift_end::text AS shift_end, a.grace_minutes, a.half_day_below_hours::text AS half_day_below_hours,
-             a.idle_timeout_min, a.weekly_off_days::int[] AS weekly_off_days
+             a.idle_timeout_min, a.weekly_off_days::int[] AS weekly_off_days, a.break_hard_limit_minutes
       FROM attendance_settings a, tenants t
       WHERE a.effective_from <= (now() AT TIME ZONE t.timezone)::date
       ORDER BY a.effective_from DESC LIMIT 1`.execute(trx);

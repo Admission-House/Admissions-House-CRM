@@ -3,6 +3,7 @@
 import { Check, CircleDot, FileText, MessageSquare, PhoneCall, RefreshCw, Repeat, UserCheck, CalendarClock, Clock } from 'lucide-react';
 import { useState } from 'react';
 import { Badge, Button, Card, Empty, Field, Input, Notice, Select, Spinner, Textarea, cx } from '@/components/ui';
+import { Modal } from '@/components/ui/modal';
 import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { fmtDateTime, fromNow } from '@/lib/format';
@@ -55,10 +56,14 @@ export function StatusPanel({ lead, onChanged }: { lead: LeadDetail; onChanged: 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [map, setMap] = useState(false);
 
   const options = statuses.data?.filter((s) => s.isActive !== false) ?? [];
   const chosen = options.find((s) => s.id === (statusId || lead.status.id));
   const changing = !!statusId && statusId !== lead.status.id;
+  const reasonNeeded = !!chosen?.requiresSubstatus && changing;
+  const chosenReason = chosen?.substatuses?.find((s) => s.id === substatusId);
+  const commentNeeded = !!chosenReason?.requiresComment;
   const needsDate = !!chosen && chosen.isOpen && chosen.requiresFollowup && (changing || lead.openFollowUps === 0) && lead.openFollowUps === 0;
 
   if (!can('lead.update')) return null;
@@ -93,32 +98,59 @@ export function StatusPanel({ lead, onChanged }: { lead: LeadDetail; onChanged: 
 
   return (
     <Card className="p-5">
-      <h2 className="text-sm font-semibold text-ink">Update status</h2>
+      <h2 className="text-sm font-semibold text-ink">Dispose lead</h2>
       <form onSubmit={save} className="mt-4 space-y-4">
         {error && <Notice tone="bad">{error}</Notice>}
         {saved && <Notice tone="ok">Saved.</Notice>}
-        <Field label="Status" htmlFor="st">
+        <Field label="Lead status" htmlFor="st" required>
           <Select id="st" value={statusId || lead.status.id} onChange={(e) => { setStatusId(e.target.value); setSubstatusId(''); }}>
             {options.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </Select>
         </Field>
         {chosen?.substatuses && chosen.substatuses.length > 0 && (
-          <Field label="Sub-status" htmlFor="sub">
-            <Select id="sub" value={substatusId} onChange={(e) => setSubstatusId(e.target.value)}>
-              <option value="">None</option>
-              {chosen.substatuses.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          <Field label="Lead sub-status" htmlFor="sub" required={reasonNeeded}>
+            <Select id="sub" value={substatusId} onChange={(e) => setSubstatusId(e.target.value)} required={reasonNeeded}>
+              <option value="">{reasonNeeded ? 'Select a reason' : 'None'}</option>
+              {chosen.substatuses.map((s) => <option key={s.id} value={s.id}>{s.name}{s.requiresComment ? ' (comments required)' : ''}</option>)}
             </Select>
           </Field>
         )}
+        <button type="button" onClick={() => setMap(true)} className="-mt-2 text-xs font-medium text-info hover:underline">View all dependencies</button>
         {can('followup.manage') && chosen?.isOpen && (
           <Field label={needsDate ? 'Next follow-up (required)' : 'Next follow-up (optional)'} htmlFor="due">
             <Input id="due" type="datetime-local" min={minLocal()} value={due} onChange={(e) => setDue(e.target.value)} required={needsDate} />
           </Field>
         )}
-        <Field label="Remark" htmlFor="rm"><Textarea id="rm" value={remark} onChange={(e) => setRemark(e.target.value)} maxLength={1000} placeholder="What was discussed?" /></Field>
+        <Field label={commentNeeded ? 'Comments (required)' : 'Comments'} htmlFor="rm" required={commentNeeded}>
+          <Textarea id="rm" value={remark} onChange={(e) => setRemark(e.target.value)} maxLength={1000} required={commentNeeded} placeholder="What was discussed?" />
+        </Field>
         <Button type="submit" loading={busy} className="w-full">Save</Button>
       </form>
+      {map && <DependencyMap statuses={options} onClose={() => setMap(false)} />}
     </Card>
+  );
+}
+
+/** Every status with the reasons (sub-statuses) that can be chosen under it, so a person can see the whole list at once. */
+function DependencyMap({ statuses, onClose }: { statuses: StatusOption[]; onClose: () => void }) {
+  return (
+    <Modal title="Statuses and their reasons" onClose={onClose}>
+      <p className="mb-3 text-xs text-muted">A status marked * needs one of its reasons to be chosen. A reason marked (comments required) needs a comment.</p>
+      <ul className="max-h-[60vh] space-y-3 overflow-y-auto">
+        {statuses.map((s) => (
+          <li key={s.id} className="rounded-md border border-line px-3 py-2">
+            <p className="text-sm font-medium text-ink">{s.name}{s.requiresSubstatus ? ' *' : ''}</p>
+            {s.substatuses && s.substatuses.length > 0 ? (
+              <ul className="mt-1 space-y-0.5 text-xs text-muted">
+                {s.substatuses.map((x) => <li key={x.id}>{x.name}{x.requiresComment ? ' (comments required)' : ''}</li>)}
+              </ul>
+            ) : (
+              <p className="mt-1 text-xs text-subtle">No reasons to choose from.</p>
+            )}
+          </li>
+        ))}
+      </ul>
+    </Modal>
   );
 }
 

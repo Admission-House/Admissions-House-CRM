@@ -547,6 +547,7 @@ export class LeadsService {
         (dto.substatusId === undefined || dto.substatusId === lead.substatus_id);
 
       if (!sameStatus) {
+        this.assertDisposition(status, !!dto.substatusId, dto.remark);
         assertFollowUpForStatus(
           { name: status.name, requiresFollowup: status.requires_followup, isOpen: status.is_open },
           !!dto.followUp,
@@ -612,6 +613,7 @@ export class LeadsService {
   bulkStatus(auth: AuthContext, dto: BulkStatusDto) {
     return this.db.withTenant(auth.tenantId, async (trx) => {
       const status = await this.requireStatus(trx, dto.statusId, dto.substatusId);
+      this.assertDisposition(status, !!dto.substatusId, dto.remark);
       if (status.requires_followup && status.is_open) {
         throw AppError.badRequest(
           'BULK_FOLLOWUP_STATUS',
@@ -1086,8 +1088,11 @@ export class LeadsService {
       is_open: boolean;
       requires_followup: boolean;
       substatus_name: string | null;
+      requires_substatus: boolean;
+      substatus_requires_comment: boolean;
     }>`
-      SELECT s.id, s.name, s.is_open, s.requires_followup, ss.name AS substatus_name
+      SELECT s.id, s.name, s.is_open, s.requires_followup, s.requires_substatus, ss.name AS substatus_name,
+             COALESCE(ss.requires_comment, false) AS substatus_requires_comment
       FROM lead_statuses s
       LEFT JOIN lead_substatuses ss ON ss.id = ${substatusId ?? null}::uuid AND ss.status_id = s.id
       WHERE s.id = ${statusId} AND s.is_active
@@ -1099,6 +1104,23 @@ export class LeadsService {
         'Choose a status that is in use (and a sub-status that belongs to it)',
       );
     return rows[0];
+  }
+
+  /**
+   * The rules of disposing a lead: some statuses need the reason chosen (a sub-status), and some reasons need a
+   * comment ("Other reasons"). Only a change of status is checked, so saving the same status again asks for nothing new.
+   */
+  private assertDisposition(
+    status: { name: string; requires_substatus: boolean; substatus_name: string | null; substatus_requires_comment: boolean },
+    substatusGiven: boolean,
+    remark: string | undefined,
+  ): void {
+    if (status.requires_substatus && !substatusGiven) {
+      throw invalid('SUBSTATUS_REQUIRED', 'substatusId', `Choose the reason for "${status.name}"`);
+    }
+    if (status.substatus_requires_comment && !(remark ?? '').trim()) {
+      throw invalid('COMMENT_REQUIRED', 'remark', `A comment is needed for "${status.substatus_name ?? 'this reason'}"`);
+    }
   }
 
   private async assertExists(

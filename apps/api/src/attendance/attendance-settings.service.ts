@@ -16,6 +16,8 @@ export interface SettingsView {
   halfDayBelowHours: number;
   idleTimeoutMin: number;
   weeklyOffDays: number[];
+  /** Minutes of break in a day after which the person is signed out. */
+  breakHardLimitMinutes: number;
 }
 
 export interface BreakTypeView {
@@ -54,14 +56,14 @@ export class AttendanceSettingsService {
       await sql`
         INSERT INTO attendance_settings
           (tenant_id, effective_from, shift_start, shift_end, grace_minutes, half_day_below_hours,
-           idle_timeout_min, weekly_off_days, created_by)
+           idle_timeout_min, weekly_off_days, break_hard_limit_minutes, created_by)
         VALUES (${auth.tenantId}, ${effectiveFrom}::date, ${dto.shiftStart}::time, ${dto.shiftEnd}::time,
                 ${dto.graceMinutes}, ${dto.halfDayBelowHours}, ${dto.idleTimeoutMin},
-                ${dto.weeklyOffDays}::smallint[], ${auth.userId})
+                ${dto.weeklyOffDays}::smallint[], ${dto.breakHardLimitMinutes}, ${auth.userId})
         ON CONFLICT (tenant_id, effective_from) DO UPDATE SET
           shift_start = EXCLUDED.shift_start, shift_end = EXCLUDED.shift_end, grace_minutes = EXCLUDED.grace_minutes,
           half_day_below_hours = EXCLUDED.half_day_below_hours, idle_timeout_min = EXCLUDED.idle_timeout_min,
-          weekly_off_days = EXCLUDED.weekly_off_days, created_by = EXCLUDED.created_by`.execute(trx);
+          weekly_off_days = EXCLUDED.weekly_off_days, break_hard_limit_minutes = EXCLUDED.break_hard_limit_minutes, created_by = EXCLUDED.created_by`.execute(trx);
 
       const after = await this.snapshot(trx);
       await this.audit.write(trx, {
@@ -129,7 +131,7 @@ export class AttendanceSettingsService {
     const { rows } = await sql<SettingsRow>`
       SELECT id, effective_from::text AS effective_from, shift_start::text AS shift_start, shift_end::text AS shift_end,
              grace_minutes, half_day_below_hours::text AS half_day_below_hours, idle_timeout_min,
-             weekly_off_days::int[] AS weekly_off_days
+             weekly_off_days::int[] AS weekly_off_days, break_hard_limit_minutes
       FROM attendance_settings ORDER BY effective_from DESC`.execute(trx);
     const views = rows.map(toSettings);
     const current = views.find((v) => v.effectiveFrom <= today) ?? null;
@@ -157,6 +159,7 @@ function toSettings(r: SettingsRow): SettingsView {
     halfDayBelowHours: Number(r.half_day_below_hours),
     idleTimeoutMin: r.idle_timeout_min,
     weeklyOffDays: r.weekly_off_days,
+    breakHardLimitMinutes: r.break_hard_limit_minutes,
   };
 }
 

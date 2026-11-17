@@ -232,7 +232,7 @@ function DayMatrix() {
 
 // ----------------------------------------------------------------- settings
 
-interface SettingsView { id: string; effectiveFrom: string; shiftStart: string; shiftEnd: string; graceMinutes: number; halfDayBelowHours: number; idleTimeoutMin: number; weeklyOffDays: number[] }
+interface SettingsView { id: string; effectiveFrom: string; shiftStart: string; shiftEnd: string; graceMinutes: number; halfDayBelowHours: number; idleTimeoutMin: number; breakHardLimitMinutes: number; weeklyOffDays: number[] }
 interface BreakType { id: string; name: string; allowedMinutes: number; isActive: boolean }
 interface AttendanceSettings { current: SettingsView | null; upcoming: SettingsView[]; history: SettingsView[]; breakTypes: BreakType[] }
 const WEEK = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -273,11 +273,11 @@ function BreakForm({ item, onClose, onSaved }: { item?: BreakType; onClose: () =
 function SettingsTab() {
   const data = useApi<AttendanceSettings>('/attendance/settings');
   const cur = data.data?.current;
-  const [draft, setDraft] = useState<{ shiftStart: string; shiftEnd: string; graceMinutes: string; halfDayBelowHours: string; idleTimeoutMin: string; weeklyOffDays: number[]; effectiveFrom: string } | null>(null);
+  const [draft, setDraft] = useState<{ shiftStart: string; shiftEnd: string; graceMinutes: string; halfDayBelowHours: string; idleTimeoutMin: string; breakHardLimitMinutes: string; weeklyOffDays: number[]; effectiveFrom: string } | null>(null);
   const [breakForm, setBreakForm] = useState<BreakType | 'new' | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null);
-  const form = draft ?? (cur ? { shiftStart: cur.shiftStart, shiftEnd: cur.shiftEnd, graceMinutes: String(cur.graceMinutes), halfDayBelowHours: String(cur.halfDayBelowHours), idleTimeoutMin: String(cur.idleTimeoutMin), weeklyOffDays: cur.weeklyOffDays, effectiveFrom: ymd(new Date()) } : null);
+  const form = draft ?? (cur ? { shiftStart: cur.shiftStart, shiftEnd: cur.shiftEnd, graceMinutes: String(cur.graceMinutes), halfDayBelowHours: String(cur.halfDayBelowHours), idleTimeoutMin: String(cur.idleTimeoutMin), breakHardLimitMinutes: String(cur.breakHardLimitMinutes), weeklyOffDays: cur.weeklyOffDays, effectiveFrom: ymd(new Date()) } : null);
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -285,7 +285,7 @@ function SettingsTab() {
     setBusy(true);
     setMsg(null);
     try {
-      await api('/attendance/settings', { method: 'PUT', body: { effectiveFrom: form.effectiveFrom, shiftStart: form.shiftStart, shiftEnd: form.shiftEnd, graceMinutes: Number(form.graceMinutes), halfDayBelowHours: Number(form.halfDayBelowHours), idleTimeoutMin: Number(form.idleTimeoutMin), weeklyOffDays: form.weeklyOffDays } });
+      await api('/attendance/settings', { method: 'PUT', body: { effectiveFrom: form.effectiveFrom, shiftStart: form.shiftStart, shiftEnd: form.shiftEnd, graceMinutes: Number(form.graceMinutes), halfDayBelowHours: Number(form.halfDayBelowHours), idleTimeoutMin: Number(form.idleTimeoutMin), breakHardLimitMinutes: Number(form.breakHardLimitMinutes), weeklyOffDays: form.weeklyOffDays } });
       setDraft(null);
       data.reload();
       setMsg({ tone: 'ok', text: 'Saved. Earlier days keep the rules they were lived under.' });
@@ -309,7 +309,8 @@ function SettingsTab() {
             <Field label="Shift ends" htmlFor="se"><Input id="se" type="time" value={form.shiftEnd} onChange={(e) => set('shiftEnd', e.target.value)} required /></Field>
             <Field label="Late after (minutes)" htmlFor="sg" hint="Minutes after the shift starts before a sign-in counts as late"><Input id="sg" inputMode="numeric" value={form.graceMinutes} onChange={(e) => set('graceMinutes', e.target.value)} required /></Field>
             <Field label="Half day below (hours)" htmlFor="sh" hint="Fewer worked hours than this makes a half day"><Input id="sh" inputMode="decimal" value={form.halfDayBelowHours} onChange={(e) => set('halfDayBelowHours', e.target.value)} required /></Field>
-            <Field label="Sign out after (minutes idle)" htmlFor="si" hint="A break does not pause this"><Input id="si" inputMode="numeric" value={form.idleTimeoutMin} onChange={(e) => set('idleTimeoutMin', e.target.value)} required /></Field>
+            <Field label="Sign out after (minutes idle)" htmlFor="si" hint="Not applied while someone is on a break"><Input id="si" inputMode="numeric" value={form.idleTimeoutMin} onChange={(e) => set('idleTimeoutMin', e.target.value)} required /></Field>
+            <Field label="Break time limit per day (minutes)" htmlFor="bl" hint="Supervisors are told when a break passes its allowance; at this limit the person is signed out"><Input id="bl" inputMode="numeric" value={form.breakHardLimitMinutes} onChange={(e) => set('breakHardLimitMinutes', e.target.value)} required /></Field>
             <Field label="Starts from" htmlFor="sf" hint="Cannot be a past day"><Input id="sf" type="date" min={ymd(new Date())} value={form.effectiveFrom} onChange={(e) => set('effectiveFrom', e.target.value)} required /></Field>
           </div>
           <fieldset>

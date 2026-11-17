@@ -371,7 +371,7 @@ describe('breaks', () => {
       await owner.query(`DELETE FROM attendance_records WHERE user_id = $1`, [fx.user(who).id]);
     });
 
-    it('is one 45 minute lunch and one 15 minute snack a day, shown with what is left', async () => {
+    it('is an allowance of minutes per kind of break per day, shown with what is left, and a hard limit for the whole day', async () => {
       const token = await checkIn(who);
       const lunch = await typeId('Lunch');
       const first = await start(token, lunch);
@@ -382,14 +382,23 @@ describe('breaks', () => {
       const mid = (await api.call('GET', '/attendance/me/today', token, undefined, OFFICE_IP)).json().breaks as { name: string; allowedMinutes: number; usedMinutes: number }[];
       expect(mid.find((b) => b.name === 'Lunch')).toMatchObject({ allowedMinutes: 45, usedMinutes: 30 });
 
-      // Lunch can be taken in two parts until the 45 minutes are used, and then not again.
+      // Lunch can be taken in parts. Using up the 45 minutes does not stop a break: only the day's hard limit does.
       const second = await start(token, lunch);
       expect(second.statusCode, second.body).toBe(200);
       await backdate(second.json().id, 15);
       await api.call('POST', '/attendance/breaks/end', token, undefined, OFFICE_IP);
-      const again = await start(token, lunch);
-      expect(again.statusCode).toBe(409);
-      expect(errorCode(again)).toBe('BREAK_ALLOWANCE_USED');
+      const beyond = await start(token, lunch);
+      expect(beyond.statusCode, beyond.body).toBe(200);
+      await api.call('POST', '/attendance/breaks/end', token, undefined, OFFICE_IP);
+      const today = (await api.call('GET', '/attendance/me/today', token, undefined, OFFICE_IP)).json();
+      expect(today.hardLimitMinutes).toBe(100);
+
+      // At the hard limit no more break can be started.
+      await owner.query(`UPDATE attendance_settings SET break_hard_limit_minutes = 45 WHERE tenant_id = $1`, [fx.tenantId]);
+      const refused = await start(token, lunch);
+      expect(refused.statusCode).toBe(409);
+      expect(errorCode(refused)).toBe('BREAK_LIMIT_REACHED');
+      await owner.query(`UPDATE attendance_settings SET break_hard_limit_minutes = 100 WHERE tenant_id = $1`, [fx.tenantId]);
 
       // The snack is a separate allowance.
       const snack = await start(token, await typeId('Tea'));
@@ -413,10 +422,45 @@ describe('breaks', () => {
       expect(await alive()).toBe(1);
       expect((await api.call('GET', '/attendance/me/today', token, undefined, OFFICE_IP)).statusCode).toBe(200);
 
-      // Long after the break should have ended, the usual limit applies again.
+      // Past the day's limit on break time (100 minutes) and a little more, the usual limit applies again.
       await quiet(70);
       await sweep.sweepOnce();
+      expect(await alive()).toBe(1);
+      await quiet(110);
+      await sweep.sweepOnce();
       expect(await alive()).toBe(0);
+    });
+
+    it('tells the supervisors once when a running break passes its allowance, and signs the person out at the hard limit', async () => {
+      await reset();
+      await owner.query(`DELETE FROM notifications WHERE tenant_id = $1`, [fx.tenantId]);
+      const token = await checkIn(who);
+      const lunch = await typeId('Lunch');
+      const started = await start(token, lunch);
+      const notices = async (event: string) =>
+        (await owner.query(`SELECT count(*)::int AS n FROM notifications WHERE tenant_id = $1 AND payload->>'event' = $2 AND payload->>'userId' = $3`, [fx.tenantId, event, fx.user(who).id])).rows[0].n as number;
+      const superAdmins = Number((await owner.query(`SELECT count(*) FROM users u JOIN roles r ON r.id = u.role_id WHERE u.tenant_id = $1 AND r.system_key = 'super_admin' AND u.status = 'active'`, [fx.tenantId])).rows[0].count);
+
+      await backdate(started.json().id, 40);
+      await sweep.sweepOnce();
+      expect(await notices('break_over')).toBe(0); // 40 of 45 minutes: still inside the allowance
+
+      await backdate(started.json().id, 80);
+      await sweep.sweepOnce();
+      expect(await notices('break_over')).toBe(superAdmins + 1); // every Super Admin and the team Admin, while the break is still running
+      await sweep.sweepOnce();
+      expect(await notices('break_over')).toBe(superAdmins + 1); // and not again
+      expect((await api.call('GET', '/auth/me', token, undefined, OFFICE_IP)).statusCode).toBe(200);
+
+      await backdate(started.json().id, 105);
+      const result = await sweep.sweepOnce();
+      expect(result.breaksStopped).toBeGreaterThanOrEqual(1);
+      expect(await notices('break_limit_signout')).toBe(superAdmins + 1);
+      expect((await api.call('GET', '/auth/me', token, undefined, OFFICE_IP)).statusCode).toBe(401);
+      const record = (await records(who))[0]!;
+      expect(record.check_out_at).not.toBeNull();
+      const open = (await owner.query(`SELECT count(*)::int AS n FROM break_logs WHERE attendance_id = $1 AND ended_at IS NULL`, [record.id])).rows[0].n;
+      expect(open).toBe(0);
     });
 
     it('still signs someone out after the usual quiet time when they are not on a break', async () => {

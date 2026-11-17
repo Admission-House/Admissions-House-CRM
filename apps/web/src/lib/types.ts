@@ -47,8 +47,10 @@ export interface StatusOption {
   queue: string;
   isOpen: boolean;
   requiresFollowup?: boolean;
+  /** A reason (sub-status) must be chosen when a lead is moved to this status. */
+  requiresSubstatus?: boolean;
   isActive?: boolean;
-  substatuses?: { id: string; name: string }[];
+  substatuses?: { id: string; name: string; requiresComment?: boolean }[];
 }
 
 export interface SourceOption {

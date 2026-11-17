@@ -15,6 +15,7 @@ interface Today {
   onBreak?: { startedAt: string; type: { name: string; allowedMinutes: number } } | null;
   breakMinutesToday?: number;
   breaks?: { id: string; name: string; allowedMinutes: number; usedMinutes: number }[];
+  hardLimitMinutes?: number;
   shift?: { start: string; end: string; idleTimeoutMin: number } | null;
 }
 
@@ -95,7 +96,7 @@ export function WorkStatus() {
               {t.shift && <div className="flex justify-between"><dt className="text-muted">Shift</dt><dd className="font-medium">{t.shift.start} to {t.shift.end}</dd></div>}
             </dl>
           )}
-          {t.shift && <p className="mt-3 text-xs text-subtle">You are signed out after {t.shift.idleTimeoutMin} minutes without activity. On a break you are kept signed in until the break is over, plus 10 minutes.</p>}
+          {t.shift && <p className="mt-3 text-xs text-subtle">You are signed out after {t.shift.idleTimeoutMin} minutes without activity. On a break you are not signed out for being quiet. Once your breaks add up to {t.hardLimitMinutes ?? 100} minutes in a day you are signed out.</p>}
           {error && <p role="alert" className="mt-3 text-xs text-bad">{error}</p>}
           <div className="mt-4 border-t border-line pt-4">
             {onBreak ? (

@@ -38,7 +38,6 @@ const ALL: NavItem[] = [
       { label: 'All leads', href: '/leads', icon: Users, any: ['lead.read'], count: 'total' },
     ],
   },
-  { label: 'Follow-ups', href: '/followups', icon: CalendarClock, any: ['followup.manage'] },
   { label: 'Calls and meetings', href: '/communications', icon: Video, any: ['video.host'] },
   {
     label: 'Calling',
@@ -84,7 +83,7 @@ const ALL: NavItem[] = [
 ];
 
 /** Screens that exist so far (the part of the address before "?"). */
-const BUILT = new Set(['/dashboard', '/settings/security', '/imports', '/settings/integrations', '/settings/telephony', '/settings/recording', '/settings/sessions', '/settings/audit', '/settings/company', '/account', '/notifications', '/settings/devices', '/salary', '/leave', '/attendance', '/reports', '/calls', '/dialer', '/followups', '/leads', '/communications', '/settings/users', '/settings/roles', '/settings/branches', '/settings/leads']);
+const BUILT = new Set(['/dashboard', '/settings/security', '/imports', '/settings/integrations', '/settings/telephony', '/settings/recording', '/settings/sessions', '/settings/audit', '/settings/company', '/account', '/notifications', '/settings/devices', '/salary', '/leave', '/attendance', '/reports', '/calls', '/dialer', '/leads', '/communications', '/settings/users', '/settings/roles', '/settings/branches', '/settings/leads']);
 
 const built = (href?: string) => !!href && BUILT.has(href.split('?')[0]!);
 

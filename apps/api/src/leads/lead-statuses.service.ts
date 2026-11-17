@@ -12,9 +12,11 @@ export interface StatusView {
   queue: string;
   isOpen: boolean;
   requiresFollowup: boolean;
+  /** A sub-status (the reason) must be chosen when a lead is moved to this status. */
+  requiresSubstatus: boolean;
   sortOrder: number;
   isActive: boolean;
-  substatuses: { id: string; name: string; sortOrder: number }[];
+  substatuses: { id: string; name: string; sortOrder: number; requiresComment: boolean }[];
 }
 
 /** The statuses a company moves its leads through, and the optional second level under each. */
@@ -35,7 +37,7 @@ export class LeadStatusesService {
       const next = dto.sortOrder ?? (await trx.selectFrom('lead_statuses').select(sql<number>`COALESCE(max(sort_order), -1) + 1`.as('n')).executeTakeFirstOrThrow()).n;
       const row = await trx
         .insertInto('lead_statuses')
-        .values({ tenant_id: auth.tenantId, name: dto.name, queue: dto.queue, is_open: dto.isOpen, requires_followup: dto.requiresFollowup, sort_order: next })
+        .values({ tenant_id: auth.tenantId, name: dto.name, queue: dto.queue, is_open: dto.isOpen, requires_followup: dto.requiresFollowup, requires_substatus: dto.requiresSubstatus ?? false, sort_order: next })
         .returning('id')
         .executeTakeFirstOrThrow();
       await this.record(trx, auth, 'lead_status.create', row.id, undefined, dto);
@@ -59,6 +61,7 @@ export class LeadStatusesService {
         ...(dto.queue !== undefined && { queue: dto.queue }),
         ...(dto.isOpen !== undefined && { is_open: dto.isOpen }),
         ...(dto.requiresFollowup !== undefined && { requires_followup: dto.requiresFollowup }),
+        ...(dto.requiresSubstatus !== undefined && { requires_substatus: dto.requiresSubstatus }),
         ...(dto.sortOrder !== undefined && { sort_order: dto.sortOrder }),
         ...(dto.isActive !== undefined && { is_active: dto.isActive }),
       };
@@ -76,7 +79,7 @@ export class LeadStatusesService {
       if (taken) throw AppError.conflict('SUBSTATUS_EXISTS', 'This status already has a sub-status with this name');
       const row = await trx
         .insertInto('lead_substatuses')
-        .values({ tenant_id: auth.tenantId, status_id: statusId, name: dto.name, sort_order: dto.sortOrder ?? 0 })
+        .values({ tenant_id: auth.tenantId, status_id: statusId, name: dto.name, requires_comment: dto.requiresComment ?? false, sort_order: dto.sortOrder ?? 0 })
         .returning('id')
         .executeTakeFirstOrThrow();
       await this.record(trx, auth, 'lead_substatus.create', row.id, undefined, { statusId, ...dto });
@@ -84,12 +87,17 @@ export class LeadStatusesService {
     });
   }
 
-  renameSubstatus(auth: AuthContext, id: string, name: string): Promise<StatusView> {
+  updateSubstatus(auth: AuthContext, id: string, dto: { name?: string; requiresComment?: boolean }): Promise<StatusView> {
     return this.db.withTenant(auth.tenantId, async (trx) => {
-      const row = await trx.selectFrom('lead_substatuses').select(['status_id', 'name']).where('id', '=', id).executeTakeFirst();
+      const row = await trx.selectFrom('lead_substatuses').select(['status_id', 'name', 'requires_comment']).where('id', '=', id).executeTakeFirst();
       if (!row) throw AppError.notFound('Sub-status');
-      await trx.updateTable('lead_substatuses').set({ name }).where('id', '=', id).execute();
-      await this.record(trx, auth, 'lead_substatus.update', id, { name: row.name }, { name });
+      if (dto.name && dto.name.toLowerCase() !== row.name.toLowerCase()) {
+        const taken = await trx.selectFrom('lead_substatuses').select('id').where('status_id', '=', row.status_id).where(sql`lower(name)`, '=', dto.name.toLowerCase()).executeTakeFirst();
+        if (taken) throw AppError.conflict('SUBSTATUS_EXISTS', 'This status already has a sub-status with this name');
+      }
+      const changes = { ...(dto.name !== undefined && { name: dto.name }), ...(dto.requiresComment !== undefined && { requires_comment: dto.requiresComment }) };
+      if (Object.keys(changes).length > 0) await trx.updateTable('lead_substatuses').set(changes).where('id', '=', id).execute();
+      await this.record(trx, auth, 'lead_substatus.update', id, { name: row.name, requiresComment: row.requires_comment }, { ...dto });
       return this.one(trx, row.status_id);
     });
   }
@@ -109,17 +117,17 @@ export class LeadStatusesService {
 
   private async load(trx: Trx, includeInactive: boolean, onlyId?: string): Promise<StatusView[]> {
     const { rows } = await sql<{
-      id: string; name: string; queue: string; is_open: boolean; requires_followup: boolean; sort_order: number; is_active: boolean;
-      subs: { id: string; name: string; sortOrder: number }[];
+      id: string; name: string; queue: string; is_open: boolean; requires_followup: boolean; requires_substatus: boolean; sort_order: number; is_active: boolean;
+      subs: { id: string; name: string; sortOrder: number; requiresComment: boolean }[];
     }>`
-      SELECT s.id, s.name, s.queue, s.is_open, s.requires_followup, s.sort_order, s.is_active,
-             COALESCE(jsonb_agg(jsonb_build_object('id', ss.id, 'name', ss.name, 'sortOrder', ss.sort_order) ORDER BY ss.sort_order, ss.name)
+      SELECT s.id, s.name, s.queue, s.is_open, s.requires_followup, s.requires_substatus, s.sort_order, s.is_active,
+             COALESCE(jsonb_agg(jsonb_build_object('id', ss.id, 'name', ss.name, 'sortOrder', ss.sort_order, 'requiresComment', ss.requires_comment) ORDER BY ss.sort_order, ss.name)
                       FILTER (WHERE ss.id IS NOT NULL), '[]'::jsonb) AS subs
       FROM lead_statuses s LEFT JOIN lead_substatuses ss ON ss.status_id = s.id
       WHERE ${onlyId ? sql`s.id = ${onlyId}` : sql`true`} ${includeInactive ? sql`` : sql`AND s.is_active`}
       GROUP BY s.id ORDER BY s.sort_order, s.name`.execute(trx);
     return rows.map((r) => ({
-      id: r.id, name: r.name, queue: r.queue, isOpen: r.is_open, requiresFollowup: r.requires_followup,
+      id: r.id, name: r.name, queue: r.queue, isOpen: r.is_open, requiresFollowup: r.requires_followup, requiresSubstatus: r.requires_substatus,
       sortOrder: r.sort_order, isActive: r.is_active, substatuses: r.subs,
     }));
   }

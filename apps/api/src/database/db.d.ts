@@ -72,6 +72,7 @@ export interface AttendanceExceptions {
 }
 
 export interface AttendanceRecords {
+  break_warned_at: Timestamp | null;
   branch_id: string | null;
   check_in_accuracy_m: Numeric | null;
   check_in_at: Timestamp;
@@ -91,6 +92,7 @@ export interface AttendanceRecords {
 }
 
 export interface AttendanceSettings {
+  break_hard_limit_minutes: Generated<number>;
   created_at: Generated<Timestamp>;
   created_by: string | null;
   effective_from: string;
@@ -525,6 +527,7 @@ export interface LeadSources {
 }
 
 export interface LeadStatuses {
+  requires_substatus: Generated<boolean>;
   created_at: Generated<Timestamp>;
   id: Generated<string>;
   is_active: Generated<boolean>;
@@ -538,6 +541,7 @@ export interface LeadStatuses {
 }
 
 export interface LeadSubstatuses {
+  requires_comment: Generated<boolean>;
   id: Generated<string>;
   name: string;
   sort_order: Generated<number>;

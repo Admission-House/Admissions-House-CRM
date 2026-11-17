@@ -13,7 +13,7 @@ export const ADMIN = [
   'user.read', 'branch.read', 'device.approve',
   'attendance.self', 'attendance.read', 'attendance.exception',
   'leave.request', 'leave.read', 'leave.approve',
-  'salary.read_own', 'salary.read', 'salary.write', 'salary.import',
+  'salary.read_own', 'salary.read', 'salary.write',
   'dashboard.read', 'report.read', 'report.export', 'video.host', 'comm.manage', 'recording.play', 'recording.download',
 ];
 
