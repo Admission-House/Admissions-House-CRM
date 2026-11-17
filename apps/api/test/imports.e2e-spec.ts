@@ -1,3 +1,4 @@
+import { parse } from 'csv-parse/sync';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import pg from 'pg';
 import writeXlsxFile from 'write-excel-file/node';
@@ -23,9 +24,13 @@ beforeAll(async () => {
   for (const name of ['admin', 'admin2', 'lc1', 'lc2']) t[name] = await api.signIn(name, { office: true });
 });
 
+/** Places made for a test. They are shared lists, so they are removed once the leads that point at them are gone. */
+const testPlaces: string[] = [];
+
 afterAll(async () => {
   await app?.close();
   await fx?.cleanup();
+  if (testPlaces.length > 0) await owner?.query(`DELETE FROM locations WHERE name = ANY($1) AND type = 'city'`, [testPlaces]).then(() => owner.query(`DELETE FROM locations WHERE name = ANY($1)`, [testPlaces]));
   await owner?.end();
 });
 
@@ -191,6 +196,56 @@ describe('importing leads', () => {
     expect(res.statusCode, res.body).toBe(202);
     expect(res.json().status).toBe('done');
     expect(res.json().totals.created).toBe(2);
+  });
+
+  it('keeps the columns that have no field of their own as a note on the lead, and exports city, stream and level', async () => {
+    const suffix = Math.random().toString(36).slice(2, 10);
+    const stateName = `Teststate ${suffix}`;
+    const cityName = `Testcity ${suffix}`;
+    const state = (await owner.query(`INSERT INTO locations (type, name) VALUES ('state', $1) RETURNING id`, [stateName])).rows[0].id;
+    await owner.query(`INSERT INTO locations (type, name, parent_id) VALUES ('city', $1, $2)`, [cityName, state]);
+    testPlaces.push(cityName, stateName);
+    {
+      const p = phone();
+      const done = await runImport(t.admin!, file(csv('Name,Phone,City,Stream,Level,Course,Qualification,Parent name,Alternate phone', `Detail Student,${p},${cityName},Engineering,PG,MBA,B.Com,Rajesh Kumar,9811122233`)), { assign: 'none' });
+      expect(done.totals.created).toBe(1);
+
+      const row = await leadByPhone(p);
+      const notes = (await owner.query(`SELECT remark FROM lead_activities WHERE lead_id = $1 AND type = 'note'`, [row.id])).rows.map((r) => r.remark as string);
+      expect(notes).toHaveLength(1);
+      expect(notes[0]).toBe('Other details from the file: Qualification: B.Com; Parent name: Rajesh Kumar; Alternate phone: 9811122233');
+
+      const exported = (await api.call('GET', '/leads/export?q=Detail%20Student', t.sa!)).body;
+      const line = (parse(exported, { bom: true, columns: true }) as Record<string, string>[])[0]!;
+      expect(line).toMatchObject({ Name: 'Detail Student', City: cityName, Stream: 'Engineering', Level: 'PG' });
+
+      const listed = (await api.call('GET', '/leads?q=Detail%20Student', t.sa!)).json().items[0];
+      expect(listed).toMatchObject({ name: 'Detail Student', email: null, course: 'MBA', region: cityName, source: { name: 'Meta Ads' } });
+    }
+  });
+
+  it('shows a city the company does not have yet as the region, and the course as typed', async () => {
+    const p = phone();
+    await runImport(t.admin!, file(csv('Name,Phone,City,Course,Email', `Far Away Student,${p},Unlistedville,BBA,far@example.com`)), { assign: 'none' });
+    const listed = (await api.call('GET', '/leads?q=Far%20Away', t.sa!)).json().items[0];
+    expect(listed).toMatchObject({ name: 'Far Away Student', email: 'far@example.com', course: 'BBA', region: 'Unlistedville' });
+  });
+
+  it('adds the details of a repeat row to the note history of the lead that already has the number', async () => {
+    await setPolicy('attach');
+    const p = phone();
+    await runImport(t.admin!, file(csv('Name,Phone,Qualification', `First Entry,${p},12th`)), { assign: 'none' });
+    await runImport(t.admin!, file(csv('Name,Phone,Qualification', `Second Entry,${p},Graduate`)), { assign: 'none' });
+    const row = await leadByPhone(p);
+    const notes = (await owner.query(`SELECT remark FROM lead_activities WHERE lead_id = $1 AND type = 'note' ORDER BY created_at`, [row.id])).rows.map((r) => r.remark as string);
+    expect(notes).toEqual(['Other details from the file: Qualification: 12th', 'Other details from the file (repeat entry): Qualification: Graduate']);
+  });
+
+  it('writes no note when every column belongs to a field', async () => {
+    const p = phone();
+    await runImport(t.admin!, file(csv('Name,Phone,Email', `Plain Row,${p},plain@example.com`)), { assign: 'none' });
+    const row = await leadByPhone(p);
+    expect((await owner.query(`SELECT count(*)::int AS n FROM lead_activities WHERE lead_id = $1 AND type = 'note'`, [row.id])).rows[0].n).toBe(0);
   });
 
   it('can leave leads in the unassigned pool', async () => {

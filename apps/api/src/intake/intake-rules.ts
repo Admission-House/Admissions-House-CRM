@@ -54,6 +54,8 @@ export interface IntakeLead {
   interest?: string;
   formName?: string;
   pagePath?: string;
+  /** Other cells of an imported row that have no field of their own, kept as text so nothing in the sheet is lost. */
+  details?: string;
   utm: { source?: string; medium?: string; campaign?: string; term?: string; content?: string };
 }
 

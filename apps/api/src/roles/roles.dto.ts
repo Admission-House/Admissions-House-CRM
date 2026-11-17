@@ -14,6 +14,8 @@ export const createRoleSchema = z.object({
   dataScope: z.enum(['all', 'team', 'own']),
   /** True if people in this role can sign in only from the office. */
   requiresOffice: z.boolean(),
+  /** Whether signing in records attendance. Always on for a role that must sign in from the office. */
+  tracksAttendance: z.boolean().optional(),
   permissions,
 });
 export class CreateRoleDto extends createZodDto(createRoleSchema) {}

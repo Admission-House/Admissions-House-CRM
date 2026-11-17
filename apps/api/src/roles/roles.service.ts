@@ -7,12 +7,24 @@ import { DatabaseService, Trx } from '../database/database.service.js';
 import type { CreateRoleDto, UpdateRoleDto } from './roles.dto.js';
 import { assertCanGrant, assertRoleEditable, assertScopeNotWider } from './role-rules.js';
 
+/**
+ * Whether a role records attendance. A role that must sign in from the office always does, so asking it not to is an
+ * error rather than something to quietly ignore. `fallback` is what applies when nothing was asked.
+ */
+function attendanceSetting(requiresOffice: boolean, asked: boolean | undefined, fallback: boolean): boolean {
+  if (requiresOffice && asked === false) {
+    throw AppError.badRequest('OFFICE_ROLE_TRACKS_ATTENDANCE', 'A role that signs in from the office always records attendance', [{ field: 'tracksAttendance', message: 'Switch off "sign in from the office" first' }]);
+  }
+  return requiresOffice ? true : (asked ?? fallback);
+}
+
 export interface RoleSummary {
   id: string;
   name: string;
   key: string | null;
   dataScope: string;
   requiresOffice: boolean;
+  tracksAttendance: boolean;
   isSystem: boolean;
   permissionCount: number;
   userCount: number;
@@ -42,16 +54,16 @@ export class RolesService {
   list(auth: AuthContext): Promise<RoleSummary[]> {
     return this.db.withTenant(auth.tenantId, async (trx) => {
       const { rows } = await sql<{
-        id: string; name: string; system_key: string | null; data_scope: string; requires_office: boolean;
+        id: string; name: string; system_key: string | null; data_scope: string; requires_office: boolean; tracks_attendance: boolean;
         is_system: boolean; permission_count: string; user_count: string;
       }>`
-        SELECT r.id, r.name, r.system_key, r.data_scope, r.requires_office, r.is_system,
+        SELECT r.id, r.name, r.system_key, r.data_scope, r.requires_office, r.tracks_attendance, r.is_system,
                (SELECT count(*) FROM role_permissions rp WHERE rp.role_id = r.id) AS permission_count,
                (SELECT count(*) FROM users u WHERE u.role_id = r.id) AS user_count
         FROM roles r
         ORDER BY r.is_system DESC, r.name`.execute(trx);
       return rows.map((r) => ({
-        id: r.id, name: r.name, key: r.system_key, dataScope: r.data_scope, requiresOffice: r.requires_office,
+        id: r.id, name: r.name, key: r.system_key, dataScope: r.data_scope, requiresOffice: r.requires_office, tracksAttendance: r.tracks_attendance,
         isSystem: r.is_system, permissionCount: Number(r.permission_count), userCount: Number(r.user_count),
       }));
     });
@@ -71,17 +83,18 @@ export class RolesService {
       const permissionIds = await this.permissionIds(trx, dto.permissions);
       assertCanGrant(auth.permissions, dto.permissions);
       await this.assertNameFree(trx, dto.name);
+      const tracks = attendanceSetting(dto.requiresOffice, dto.tracksAttendance, dto.requiresOffice);
 
       const role = await trx
         .insertInto('roles')
-        .values({ tenant_id: auth.tenantId, name: dto.name, data_scope: dto.dataScope, requires_office: dto.requiresOffice })
+        .values({ tenant_id: auth.tenantId, name: dto.name, data_scope: dto.dataScope, requires_office: dto.requiresOffice, tracks_attendance: tracks })
         .returning('id')
         .executeTakeFirstOrThrow();
       await this.setPermissions(trx, auth.tenantId, role.id, permissionIds);
 
       await this.audit.write(trx, {
         tenantId: auth.tenantId, actorId: auth.userId, action: 'role.create', entity: 'role', entityId: role.id,
-        after: { name: dto.name, dataScope: dto.dataScope, requiresOffice: dto.requiresOffice, permissions: dto.permissions },
+        after: { name: dto.name, dataScope: dto.dataScope, requiresOffice: dto.requiresOffice, tracksAttendance: tracks, permissions: dto.permissions },
         ip: auth.ip, requestId: auth.requestId,
       });
       const created = await this.load(trx, role.id);
@@ -98,9 +111,12 @@ export class RolesService {
           permissions: dto.permissions !== undefined,
           name: dto.name !== undefined && dto.name !== current.summary.name,
           scope: (dto.dataScope !== undefined && dto.dataScope !== current.summary.dataScope) ||
-            (dto.requiresOffice !== undefined && dto.requiresOffice !== current.summary.requiresOffice),
+            (dto.requiresOffice !== undefined && dto.requiresOffice !== current.summary.requiresOffice) ||
+            (dto.tracksAttendance !== undefined && dto.tracksAttendance !== current.summary.tracksAttendance),
         },
       );
+      const requiresOffice = dto.requiresOffice ?? current.summary.requiresOffice;
+      const tracks = attendanceSetting(requiresOffice, dto.tracksAttendance, dto.requiresOffice === true ? true : current.summary.tracksAttendance);
       if (dto.dataScope) assertScopeNotWider(auth.dataScope, dto.dataScope);
       if (dto.name && dto.name !== current.summary.name) await this.assertNameFree(trx, dto.name);
 
@@ -115,6 +131,7 @@ export class RolesService {
         ...(dto.name !== undefined && { name: dto.name }),
         ...(dto.dataScope !== undefined && { data_scope: dto.dataScope }),
         ...(dto.requiresOffice !== undefined && { requires_office: dto.requiresOffice }),
+        ...(tracks !== current.summary.tracksAttendance && { tracks_attendance: tracks }),
       };
       if (Object.keys(changes).length > 0) await trx.updateTable('roles').set(changes).where('id', '=', id).execute();
 
@@ -148,10 +165,10 @@ export class RolesService {
 
   private async load(trx: Trx, id: string): Promise<{ summary: RoleSummary; permissions: string[] }> {
     const { rows } = await sql<{
-      id: string; name: string; system_key: string | null; data_scope: string; requires_office: boolean;
+      id: string; name: string; system_key: string | null; data_scope: string; requires_office: boolean; tracks_attendance: boolean;
       is_system: boolean; user_count: string; permissions: string[];
     }>`
-      SELECT r.id, r.name, r.system_key, r.data_scope, r.requires_office, r.is_system,
+      SELECT r.id, r.name, r.system_key, r.data_scope, r.requires_office, r.tracks_attendance, r.is_system,
              (SELECT count(*) FROM users u WHERE u.role_id = r.id) AS user_count,
              COALESCE((SELECT array_agg(p.code ORDER BY p.code) FROM role_permissions rp
                        JOIN permissions p ON p.id = rp.permission_id WHERE rp.role_id = r.id), '{}') AS permissions
@@ -161,7 +178,7 @@ export class RolesService {
     return {
       permissions: r.permissions,
       summary: {
-        id: r.id, name: r.name, key: r.system_key, dataScope: r.data_scope, requiresOffice: r.requires_office,
+        id: r.id, name: r.name, key: r.system_key, dataScope: r.data_scope, requiresOffice: r.requires_office, tracksAttendance: r.tracks_attendance,
         isSystem: r.is_system, permissionCount: r.permissions.length, userCount: Number(r.user_count),
       },
     };

@@ -13,7 +13,7 @@ const SYNONYMS: Record<Field, string[]> = {
   level: ['level', 'courselevel', 'programlevel', 'ugpg'],
   mode: ['mode', 'studymode', 'modeofstudy', 'coursemode', 'learningmode'],
   stream: ['stream', 'field', 'fieldofstudy', 'discipline'],
-  city: ['city', 'location', 'preferredcity', 'currentcity', 'town'],
+  city: ['city', 'region', 'location', 'preferredcity', 'currentcity', 'town', 'area', 'locality', 'district', 'citytown', 'cityname', 'preferredlocation'],
   interest: ['interest', 'course', 'coursename', 'program', 'programme', 'interestedin', 'interestedcourse', 'courseinterested'],
   utm_source: ['utmsource', 'campaignsource'],
   utm_medium: ['utmmedium', 'campaignmedium'],
@@ -67,9 +67,28 @@ export interface Record_ {
   /** Row number in the spreadsheet, counting the header as row 1. */
   row: number;
   raw: Partial<Record<Field, string>>;
+  /** The row's other columns as "Heading: value; Heading: value", or nothing when they are empty. */
+  details?: string;
 }
 
-/** The mapped cells of each non-empty row. */
+const MAX_DETAIL_VALUE = 200;
+const MAX_DETAILS = 1500;
+
+/** The cells of a row that no field claims, in the order of the sheet, kept as one line of text. */
+export function detailsOf(header: readonly string[], cells: readonly string[], mapping: Mapping): string | undefined {
+  const used = new Set(Object.values(mapping));
+  const parts: string[] = [];
+  header.forEach((heading, at) => {
+    const value = (cells[at] ?? '').trim();
+    if (used.has(at) || heading === '' || value === '') return;
+    parts.push(`${heading}: ${value.length > MAX_DETAIL_VALUE ? `${value.slice(0, MAX_DETAIL_VALUE)}…` : value}`);
+  });
+  if (parts.length === 0) return undefined;
+  const text = parts.join('; ');
+  return text.length > MAX_DETAILS ? `${text.slice(0, MAX_DETAILS)}…` : text;
+}
+
+/** The mapped cells of each non-empty row, with the other columns kept as details. */
 export function toRecords(table: Table, mapping: Mapping): Record_[] {
   const out: Record_[] = [];
   table.rows.forEach((cells, i) => {
@@ -79,7 +98,10 @@ export function toRecords(table: Table, mapping: Mapping): Record_[] {
       const value = at === undefined ? '' : (cells[at] ?? '').trim();
       if (value) raw[field] = value;
     }
-    if (Object.keys(raw).length > 0) out.push({ row: i + 2, raw });
+    if (Object.keys(raw).length > 0) {
+      const details = detailsOf(table.header, cells, mapping);
+      out.push({ row: i + 2, raw, ...(details && { details }) });
+    }
   });
   return out;
 }
@@ -103,7 +125,7 @@ export interface InvalidRow {
 export function validateRecords(records: readonly Record_[], formName: string): { valid: ValidRow[]; invalid: InvalidRow[] } {
   const valid: ValidRow[] = [];
   const invalid: InvalidRow[] = [];
-  for (const { row, raw } of records) {
+  for (const { row, raw, details } of records) {
     const missing = (['name', 'phone'] as const).filter((f) => !raw[f]);
     if (missing.length > 0) {
       invalid.push({ row, name: raw.name, phone: raw.phone, problem: missing.map((f) => `${f}: ${f === 'name' ? 'Name' : 'Phone number'} is required`).join('; ') });
@@ -114,7 +136,7 @@ export function validateRecords(records: readonly Record_[], formName: string): 
       interest: raw.interest, source: formName,
       utm: { source: raw.utm_source, medium: raw.utm_medium, campaign: raw.utm_campaign, term: raw.utm_term, content: raw.utm_content },
     });
-    if (parsed.ok) valid.push({ row, lead: parsed.lead });
+    if (parsed.ok) valid.push({ row, lead: details ? { ...parsed.lead, details } : parsed.lead });
     else invalid.push({ row, name: raw.name, phone: raw.phone, problem: parsed.errors.map((e) => `${e.field}: ${e.message}`).join('; ') });
   }
   return { valid, invalid };

@@ -307,7 +307,7 @@ function Leads() {
         <Card><Empty title="No leads match">Try removing a filter, or add a lead by hand.</Empty></Card>
       ) : (
         <>
-          <Card className="hidden overflow-hidden md:block">
+          <Card className="hidden overflow-x-auto md:block">
             <table className="w-full text-left text-sm">
               <thead className="border-b border-line bg-head text-[13px] text-muted">
                 <tr>
@@ -315,6 +315,9 @@ function Leads() {
                     <input type="checkbox" aria-label="Select all leads on this page" checked={allSelected} onChange={(e) => setSelected(e.target.checked ? new Set(items.map((l) => l.id)) : new Set())} className="h-3.5 w-3.5 accent-[#0f625e]" />
                   </th>
                   <th className="px-3 py-3 font-medium">Lead</th>
+                  <th className="px-3 py-3 font-medium">Email</th>
+                  <th className="px-3 py-3 font-medium">Course</th>
+                  <th className="px-3 py-3 font-medium">Region</th>
                   <th className="px-3 py-3 font-medium">Status</th>
                   <th className="px-3 py-3 font-medium">Source</th>
                   <th className="px-3 py-3 font-medium">Assigned to</th>
@@ -340,6 +343,9 @@ function Leads() {
                           </div>
                         </div>
                       </td>
+                      <td className="max-w-[14rem] truncate px-3 py-2.5 text-muted" title={l.email ?? undefined}>{l.email ?? <span className="text-subtle">&mdash;</span>}</td>
+                      <td className="max-w-[12rem] truncate px-3 py-2.5" title={l.course ?? undefined}>{l.course ?? <span className="text-subtle">&mdash;</span>}</td>
+                      <td className="max-w-[10rem] truncate px-3 py-2.5" title={l.region ?? undefined}>{l.region ?? <span className="text-subtle">&mdash;</span>}</td>
                       <td className="px-3 py-2.5"><Badge tone={queueTone(l.queue)}>{l.status.name}</Badge></td>
                       <td className="px-3 py-2.5 text-muted">{l.source.name}</td>
                       <td className="px-3 py-2.5">{l.assignedTo?.name ?? <span className="text-subtle">Unassigned</span>}</td>
@@ -376,6 +382,9 @@ function Leads() {
                   </div>
                   <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
                     <span>{l.source.name}</span>
+                    {l.course && <span>{l.course}</span>}
+                    {l.region && <span>{l.region}</span>}
+                    {l.email && <span className="max-w-full truncate">{l.email}</span>}
                     <span>{l.assignedTo?.name ?? 'Not assigned'}</span>
                     {l.nextFollowupAt && <span className={cx(new Date(l.nextFollowupAt) < new Date() && l.status.isOpen && 'font-medium text-bad')}>Follow-up {fromNow(l.nextFollowupAt)}</span>}
                   </div>

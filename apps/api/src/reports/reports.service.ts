@@ -252,7 +252,7 @@ export class ReportsService {
       const scoped = scopeCondition(auth, 'u.id');
       const { rows: people } = await sql<{ id: string; name: string; role: string }>`
         SELECT u.id, u.name, r.name AS role FROM users u JOIN roles r ON r.id = u.role_id
-        WHERE u.status = 'active' AND r.requires_office ${scoped ? sql`AND ${scoped}` : sql``} ORDER BY u.name`.execute(trx);
+        WHERE u.status = 'active' AND r.tracks_attendance ${scoped ? sql`AND ${scoped}` : sql``} ORDER BY u.name`.execute(trx);
       const sums = await this.summary.forMonth(trx, people.map((p) => p.id), month);
       return {
         title: 'Attendance summary', from: month, to: month,
@@ -280,7 +280,7 @@ export class ReportsService {
       const scoped = scopeCondition(auth, 'u.id');
       const { rows: people } = await sql<{ id: string; name: string; role: string }>`
         SELECT u.id, u.name, r.name AS role FROM users u JOIN roles r ON r.id = u.role_id
-        WHERE u.status = 'active' AND r.requires_office ${scoped ? sql`AND ${scoped}` : sql``} ORDER BY u.name`.execute(trx);
+        WHERE u.status = 'active' AND r.tracks_attendance ${scoped ? sql`AND ${scoped}` : sql``} ORDER BY u.name`.execute(trx);
       const ids = people.map((p) => p.id);
 
       const { rows: days } = await sql<{ day: string; off: boolean; future: boolean }>`

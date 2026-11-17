@@ -27,6 +27,8 @@ export interface LeadListItem {
   nextFollowupAt: string | null;
   expectedClosureOn: string | null;
   interestNote: string | null;
+  course: string | null;
+  region: string | null;
   createdAt: string;
   updatedAt: string;
 }

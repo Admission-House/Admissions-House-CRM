@@ -69,6 +69,32 @@ describe('roles and permissions', () => {
     expect(byKey.counsellor.userCount).toBeGreaterThan(3);
   });
 
+  it('lets a role record attendance without signing in from the office, and never the other way round', async () => {
+    const remote = await api.call('POST', '/roles', sa, { name: 'Remote Staff', dataScope: 'own', requiresOffice: false, tracksAttendance: true, permissions: ['lead.read'] });
+    expect(remote.statusCode, remote.body).toBe(201);
+    expect(remote.json()).toMatchObject({ requiresOffice: false, tracksAttendance: true });
+
+    const plain = await api.call('POST', '/roles', sa, { name: 'Viewer Only', dataScope: 'own', requiresOffice: false, permissions: ['lead.read'] });
+    expect(plain.json()).toMatchObject({ requiresOffice: false, tracksAttendance: false });
+    const office = await api.call('POST', '/roles', sa, { name: 'Office Staff', dataScope: 'own', requiresOffice: true, permissions: ['lead.read'] });
+    expect(office.json()).toMatchObject({ requiresOffice: true, tracksAttendance: true });
+
+    const contradiction = await api.call('POST', '/roles', sa, { name: 'Odd Office', dataScope: 'own', requiresOffice: true, tracksAttendance: false, permissions: [] });
+    expect(contradiction.statusCode).toBe(400);
+    expect(errorCode(contradiction)).toBe('OFFICE_ROLE_TRACKS_ATTENDANCE');
+
+    const turnedOn = await api.call('PATCH', `/roles/${plain.json().id}`, sa, { tracksAttendance: true });
+    expect(turnedOn.json()).toMatchObject({ tracksAttendance: true });
+    const tooFar = await api.call('PATCH', `/roles/${turnedOn.json().id}`, sa, { requiresOffice: true, tracksAttendance: false });
+    expect(errorCode(tooFar)).toBe('OFFICE_ROLE_TRACKS_ATTENDANCE');
+    const nowOffice = await api.call('PATCH', `/roles/${turnedOn.json().id}`, sa, { requiresOffice: true });
+    expect(nowOffice.json()).toMatchObject({ requiresOffice: true, tracksAttendance: true });
+
+    const list = (await api.call('GET', '/roles', sa)).json() as { key: string | null; tracksAttendance: boolean }[];
+    expect(list.find((r) => r.key === 'super_admin')?.tracksAttendance).toBe(true);
+    for (const r of [remote, plain, office]) await api.call('DELETE', `/roles/${r.json().id}`, sa);
+  });
+
   it('creates, edits and deletes a custom role', async () => {
     const created = await api.call('POST', '/roles', sa, {
       name: 'Team Lead', dataScope: 'team', requiresOffice: true, permissions: ['lead.read', 'lead.update', 'lead.read'],

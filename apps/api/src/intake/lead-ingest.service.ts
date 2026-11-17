@@ -79,6 +79,7 @@ export class LeadIngestService {
 
     await this.recordEnquiry(trx, p, existing.id);
     await this.activity(trx, p.tenantId, existing.id, 'enquiry', `Enquired again through ${describe(sourceName, p.lead)}`);
+    await this.details(trx, p.tenantId, existing.id, p.lead, 'Other details from the file (repeat entry)');
     if (existing.assigned_to && !p.options?.quiet) {
       await this.notifications.notify(trx, {
         tenantId: p.tenantId,
@@ -149,6 +150,7 @@ export class LeadIngestService {
     }
     await this.recordEnquiry(trx, p, row.id);
     await this.activity(trx, p.tenantId, row.id, 'enquiry', `New lead from ${describe(sourceName, lead)}`);
+    await this.details(trx, p.tenantId, row.id, lead, 'Other details from the file');
 
     if (assignment.userId) {
       const assignee = await trx.selectFrom('users').select('name').where('id', '=', assignment.userId).executeTakeFirstOrThrow();
@@ -232,6 +234,12 @@ export class LeadIngestService {
 
   private async activity(trx: Trx, tenantId: string, leadId: string, type: 'enquiry' | 'assignment', remark: string): Promise<void> {
     await this.writer.activity(trx, { tenantId, leadId, type, remark });
+  }
+
+  /** What an imported sheet held beyond the fixed fields (a parent's name, a qualification, another number), as a note the counsellor reads. */
+  private async details(trx: Trx, tenantId: string, leadId: string, lead: IntakeLead, heading: string): Promise<void> {
+    if (!lead.details) return;
+    await this.writer.activity(trx, { tenantId, leadId, type: 'note', remark: `${heading}: ${lead.details}` });
   }
 }
 

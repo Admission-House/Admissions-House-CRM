@@ -122,8 +122,8 @@ export async function createFixture(owner: pg.Client, specs: UserSpec[] = DEFAUL
   ] as const) {
     roleIds[key] = (
       await q(
-        `INSERT INTO roles (tenant_id, name, system_key, data_scope, requires_office, is_system)
-         VALUES ($1, $2, $3, $4, $5, true) RETURNING id`,
+        `INSERT INTO roles (tenant_id, name, system_key, data_scope, requires_office, tracks_attendance, is_system)
+         VALUES ($1, $2, $3, $4, $5, ($5 OR $3 = 'super_admin'), true) RETURNING id`,
         [tenantId, key, key, scope, office],
       )
     ).rows[0].id;

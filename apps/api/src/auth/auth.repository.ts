@@ -27,6 +27,7 @@ export interface LoginUser {
   role_name: string;
   role_key: RoleKey | null;
   requires_office: boolean;
+  tracks_attendance: boolean;
 }
 
 export interface SessionRow {
@@ -45,6 +46,7 @@ export interface SessionRow {
   role_key: RoleKey | null;
   data_scope: DataScope;
   requires_office: boolean;
+  tracks_attendance: boolean;
   permissions: string[];
   /** The company's rule on two-step sign-in (see two-step-policy.ts), and whether this person has it on. */
   require_two_step: string | null;
@@ -87,6 +89,7 @@ export class AuthRepository {
         'r.name as role_name',
         'r.system_key as role_key',
         'r.requires_office',
+        'r.tracks_attendance',
         sql<boolean>`(u.locked_until IS NOT NULL AND u.locked_until > now())`.as('locked'),
       ])
       .where('u.email', '=', email)
@@ -251,7 +254,7 @@ export class AuthRepository {
              u.name, u.email, u.must_change_password, u.role_id,
              t.settings->>'require_two_step' AS require_two_step,
              EXISTS (SELECT 1 FROM user_mfa m WHERE m.user_id = u.id AND m.enabled_at IS NOT NULL) AS two_step_on,
-             r.system_key AS role_key, r.data_scope, r.requires_office,
+             r.system_key AS role_key, r.data_scope, r.requires_office, r.tracks_attendance,
              COALESCE((SELECT array_agg(p.code ORDER BY p.code)
                        FROM role_permissions rp JOIN permissions p ON p.id = rp.permission_id
                        WHERE rp.role_id = r.id AND rp.tenant_id = r.tenant_id), '{}') AS permissions

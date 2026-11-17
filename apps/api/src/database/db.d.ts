@@ -735,6 +735,7 @@ export interface Roles {
   is_system: Generated<boolean>;
   name: string;
   requires_office: Generated<boolean>;
+  tracks_attendance: Generated<boolean>;
   system_key: string | null;
   tenant_id: string;
   updated_at: Generated<Timestamp>;

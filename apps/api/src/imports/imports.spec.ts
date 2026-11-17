@@ -2,7 +2,7 @@ import { parse } from 'csv-parse/sync';
 import writeXlsxFile from 'write-excel-file/node';
 import { AppError } from '../common/app-error.js';
 import { csvCell, csvRow, neutralizeFormula } from '../common/csv.js';
-import { applyOverride, detectMapping, leadHeaderRow, repeatsInFile, toRecords, validateRecords } from './import-rules.js';
+import { applyOverride, detailsOf, detectMapping, leadHeaderRow, repeatsInFile, toRecords, validateRecords } from './import-rules.js';
 import { MAX_COLUMNS, MAX_ROWS, readTable } from './spreadsheet.js';
 
 const codeOf = async (fn: () => unknown): Promise<string | undefined> => {
@@ -224,5 +224,44 @@ describe('readTable: workbooks as people really make them', () => {
   it('still takes the first filled row as the header when nothing looks like one', async () => {
     const buf = await book([{ name: 'Sheet1', rows: [['Alpha', 'Beta'], ['1', '2']] }]);
     expect((await readTable(buf, { looksLikeHeader: leadHeaderRow })).header).toEqual(['Alpha', 'Beta']);
+  });
+});
+
+describe('details: the columns that have no field of their own', () => {
+  const table = (header: string[], ...rows: string[][]) => ({ header, rows });
+
+  it('keeps them in the order of the sheet, and leaves out empty cells and the mapped columns', () => {
+    const header = ['Name', 'Mobile', 'Qualification', 'Parent', 'Note'];
+    const mapping = detectMapping(header).mapping;
+    expect(detailsOf(header, ['Riya', '9811100001', 'B.Com', '', 'Call after 5'], mapping)).toBe('Qualification: B.Com; Note: Call after 5');
+    expect(detailsOf(header, ['Riya', '9811100001', '', '', ''], mapping)).toBeUndefined();
+  });
+
+  it('shortens a very long value and caps the whole text', () => {
+    const header = ['Name', 'Phone', 'A', 'B'];
+    const mapping = detectMapping(header).mapping;
+    expect(detailsOf(header, ['x', '9', 'a'.repeat(500), ''], mapping)).toBe(`A: ${'a'.repeat(200)}…`);
+    const wide = Array.from({ length: 12 }, (_v, i) => `Col${i}`);
+    const text = detailsOf(['Name', 'Phone', ...wide], ['x', '9', ...wide.map(() => 'v'.repeat(180))], detectMapping(['Name', 'Phone']).mapping)!;
+    expect(text.length).toBeLessThanOrEqual(1501);
+  });
+
+  it('attaches the details to a valid row and to nothing else', () => {
+    const t = table(['Name', 'Phone', 'Qualification'], ['Riya', '9811100001', 'B.Com'], ['Asha', '9811100002', '']);
+    const { valid } = validateRecords(toRecords(t, detectMapping(t.header).mapping), 'import');
+    expect(valid[0]!.lead.details).toBe('Qualification: B.Com');
+    expect(valid[1]!.lead.details).toBeUndefined();
+  });
+});
+
+describe('detectMapping: the headings people really use', () => {
+  it('reads Region, Area and Locality as the city, and Course as the interest', () => {
+    for (const heading of ['Region', 'region', 'REGION', 'Area', 'Locality', 'City / Town', 'Preferred Location']) {
+      expect(detectMapping(['Name', 'Phone', heading]).mapping.city, heading).toBe(2);
+    }
+    expect(detectMapping(['Student Name', 'Mobile No.', 'Email ID', 'Course', 'Region'])).toMatchObject({ mapping: { name: 0, phone: 1, email: 2, interest: 3, city: 4 }, unmapped: [] });
+  });
+  it('does not take State for the city', () => {
+    expect(detectMapping(['Name', 'Phone', 'State']).mapping.city).toBeUndefined();
   });
 });

@@ -171,6 +171,7 @@ function ImportLeads({ onImported }: { onImported: () => void }) {
           <Panel title="2. Check the columns">
             <div className="space-y-4">
               <Totals items={[{ label: 'Rows in the file', value: preview.totals.rows }, { label: 'Ready to import', value: preview.totals.valid, tone: 'text-ok' }, { label: 'Have problems', value: preview.totals.invalid, tone: preview.totals.invalid ? 'text-bad' : undefined }, { label: 'Repeated in the file', value: preview.totals.repeatedInFile }, { label: 'Already in the CRM', value: preview.totals.alreadyInCrm }]} />
+              {preview.unmappedColumns.length > 0 && preview.missing.length === 0 && <Notice>These columns have no field of their own, so they are saved in the notes of each lead and nothing is lost: {preview.unmappedColumns.join(', ')}.</Notice>}
               {preview.missing.length > 0 && <Notice tone="bad">Match a column for {preview.missing.map((m) => FIELD_LABEL[m] ?? m).join(' and ')} to continue.</Notice>}
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {Object.keys(FIELD_LABEL).map((f) => (

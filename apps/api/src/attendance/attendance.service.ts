@@ -200,13 +200,13 @@ export class AttendanceService {
       let qb = trx
         .selectFrom('users as u')
         .innerJoin('roles as r', 'r.id', 'u.role_id')
-        .select(['u.id', 'u.branch_id', 'u.status', 'r.requires_office'])
+        .select(['u.id', 'u.branch_id', 'u.status', 'r.tracks_attendance'])
         .where('u.id', '=', dto.userId);
       const scoped = scopeCondition(auth, 'u.id');
       if (scoped) qb = qb.where(scoped);
       const target = await qb.executeTakeFirst();
       if (!target) throw AppError.notFound('Person');
-      if (!target.requires_office) {
+      if (!target.tracks_attendance) {
         throw AppError.badRequest('NOT_TRACKED', 'Attendance is not recorded for this person');
       }
 

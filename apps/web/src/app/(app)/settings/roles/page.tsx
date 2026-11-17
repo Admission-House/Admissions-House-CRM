@@ -13,6 +13,7 @@ interface RoleRow {
   key: string | null;
   dataScope: 'all' | 'team' | 'own';
   requiresOffice: boolean;
+  tracksAttendance: boolean;
   isSystem: boolean;
   permissionCount: number;
   userCount: number;
@@ -39,6 +40,7 @@ function RoleForm({ role, groups, onClose, onSaved }: { role?: RoleDetail | null
   const [name, setName] = useState(role?.name ?? '');
   const [scope, setScope] = useState<RoleRow['dataScope']>(role?.dataScope ?? 'own');
   const [office, setOffice] = useState(role?.requiresOffice ?? true);
+  const [tracks, setTracks] = useState(role?.tracksAttendance ?? true);
   const [codes, setCodes] = useState<Set<string>>(new Set(role?.permissions ?? []));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -51,7 +53,7 @@ function RoleForm({ role, groups, onClose, onSaved }: { role?: RoleDetail | null
     setBusy(true);
     setError(null);
     try {
-      const body = { name: name.trim(), dataScope: scope, requiresOffice: office, permissions: [...codes] };
+      const body = { name: name.trim(), dataScope: scope, requiresOffice: office, tracksAttendance: office || tracks, permissions: [...codes] };
       if (role) await api(`/roles/${role.id}`, { method: 'PATCH', body });
       else await api('/roles', { method: 'POST', body });
       onSaved();
@@ -66,10 +68,13 @@ function RoleForm({ role, groups, onClose, onSaved }: { role?: RoleDetail | null
       <form onSubmit={save} className="space-y-5">
         {error && <Notice tone="bad">{error}</Notice>}
         {role?.isSystem && <Notice tone="info">This is one of the standard roles. Its permissions can be changed, but it cannot be deleted. Nobody can be given more than they hold themselves.</Notice>}
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Role name" htmlFor="rn" required><Input id="rn" value={name} onChange={(e) => setName(e.target.value)} required minLength={2} disabled={role?.isSystem} /></Field>
           <Field label="Can see" htmlFor="rs" hint="Whose leads, calls and records">
             <Select id="rs" value={scope} onChange={(e) => setScope(e.target.value as RoleRow['dataScope'])}>{Object.entries(SCOPE).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</Select>
+          </Field>
+          <Field label="Attendance" htmlFor="rt" hint={office ? 'Always recorded for people who sign in from the office' : 'Signing in marks them present for the day'}>
+            <Select id="rt" value={office || tracks ? 'yes' : 'no'} disabled={office} onChange={(e) => setTracks(e.target.value === 'yes')}><option value="yes">Recorded when they sign in</option><option value="no">Not recorded</option></Select>
           </Field>
           <Field label="Sign-in" htmlFor="ro" hint="Office roles sign in only from the office">
             <Select id="ro" value={office ? 'office' : 'anywhere'} onChange={(e) => setOffice(e.target.value === 'office')}><option value="office">From the office only</option><option value="anywhere">From anywhere</option></Select>
@@ -137,7 +142,7 @@ export default function RolesPage() {
               <li key={r.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5">
                 <div className="min-w-0">
                   <p className="flex items-center gap-2 text-[15px] font-semibold text-ink">{r.name}{r.isSystem && <Badge><Lock className="mr-1 h-3 w-3" aria-hidden />Standard</Badge>}</p>
-                  <p className="mt-1 text-xs text-muted">Sees {SCOPE[r.dataScope]!.toLowerCase()} · {r.requiresOffice ? 'office sign-in' : 'signs in from anywhere'} · {r.permissionCount} permissions · {r.userCount} {r.userCount === 1 ? 'person' : 'people'}</p>
+                  <p className="mt-1 text-xs text-muted">Sees {SCOPE[r.dataScope]!.toLowerCase()} · {r.requiresOffice ? 'office sign-in' : 'signs in from anywhere'}{r.tracksAttendance && !r.requiresOffice ? ' · attendance recorded' : ''} · {r.permissionCount} permissions · {r.userCount} {r.userCount === 1 ? 'person' : 'people'}</p>
                 </div>
                 <div className="flex gap-2">
                   <Button variant="secondary" size="sm" onClick={() => setEditing(r.id)}>Edit</Button>

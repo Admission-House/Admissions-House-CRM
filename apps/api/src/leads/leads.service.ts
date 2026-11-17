@@ -67,6 +67,10 @@ export interface LeadListItem {
   nextFollowupAt: Date | null;
   expectedClosureOn: string | null;
   interestNote: string | null;
+  /** The course the student wants: the one chosen from the list, or what was typed or imported. */
+  course: string | null;
+  /** The city (region) the student is in or wants: from the list, or what was typed or imported. */
+  region: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -82,6 +86,8 @@ interface ListRow {
   next_followup_at: Date | null;
   expected_closure_on: string | null;
   interest_note: string | null;
+  course: string | null;
+  region: string | null;
   created_at: Date;
   updated_at: Date;
   assigned_to: string | null;
@@ -172,6 +178,10 @@ export class LeadsService {
         SELECT l.id, l.lead_no::text AS lead_no, l.name, l.primary_phone, l.email, l.intent, l.study_mode,
                l.next_followup_at, l.expected_closure_on::text AS expected_closure_on, l.interest_note,
                l.created_at, l.updated_at, l.assigned_to, a.name AS assignee_name,
+               COALESCE((SELECT c.name FROM courses c WHERE c.id = l.interested_course_id),
+                        NULLIF(CASE WHEN split_part(l.interest_note, ' | ', 1) ~ '^(Stream|City): ' THEN '' ELSE split_part(l.interest_note, ' | ', 1) END, '')) AS course,
+               COALESCE((SELECT loc.name FROM locations loc WHERE loc.id = l.interested_location_id),
+                        substring(l.interest_note from 'City: ([^|]+)')) AS region,
                s.id AS status_id, s.name AS status_name, s.queue AS status_queue, s.is_open AS status_open,
                ${EFFECTIVE_QUEUE} AS queue, src.id AS source_id, src.name AS source_name,
                (${order.key})::text AS sort_key
@@ -193,7 +203,11 @@ export class LeadsService {
     return this.db.withTenant(auth.tenantId, async (trx) => {
       const filters = this.filters(auth, { ...query, limit: 1, sort: 'newest' } as ListLeadsDto);
       const { rows } = await sql<ExportRow>`
-        SELECT l.lead_no::text AS lead_no, l.name, l.primary_phone AS phone, l.email, s.name AS status, ${EFFECTIVE_QUEUE} AS queue, src.name AS source,
+        SELECT l.lead_no::text AS lead_no, l.name, l.primary_phone AS phone, l.email,
+               (SELECT loc.name FROM locations loc WHERE loc.id = l.interested_location_id) AS city,
+               (SELECT st.name FROM lead_profiles lp JOIN streams st ON st.id = lp.preferred_stream_id WHERE lp.lead_id = l.id) AS stream,
+               (SELECT lp.preferred_level FROM lead_profiles lp WHERE lp.lead_id = l.id) AS level,
+               s.name AS status, ${EFFECTIVE_QUEUE} AS queue, src.name AS source,
                a.name AS assigned_to, l.intent, l.study_mode, l.interest_note AS interest,
                to_char(l.next_followup_at AT TIME ZONE t.timezone, 'YYYY-MM-DD HH24:MI') AS next_followup,
                l.expected_closure_on::text AS expected_closure,
@@ -1151,6 +1165,8 @@ function toListItem(r: ListRow): LeadListItem {
     nextFollowupAt: r.next_followup_at,
     expectedClosureOn: r.expected_closure_on,
     interestNote: r.interest_note,
+    course: r.course,
+    region: r.region,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };

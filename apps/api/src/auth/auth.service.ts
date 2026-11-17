@@ -214,9 +214,9 @@ export class AuthService {
       tenantId: tenant.id, exceptUserId: user.id, quietMinutes: 30,
       payload: { event: 'login_ok', userId: user.id, userName: user.name, role: user.role_name, ip, clientType: input.clientType },
     });
-    // Signing in from the office is the attendance: people who must sign in from the office are
-    // checked in here, and checked out when their last session ends (see migration 013).
-    if (user.requires_office) {
+    // Signing in is the attendance for every role that records it (the office roles, and the Super Admin, who signs in
+    // from anywhere): checked in here, and checked out when their last session ends (see migration 013).
+    if (user.tracks_attendance) {
       await this.attendance.checkIn(trx, {
         tenantId: tenant.id,
         userId: user.id,
@@ -372,7 +372,7 @@ export class AuthService {
           permissions: new Set(row.permissions),
           mustChangePassword: row.must_change_password,
           mfaSetupRequired: twoStepRequired(parseTwoStepPolicy(row.require_two_step), row.role_key) && !row.two_step_on,
-          tracksAttendance: row.requires_office,
+          tracksAttendance: row.tracks_attendance,
           ip: normalizeIp(meta.ip),
           requestId: meta.requestId,
         });

@@ -13,6 +13,16 @@ let sweep: IdleSweepService;
 let sa: string;
 let admin: string;
 
+/** Runs `fn` while the Super Admin role does not record attendance, then puts the setting back. */
+async function withoutAttendanceForSuper<T>(fn: () => Promise<T>): Promise<T> {
+  await owner.query(`UPDATE roles SET tracks_attendance = false WHERE tenant_id = $1 AND system_key = 'super_admin'`, [fx.tenantId]);
+  try {
+    return await fn();
+  } finally {
+    await owner.query(`UPDATE roles SET tracks_attendance = true WHERE tenant_id = $1 AND system_key = 'super_admin'`, [fx.tenantId]);
+  }
+}
+
 beforeAll(async () => {
   owner = new pg.Client({ connectionString: process.env.MIGRATOR_DATABASE_URL });
   await owner.connect();
@@ -113,11 +123,22 @@ describe('attendance starts when someone signs in from the office', () => {
     expect(all[0].check_in_at).toEqual(first.check_in_at);
   });
 
-  it('does not record attendance for a Super Admin, who can sign in from anywhere', async () => {
+  it('records attendance for a Super Admin too, who can sign in from anywhere, without asking for the office', async () => {
     const res = await api.call('GET', '/attendance/me/today', sa);
-    expect(res.json()).toEqual({ tracked: false });
-    const count = (await owner.query(`SELECT count(*)::int AS n FROM attendance_records WHERE user_id = $1`, [fx.user('super').id])).rows[0].n;
-    expect(count).toBe(0);
+    expect(res.json()).toMatchObject({ tracked: true, checkedIn: true });
+    const rows = (await owner.query(`SELECT method, check_in_lat FROM attendance_records WHERE user_id = $1`, [fx.user('super').id])).rows;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ method: 'office_check', check_in_lat: null });
+  });
+
+  it('checks a Super Admin out when their last session ends', async () => {
+    const token = await api.signIn('lockme');
+    const [open] = (await owner.query(`SELECT check_out_at FROM attendance_records WHERE user_id = $1`, [fx.user('lockme').id])).rows;
+    expect(open.check_out_at).toBeNull();
+    await api.call('POST', '/auth/logout', token);
+    const [closed] = (await owner.query(`SELECT check_out_at, check_out_reason FROM attendance_records WHERE user_id = $1`, [fx.user('lockme').id])).rows;
+    expect(closed.check_out_at).not.toBeNull();
+    expect(closed.check_out_reason).toBe('manual');
   });
 
   it('does not check in someone whose sign-in is refused', async () => {
@@ -310,7 +331,7 @@ describe('breaks', () => {
   });
 
   it('is not available to someone whose attendance is not recorded', async () => {
-    const res = await api.call('POST', '/attendance/breaks/start', sa, { breakTypeId: await typeId('Lunch') });
+    const res = await withoutAttendanceForSuper(async () => api.call('POST', '/attendance/breaks/start', sa, { breakTypeId: await typeId('Lunch') }));
     expect(errorCode(res)).toBe('NOT_TRACKED');
   });
 });
@@ -439,7 +460,7 @@ describe('attendance exceptions', () => {
   });
 
   it('is for people whose attendance is recorded, and for those allowed to raise one', async () => {
-    const notTracked = await raise(sa, { userId: fx.user('lockme').id, date: await localDate(-1), reason });
+    const notTracked = await withoutAttendanceForSuper(async () => raise(sa, { userId: fx.user('lockme').id, date: await localDate(-1), reason }));
     expect(errorCode(notTracked)).toBe('NOT_TRACKED');
 
     const token = await checkIn('att5');

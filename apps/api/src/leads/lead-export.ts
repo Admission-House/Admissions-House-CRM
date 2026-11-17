@@ -9,6 +9,9 @@ export interface ExportRow {
   name: string;
   phone: string;
   email: string | null;
+  city: string | null;
+  stream: string | null;
+  level: string | null;
   status: string;
   queue: string;
   source: string;
@@ -27,6 +30,9 @@ export const COLUMNS: { header: string; value: (r: ExportRow) => string }[] = [
   { header: 'Name', value: (r) => r.name },
   { header: 'Phone', value: (r) => spacedPhone(r.phone) },
   { header: 'Email', value: (r) => r.email ?? '' },
+  { header: 'City', value: (r) => r.city ?? '' },
+  { header: 'Stream', value: (r) => r.stream ?? '' },
+  { header: 'Level', value: (r) => r.level ?? '' },
   { header: 'Status', value: (r) => r.status },
   { header: 'Queue', value: (r) => r.queue },
   { header: 'Source', value: (r) => r.source },
