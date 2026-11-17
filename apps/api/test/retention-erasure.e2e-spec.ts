@@ -155,8 +155,20 @@ describe('clearing old technical records', () => {
       [fx.tenantId, user, randomUUID(), randomUUID()],
     );
 
+    await owner.query(
+      `INSERT INTO notifications (tenant_id, user_id, type, payload, read_at, created_at) VALUES
+         ($1, $2, 'system', '{"event":"old-read"}', now() - interval '99 days', now() - interval '100 days'),
+         ($1, $2, 'system', '{"event":"old-unread"}', NULL, now() - interval '100 days'),
+         ($1, $2, 'system', '{"event":"very-old-unread"}', NULL, now() - interval '200 days'),
+         ($1, $2, 'system', '{"event":"fresh-unread"}', NULL, now())`,
+      [fx.tenantId, user],
+    );
+
     const counts = await app.get(RetentionService).runOnce();
     expect(counts.loginAttempts).toBeGreaterThanOrEqual(1);
+    expect(counts.notifications).toBeGreaterThanOrEqual(2);
+    const notices = (await owner.query(`SELECT payload->>'event' AS e FROM notifications WHERE tenant_id = $1 AND payload->>'event' IN ('old-read','old-unread','very-old-unread','fresh-unread') ORDER BY 1`, [fx.tenantId])).rows.map((r) => r.e);
+    expect(notices).toEqual(['fresh-unread', 'old-unread']); // read ones go after 90 days, unread ones after 180
 
     const left = async (sqlText: string) => (await owner.query(sqlText, [fx.tenantId])).rows[0].n as number;
     expect(await left(`SELECT count(*)::int AS n FROM login_attempts WHERE tenant_id = $1 AND created_at < now() - interval '90 days'`)).toBe(0);

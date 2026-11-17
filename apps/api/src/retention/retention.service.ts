@@ -14,6 +14,7 @@ export interface RetentionCounts {
   inboundEvents: number;
   sessions: number;
   resetTokens: number;
+  notifications: number;
 }
 
 /**
@@ -41,7 +42,7 @@ export class RetentionService implements OnModuleInit {
 
   /** One pass over every active company. Returns what was removed in total. */
   async runOnce(): Promise<RetentionCounts> {
-    const total: RetentionCounts = { loginAttempts: 0, inboundEvents: 0, sessions: 0, resetTokens: 0 };
+    const total: RetentionCounts = { loginAttempts: 0, inboundEvents: 0, sessions: 0, resetTokens: 0, notifications: 0 };
     const { rows: tenants } = await sql<{ id: string }>`SELECT list_active_tenant_ids() AS id`.execute(this.db.unscoped());
     for (const { id } of tenants) {
       const c = await this.purgeTenant(id);
@@ -49,13 +50,14 @@ export class RetentionService implements OnModuleInit {
       total.inboundEvents += c.inboundEvents;
       total.sessions += c.sessions;
       total.resetTokens += c.resetTokens;
+      total.notifications += c.notifications;
     }
     return total;
   }
 
   private async purgeTenant(tenantId: string): Promise<RetentionCounts> {
     const days = this.env.RETENTION_KEEP_DAYS;
-    const counts: RetentionCounts = { loginAttempts: 0, inboundEvents: 0, sessions: 0, resetTokens: 0 };
+    const counts: RetentionCounts = { loginAttempts: 0, inboundEvents: 0, sessions: 0, resetTokens: 0, notifications: 0 };
     const locked = await this.db.withTenant(tenantId, async (trx) => {
       const { rows } = await sql<{ ok: boolean }>`SELECT pg_try_advisory_xact_lock(hashtext('retention'), hashtext(${tenantId})) AS ok`.execute(trx);
       return rows[0]?.ok ?? false;
@@ -91,6 +93,14 @@ export class RetentionService implements OnModuleInit {
       Number((await sql`DELETE FROM password_reset_tokens WHERE id IN (
           SELECT id FROM password_reset_tokens WHERE COALESCE(used_at, expires_at) < now() - make_interval(days => ${RESET_KEEP_DAYS}) LIMIT ${BATCH})`.execute(trx)).numAffectedRows ?? 0));
 
+    // A notice that was read is kept for the agreed time; one nobody ever read, twice as long.
+    counts.notifications = await loop(async (trx) =>
+      Number((await sql`DELETE FROM notifications WHERE id IN (
+          SELECT id FROM notifications
+           WHERE created_at < now() - make_interval(days => ${days})
+             AND (read_at IS NOT NULL OR created_at < now() - make_interval(days => ${days * 2}))
+           LIMIT ${BATCH})`.execute(trx)).numAffectedRows ?? 0));
+
     return counts;
   }
 
@@ -99,8 +109,8 @@ export class RetentionService implements OnModuleInit {
     this.running = true;
     try {
       const c = await this.runOnce();
-      const total = c.loginAttempts + c.inboundEvents + c.sessions + c.resetTokens;
-      if (total > 0) this.logger.log(`cleared ${c.loginAttempts} sign-in attempts, ${c.inboundEvents} website events, ${c.sessions} old sessions, ${c.resetTokens} reset links`);
+      const total = c.loginAttempts + c.inboundEvents + c.sessions + c.resetTokens + c.notifications;
+      if (total > 0) this.logger.log(`cleared ${c.loginAttempts} sign-in attempts, ${c.inboundEvents} website events, ${c.sessions} old sessions, ${c.resetTokens} reset links, ${c.notifications} old notices`);
     } catch (err) {
       this.logger.error(`retention failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {

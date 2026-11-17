@@ -94,7 +94,7 @@ export function Panel({ title, actions, children, className, flush }: { title?: 
       {(title || actions) && (
         <div className="flex min-h-11 items-center justify-between gap-3 border-b border-line/60 px-4 py-2">
           <h2 className="text-sm font-semibold text-ink">{title}</h2>
-          {actions && <div className="flex items-center gap-2">{actions}</div>}
+          {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
         </div>
       )}
       <div className={flush ? '' : 'p-4'}>{children}</div>
@@ -208,7 +208,7 @@ export function PageHeader({ title, subtitle, actions }: { title: string; subtit
         <h1 className="text-xl font-semibold tracking-tight text-ink">{title}</h1>
         {subtitle && <p className="mt-1 text-sm text-muted">{subtitle}</p>}
       </div>
-      {actions && <div className="flex items-center gap-2">{actions}</div>}
+      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </div>
   );
 }

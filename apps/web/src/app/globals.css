@@ -109,3 +109,10 @@
     .glass-brand { background: #063b39; -webkit-backdrop-filter: none; backdrop-filter: none; }
   }
 }
+
+/*
+ * A table or row of tabs that scrolls sideways must be the containing block of the hidden (screen-reader) text inside it.
+ * Otherwise that text, which is positioned out of the flow, sits where its cell is and makes the whole page scroll
+ * sideways on a phone.
+ */
+.overflow-x-auto { position: relative; }

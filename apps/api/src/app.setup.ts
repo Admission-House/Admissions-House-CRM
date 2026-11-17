@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { findBadText } from './common/clean-text.js';
 import type { IncomingHttpHeaders } from 'node:http';
 import cookie from '@fastify/cookie';
 import multipart from '@fastify/multipart';
@@ -50,6 +51,18 @@ export async function configureApp(app: NestFastifyApplication, env: Env): Promi
     // Nothing from the API may be kept by a browser cache, proxy or CDN unless the endpoint says so
     // itself (the company logo does). Otherwise one person's lead list could be served to another.
     if (request.url.startsWith('/api/v1/') && !reply.hasHeader('cache-control')) void reply.header('cache-control', 'private, no-store');
+  });
+
+  // Text the database cannot store (a NUL character, half of a surrogate pair) is refused at the door with a plain
+  // answer, instead of failing deep inside whichever screen happened to save it.
+  app.getHttpAdapter().getInstance().addHook('preValidation', async (request, reply) => {
+    if (!request.url.startsWith('/api/v1/')) return;
+    const found = findBadText(request.body) ?? findBadText(request.query);
+    if (found) {
+      return reply.status(400).send({
+        error: { code: 'INVALID_TEXT', message: 'Some of the text contains characters that cannot be saved. Remove them and try again.', fieldErrors: [{ field: found, message: 'Contains a character that cannot be saved' }], requestId: request.id },
+      });
+    }
   });
 
   // Time every request for the monitoring numbers. The route is the pattern, not the real address.

@@ -128,3 +128,17 @@ describe('a screen left open at an empty desk', () => {
     expect(await idleFor()).toBeLessThan(60);
   });
 });
+
+describe('text the database cannot store', () => {
+  it('is refused with a plain 400 on any screen, in the body or the address', async () => {
+    const token = await api.signIn('super');
+    for (const [path, body] of [['/branches', { name: 'Bad\u0000Name' }], ['/streams', { name: 'ok', note: '\ud800' }]] as const) {
+      const res = await api.call('POST', path, token, body as never);
+      expect(res.statusCode, path).toBe(400);
+      expect(res.json().error.code).toBe('INVALID_TEXT');
+    }
+    const q = await api.call('GET', '/leads?q=a%00b%00c', token);
+    expect(q.statusCode).toBe(400);
+    expect((await api.call('PUT', '/me/account', token, { name: 'Fine Name' })).statusCode).toBe(200);
+  });
+});

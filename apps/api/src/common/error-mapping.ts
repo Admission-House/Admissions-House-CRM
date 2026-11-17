@@ -95,6 +95,9 @@ export function mapError(err: unknown): MappedError {
 
   if (isPgError(err)) {
     switch (err.code) {
+      case '22021':
+      case '22P05':
+        return { status: 400, code: 'INVALID_TEXT', message: 'Some of the text contains characters that cannot be saved', unexpected: false };
       case '23505':
         return { status: 409, code: 'DUPLICATE', message: 'A record with these details already exists', unexpected: false };
       case '23503':
