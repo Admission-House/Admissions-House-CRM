@@ -921,15 +921,7 @@ export class LeadsService {
     );
 
     return {
-      id: r.id,
-      leadNo: r.lead_no,
-      name: r.name,
-      phone: r.primary_phone,
-      email: r.email,
-      intent: r.intent,
-      studyMode: r.study_mode,
-      expectedClosureOn: r.expected_closure_on,
-      interestNote: r.interest_note,
+      ...leadCore(r),
       status: {
         id: r.status_id,
         name: r.status_name,
@@ -1149,7 +1141,11 @@ interface DetailRow extends Omit<ListRow, 'sort_key'> {
   open_followups: string;
 }
 
-function toListItem(r: ListRow): LeadListItem {
+/** The fields a lead has in every view of it (the list and the single lead), named the way the API shows them. */
+function leadCore(r: {
+  id: string; lead_no: string; name: string; primary_phone: string; email: string | null; intent: string | null;
+  study_mode: string | null; expected_closure_on: string | null; interest_note: string | null;
+}) {
   return {
     id: r.id,
     leadNo: r.lead_no,
@@ -1158,13 +1154,19 @@ function toListItem(r: ListRow): LeadListItem {
     email: r.email,
     intent: r.intent,
     studyMode: r.study_mode,
+    expectedClosureOn: r.expected_closure_on,
+    interestNote: r.interest_note,
+  };
+}
+
+function toListItem(r: ListRow): LeadListItem {
+  return {
+    ...leadCore(r),
     status: { id: r.status_id, name: r.status_name, queue: r.status_queue, isOpen: r.status_open },
     queue: r.queue,
     source: { id: r.source_id, name: r.source_name },
     assignedTo: r.assigned_to ? { id: r.assigned_to, name: r.assignee_name ?? '' } : null,
     nextFollowupAt: r.next_followup_at,
-    expectedClosureOn: r.expected_closure_on,
-    interestNote: r.interest_note,
     course: r.course,
     region: r.region,
     createdAt: r.created_at,

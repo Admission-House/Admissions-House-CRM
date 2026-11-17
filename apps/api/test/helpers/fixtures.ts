@@ -1,3 +1,4 @@
+import { ADMIN, COUNSELLOR } from '../../db/permission-sets.mjs';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { PasswordService } from '../../src/auth/password.service.js';
@@ -98,10 +99,8 @@ export const DEFAULT_USERS: UserSpec[] = [
   { name: 'lv10', role: 'counsellor', manager: 'admin' },
 ];
 
-const STANDARD_PERMISSIONS: Record<Exclude<RoleKey, 'super_admin'>, string[]> = {
-  admin: ['lead.read', 'lead.create', 'lead.update', 'lead.assign', 'lead.import', 'lead.export', 'call.place', 'dashboard.read', 'report.read', 'report.export', 'salary.write', 'salary.read', 'salary.import', 'salary.read_own', 'call.read', 'call.listen', 'dialer.use', 'followup.manage', 'user.read', 'device.approve', 'branch.read', 'attendance.self', 'attendance.read', 'attendance.exception', 'leave.request', 'leave.read', 'leave.approve', 'master.read', 'master.create', 'master.review', 'shortlist.manage', 'document.manage', 'video.host', 'comm.manage', 'recording.play', 'recording.download'],
-  counsellor: ['lead.read', 'video.host', 'recording.play', 'dashboard.read', 'report.read', 'salary.read_own', 'call.place', 'dialer.use', 'call.read', 'lead.create', 'lead.update', 'followup.manage', 'attendance.self', 'leave.request', 'master.read', 'master.create', 'shortlist.manage', 'document.manage'],
-};
+/** The standard roles get exactly what a new company gets, so the tests cannot drift from what runs in production. */
+const STANDARD_PERMISSIONS: Record<Exclude<RoleKey, 'super_admin'>, readonly string[]> = { admin: ADMIN, counsellor: COUNSELLOR };
 
 /** A company with the three standard roles, an office, and users, in the real database. */
 export async function createFixture(owner: pg.Client, specs: UserSpec[] = DEFAULT_USERS): Promise<Fixture> {

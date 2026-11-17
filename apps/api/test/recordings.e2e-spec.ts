@@ -206,10 +206,20 @@ describe('listening to a recording', () => {
   });
 
   it('follows the data scope and the permission', async () => {
-    expect((await api.call('GET', `/calls/${callId}/recording`, t.lc2!)).statusCode).toBe(403); // a counsellor may not listen at all
+    // A counsellor may listen to calls, but only their own: another counsellor's call is not found.
+    expect((await api.call('GET', `/calls/${callId}/recording`, t.lc2!)).statusCode).toBe(404);
+    // And a role without the permission cannot listen at all.
+    await owner.query(`DELETE FROM role_permissions WHERE tenant_id = $1 AND permission_id = (SELECT id FROM permissions WHERE code = 'call.listen') AND role_id = (SELECT id FROM roles WHERE tenant_id = $1 AND system_key = 'counsellor')`, [fx.tenantId]);
+    try {
+      expect((await api.call('GET', `/calls/${callId}/recording`, t.lc2!)).statusCode).toBe(403);
+    } finally {
+      await owner.query(`INSERT INTO role_permissions (tenant_id, role_id, permission_id) SELECT $1, (SELECT id FROM roles WHERE tenant_id = $1 AND system_key = 'counsellor'), id FROM permissions WHERE code = 'call.listen' ON CONFLICT DO NOTHING`, [fx.tenantId]);
+    }
     expect((await api.call('GET', `/calls/${callId}/recording`, t.admin2!)).statusCode).toBe(404); // another team's admin cannot see the call
     expect((await api.call('GET', `/calls/${callId}/recording`, t.sa!)).statusCode).toBe(200);
-    expect((await api.call('POST', `/calls/${callId}/recording/link`, t.lc1!)).statusCode).toBe(403);
+    // A counsellor can get a short playback link for their own call, never for another's.
+    expect((await api.call('POST', `/calls/${callId}/recording/link`, t.lc1!)).statusCode).toBe(200);
+    expect((await api.call('POST', `/calls/${callId}/recording/link`, t.lc2!)).statusCode).toBe(404);
     expect((await app.inject({ method: 'GET', url: `/api/v1/calls/${callId}/recording` })).statusCode).toBe(401);
   });
 

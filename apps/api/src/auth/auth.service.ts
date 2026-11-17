@@ -375,6 +375,7 @@ export class AuthService {
           mustChangePassword: row.must_change_password,
           mfaSetupRequired: twoStepRequired(parseTwoStepPolicy(row.require_two_step), row.role_key) && !row.two_step_on,
           tracksAttendance: row.tracks_attendance,
+          requiresOffice: row.requires_office,
           ip: normalizeIp(meta.ip),
           requestId: meta.requestId,
         });

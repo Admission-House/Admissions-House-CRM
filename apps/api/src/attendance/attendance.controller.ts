@@ -32,6 +32,14 @@ export class AttendanceController {
     return this.attendance.today(auth);
   }
 
+  /** Checks in without signing in again. For the Super Admin; office roles are checked in when they sign in from the office. */
+  @RequirePermissions('attendance.self')
+  @Post('me/check-in')
+  @HttpCode(200)
+  checkIn(@CurrentAuth() auth: AuthContext) {
+    return this.attendance.checkInSelf(auth);
+  }
+
   /** The signed-in person's own attendance, newest day first. Needs no permission to look at others. */
   @RequirePermissions('attendance.self')
   @Get('me')

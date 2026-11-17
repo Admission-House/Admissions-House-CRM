@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { FieldError } from '../common/app-error.js';
+import { tidyName } from '../common/person-name.js';
 import { normalizePhone } from '../common/phone.js';
 
 // ---------------------------------------------------------------- reading a payload
@@ -24,7 +25,7 @@ const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
  */
 export const intakePayloadSchema = z.object({
   id: text(120),
-  name: z.string().trim().min(1, 'A name is needed').transform((v) => v.slice(0, 80)),
+  name: z.string().transform(tidyName).pipe(z.string().min(1, 'A name is needed')).transform((v) => v.slice(0, 80)),
   phone: z.string().trim().min(1, 'A phone number is needed').max(40),
   // A bad email must not cost us the lead: it is dropped instead.
   email: text(254).transform((v) => (v && EMAIL.test(v) ? v.toLowerCase() : undefined)),

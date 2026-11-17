@@ -6,7 +6,7 @@
 export const SUPER_ADMIN = 'ALL';
 
 export const ADMIN = [
-  'lead.read', 'lead.create', 'lead.update', 'lead.assign',
+  'lead.read', 'lead.create', 'lead.update', 'lead.assign', 'lead.import', 'lead.export',
   'followup.manage', 'document.manage', 'shortlist.manage',
   'call.place', 'call.read', 'call.listen', 'dialer.use',
   'master.read', 'master.create', 'master.review',
@@ -14,7 +14,7 @@ export const ADMIN = [
   'attendance.self', 'attendance.read', 'attendance.exception',
   'leave.request', 'leave.read', 'leave.approve',
   'salary.read_own', 'salary.read', 'salary.write', 'salary.import',
-  'dashboard.read', 'report.read', 'video.host', 'comm.manage', 'recording.play', 'recording.download',
+  'dashboard.read', 'report.read', 'report.export', 'video.host', 'comm.manage', 'recording.play', 'recording.download',
 ];
 
 export const COUNSELLOR = [

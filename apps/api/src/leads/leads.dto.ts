@@ -2,6 +2,7 @@ import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import { calendarDate } from '../common/dates.js';
 import { pageQuerySchema } from '../common/pagination.js';
+import { personName } from '../common/person-name.js';
 import { phoneSchema } from '../common/phone-schema.js';
 
 const phone = phoneSchema;
@@ -42,7 +43,7 @@ export class ExportLeadsDto extends createZodDto(exportLeadsSchema) {}
 // -------------------------------------------------------------------- create
 
 export const createLeadSchema = z.object({
-  name: z.string().trim().min(2).max(80),
+  name: personName(2, 80),
   phone,
   email: z.string().trim().toLowerCase().email().max(254).optional(),
   sourceId: z.uuid(),
@@ -68,7 +69,7 @@ export class CreateLeadDto extends createZodDto(createLeadSchema) {}
 
 export const updateLeadSchema = z
   .object({
-    name: z.string().trim().min(2).max(80),
+    name: personName(2, 80),
     phone,
     email: z.string().trim().toLowerCase().email().max(254).nullable(),
     intent: z.enum(['hot', 'warm', 'cold']).nullable(),

@@ -131,6 +131,31 @@ describe('attendance starts when someone signs in from the office', () => {
     expect(rows[0]).toMatchObject({ method: 'office_check', check_in_lat: null });
   });
 
+  it('lets a Super Admin who is signed in but not checked in check in with one press, and never twice', async () => {
+    const token = await api.signIn('lockme');
+    const user = fx.user('lockme').id;
+    await owner.query(`DELETE FROM attendance_records WHERE user_id = $1`, [user]);
+
+    const before = (await api.call('GET', '/attendance/me/today', token)).json();
+    expect(before).toMatchObject({ tracked: true, checkedIn: false, canCheckIn: true });
+
+    const pressed = await api.call('POST', '/attendance/me/check-in', token);
+    expect(pressed.statusCode, pressed.body).toBe(200);
+    expect(pressed.json()).toMatchObject({ checkedIn: true, canCheckIn: false });
+    const again = await api.call('POST', '/attendance/me/check-in', token);
+    expect(again.statusCode).toBe(200);
+    expect((await owner.query(`SELECT count(*)::int AS n FROM attendance_records WHERE user_id = $1`, [user])).rows[0].n).toBe(1);
+    expect((await owner.query(`SELECT count(*)::int AS n FROM audit_logs WHERE tenant_id = $1 AND actor_id = $2 AND action = 'attendance.self_check_in'`, [fx.tenantId, user])).rows[0].n).toBe(2);
+    await api.call('POST', '/auth/logout', token);
+  });
+
+  it('does not let a person who must sign in from the office check in from anywhere else', async () => {
+    const res = await api.call('POST', '/attendance/me/check-in', admin);
+    expect(res.statusCode).toBe(403);
+    expect(errorCode(res)).toBe('OFFICE_SIGN_IN_REQUIRED');
+    expect((await api.call('GET', '/attendance/me/today', admin)).json().canCheckIn).toBe(false);
+  });
+
   it('checks a Super Admin out when their last session ends', async () => {
     const token = await api.signIn('lockme');
     const [open] = (await owner.query(`SELECT check_out_at FROM attendance_records WHERE user_id = $1`, [fx.user('lockme').id])).rows;

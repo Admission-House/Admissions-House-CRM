@@ -7,7 +7,6 @@ import { AppError } from '../common/app-error.js';
 import { ENV } from '../config/config.module.js';
 import type { Env } from '../config/env.js';
 import { DatabaseService, Trx } from '../database/database.service.js';
-import { NotificationsService } from '../notifications/notifications.service.js';
 import { FileLinks } from '../storage/file-links.service.js';
 import { buildRtcToken, channelOf, secondsLeft, type SessionKind } from '../video/video-rules.js';
 import { VideoStore } from '../video/video-store.js';
@@ -93,7 +92,6 @@ export class RecordingService {
     private readonly db: DatabaseService,
     private readonly agora: AgoraRecordingClient,
     private readonly storage: RecordingStorage,
-    private readonly notifications: NotificationsService,
     private readonly audit: AuditService,
     private readonly links: FileLinks,
     private readonly store: VideoStore,

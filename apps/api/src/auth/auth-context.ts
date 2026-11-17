@@ -16,8 +16,10 @@ export interface AuthContext {
   mustChangePassword: boolean;
   /** The company requires two-step sign-in for this role and this person has not set it up yet. */
   mfaSetupRequired: boolean;
-  /** True for people who sign in from the office; their attendance is recorded at sign-in. */
+  /** True when signing in records the person's attendance (the office roles, and the Super Admin). */
   tracksAttendance: boolean;
+  /** True when the person must sign in from the office. Others (the Super Admin) can also check in without signing in again. */
+  requiresOffice: boolean;
   ip: string;
   requestId: string;
 }

@@ -56,6 +56,22 @@ export class AttendanceService {
 
   // -------------------------------------------------------------- own day
 
+  /**
+   * Checks the signed-in person in for today without signing in again. Only for roles that record attendance but do
+   * not sign in from the office (the Super Admin): people who must be in the office are checked in by signing in
+   * there, with the place proved, and cannot do it from anywhere else. A second press changes nothing.
+   */
+  async checkInSelf(auth: AuthContext) {
+    if (!auth.tracksAttendance) throw AppError.badRequest('NOT_TRACKED', 'Attendance is not recorded for your role');
+    if (auth.requiresOffice) throw new AppError('OFFICE_SIGN_IN_REQUIRED', 'Your attendance is marked when you sign in from the office.', 403);
+    await this.db.withTenant(auth.tenantId, async (trx) => {
+      const me = await trx.selectFrom('users').select('branch_id').where('id', '=', auth.userId).executeTakeFirstOrThrow();
+      await this.repo.checkIn(trx, { tenantId: auth.tenantId, userId: auth.userId, branchId: me.branch_id, ip: auth.ip });
+      await this.audit.write(trx, { tenantId: auth.tenantId, actorId: auth.userId, action: 'attendance.self_check_in', entity: 'user', entityId: auth.userId, ip: auth.ip, requestId: auth.requestId });
+    });
+    return this.today(auth);
+  }
+
   /** Where the signed-in person stands today: checked in, on a break, and the shift rules. */
   today(auth: AuthContext) {
     return this.db.withTenant(auth.tenantId, async (trx) => {
@@ -78,10 +94,13 @@ export class AttendanceService {
         WHERE a.user_id = ${auth.userId} AND a.work_date = ${today}::date`.execute(trx);
       const r = rows[0];
 
+      const checkedIn = !!r && r.check_out_at === null;
       return {
         tracked: true as const,
         today,
-        checkedIn: !!r && r.check_out_at === null,
+        checkedIn,
+        /** Someone who signs in from anywhere can also check in with a button, for example after being signed in already. */
+        canCheckIn: !checkedIn && !auth.requiresOffice,
         record: r && {
           id: r.id, workDate: r.work_date, checkInAt: r.check_in_at, checkOutAt: r.check_out_at,
           lateMinutes: r.late_minutes, method: r.method,

@@ -248,6 +248,45 @@ describe('importing leads', () => {
     expect((await owner.query(`SELECT count(*)::int AS n FROM lead_activities WHERE lead_id = $1 AND type = 'note'`, [row.id])).rows[0].n).toBe(0);
   });
 
+  it('takes a messy sheet as an admin gets it from a college or an ad platform, and the export shows the same leads back', async () => {
+    const n = counter + 1;
+    const mobile = (i: number) => `9${String(610_000_000 + n * 100 + i).padStart(9, '0')}`;
+    const rows = [
+      ['Sr No', 'Student Name', 'Mobile No.', 'Email ID', 'Course', 'Region', 'Qualification', 'Parent Name', 'Remarks'],
+      ['1', 'Aarav Sharma', `+91 ${mobile(1).slice(0, 5)} ${mobile(1).slice(5)}`, 'AARAV@Example.com', 'MBA', 'Noida', 'B.Com', 'Rakesh Sharma', 'Call after 6 pm'],
+      ['2', 'प्रिया वर्मा', `0${mobile(2)}`, '', 'BBA', 'Lucknow', '12th', 'Sunita Verma', ''],
+      ['3', 'Mohammed Faiz', `91-${mobile(3)}`, 'faiz@example.com', 'B.Tech CSE', 'Delhi', 'Diploma', '', 'Wants hostel'],
+      ['4', 'Duplicate Of One', mobile(1), 'dup@example.com', 'MBA', 'Noida', '', '', 'Second form fill'],
+      ['5', 'No Number', '', 'nonumber@example.com', 'BCA', 'Kanpur', '', '', ''],
+      ['6', '', mobile(6), '', 'MCA', 'Agra', '', '', 'No name given'],
+      ['7', 'Bad Number', '12345', '', 'MBA', 'Noida', '', '', ''],
+      ['8', 'Neha  Gupta ', `  ${mobile(8)}  `, 'neha.gupta@example.com', 'M.Com', 'Ghaziabad', 'B.Com', 'Anil Gupta', ''],
+    ];
+    const { default: writeXlsx } = await import('write-excel-file/node');
+    const data = await writeXlsx(rows.map((r) => r.map((value) => ({ value, type: String })))).toBuffer();
+    const done = await runImport(t.admin!, file(data, 'college data.xlsx'), { assign: 'none' });
+    // 4 good rows are filed, the repeat of row 1 is added to it, and 3 rows that cannot be filed are reported.
+    expect(done.totals).toMatchObject({ rows: 8, invalid: 3, created: 4, attached: 1 });
+
+    const lead = async (m: string) => (await owner.query(`SELECT name, email, primary_phone FROM leads WHERE tenant_id = $1 AND primary_phone = $2 AND deleted_at IS NULL`, [fx.tenantId, `91${m}`])).rows[0];
+    expect(await lead(mobile(1))).toMatchObject({ name: 'Aarav Sharma', email: 'aarav@example.com' });
+    expect(await lead(mobile(2))).toMatchObject({ name: 'प्रिया वर्मा' });
+    expect(await lead(mobile(3))).toMatchObject({ name: 'Mohammed Faiz' });
+    expect(await lead(mobile(8))).toMatchObject({ name: 'Neha Gupta' });
+
+    // The admin sees them in the list with course and region, and the notes keep everything else.
+    const listed = (await api.call('GET', '/leads?q=Aarav%20Sharma', t.admin!)).json().items[0];
+    expect(listed).toMatchObject({ name: 'Aarav Sharma', course: 'MBA', region: 'Noida', source: { name: 'Meta Ads' } });
+    const notes = (await owner.query(`SELECT remark FROM lead_activities a JOIN leads l ON l.id = a.lead_id WHERE l.tenant_id = $1 AND l.primary_phone = $2 AND a.type = 'note' ORDER BY a.created_at`, [fx.tenantId, `91${mobile(1)}`])).rows.map((r) => r.remark as string);
+    expect(notes[0]).toBe('Other details from the file: Sr No: 1; Qualification: B.Com; Parent Name: Rakesh Sharma; Remarks: Call after 6 pm');
+    expect(notes[1]).toContain('Second form fill');
+
+    // Export and import round trip: the same four people come back out for the admin, with the Hindi name intact.
+    const exported = (await api.call('GET', '/leads/export?format=csv', t.admin!)).body;
+    const names = (parse(exported, { bom: true, columns: true }) as Record<string, string>[]).map((r) => r.Name);
+    for (const expected of ['Aarav Sharma', 'प्रिया वर्मा', 'Mohammed Faiz', 'Neha Gupta']) expect(names, expected).toContain(expected);
+  });
+
   it('can leave leads in the unassigned pool', async () => {
     const p = phone();
     const done = await runImport(t.admin!, file(csv('Name,Phone', `Pool Lead,${p}`)), { assign: 'none' });

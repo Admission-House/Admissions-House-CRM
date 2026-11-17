@@ -4,7 +4,6 @@ import { z } from 'zod';
 import { scopeCondition } from '../access/scope.js';
 import { AuditService } from '../audit/audit.service.js';
 import type { AuthContext } from '../auth/auth-context.js';
-import { AuthRepository } from '../auth/auth.repository.js';
 import { AppError } from '../common/app-error.js';
 import { decodeCursor, Page, toPage } from '../common/pagination.js';
 import { DatabaseService, Trx } from '../database/database.service.js';
@@ -41,7 +40,6 @@ export class DevicesService {
   constructor(
     private readonly db: DatabaseService,
     private readonly audit: AuditService,
-    private readonly authRepo: AuthRepository,
   ) {}
 
   list(auth: AuthContext, query: { status: 'pending' | 'approved' | 'all'; limit: number; cursor?: string }): Promise<Page<DeviceView>> {

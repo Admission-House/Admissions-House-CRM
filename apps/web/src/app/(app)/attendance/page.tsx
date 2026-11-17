@@ -68,6 +68,22 @@ function MyAttendance() {
     return { from: `${month}-01`, to: ymd(new Date(y, m, 0)), limit: 100 };
   }, [month]);
   const mine = useApi<Page<Record_>>('/attendance/me', range);
+  const today = useApi<{ tracked: boolean; checkedIn?: boolean; canCheckIn?: boolean }>('/attendance/me/today');
+  const [checking, setChecking] = useState(false);
+  const [checkError, setCheckError] = useState<string | null>(null);
+  async function checkInNow() {
+    setChecking(true);
+    setCheckError(null);
+    try {
+      await api('/attendance/me/check-in', { method: 'POST' });
+      today.reload();
+      mine.reload();
+    } catch (err) {
+      setCheckError(err instanceof ApiError ? err.message : 'Cannot reach the server. Try again.');
+    } finally {
+      setChecking(false);
+    }
+  }
   const items = mine.data?.items ?? [];
   const late = items.filter((r) => r.lateMinutes > 0).length;
   const worked = items.reduce((n, r) => n + r.workedMinutes, 0);
@@ -80,7 +96,15 @@ function MyAttendance() {
         ))}
       </div>
       <Panel title="My attendance" flush actions={<Input type="month" aria-label="Month" value={month} max={ymd(new Date()).slice(0, 7)} onChange={(e) => e.target.value && setMonth(e.target.value)} className="w-44" />}>
-        <p className="border-b border-line px-4 py-3 text-xs text-muted">Signing in from the office marks your attendance. There is nothing to press.</p>
+        {today.data?.canCheckIn ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3">
+            <p className="text-sm text-ink">You are not checked in for today.</p>
+            <Button onClick={() => void checkInNow()} loading={checking}>Check in now</Button>
+          </div>
+        ) : (
+          <p className="border-b border-line px-4 py-3 text-xs text-muted">Signing in marks your attendance (from the office, for office roles). There is nothing to press.</p>
+        )}
+        {checkError && <div className="px-4 pt-3"><Notice tone="bad">{checkError}</Notice></div>}
         {mine.error ? <div className="p-4"><Notice tone="bad">{mine.error.message}</Notice></div> : mine.loading && !mine.data ? <Spinner /> : <RecordsTable rows={items} />}
       </Panel>
     </div>
