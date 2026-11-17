@@ -103,6 +103,9 @@ export class AuthRepository {
       .selectFrom('login_attempts')
       .select(sql<string>`count(*)`.as('n'))
       .where('ip', '=', ip)
+      // Only attempts that failed count. A whole office signs in from one public address, often within the same few
+      // minutes, and people who got in with the right password are not guessing anything.
+      .where('result', '<>', 'success')
       .where('created_at', '>', sql<Date>`now() - interval '10 minutes'`)
       .executeTakeFirstOrThrow();
     return Number(row.n);

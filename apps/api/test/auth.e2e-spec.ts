@@ -550,6 +550,24 @@ describe('sessions managed by a Super Admin', () => {
 // ------------------------------------------------------------------ throttling
 
 describe('repeated attempts from one address', () => {
+  it('lets a whole office sign in from one address at the same time, only failed attempts count against it', async () => {
+    const office = await startApp({ LOGIN_IP_MAX_ATTEMPTS: '5' });
+    try {
+      const ip = '198.51.100.20';
+      // Twelve people arriving together: more sign-ins than the limit on failures, every one of them right.
+      const results = await Promise.all(Array.from({ length: 12 }, () => office.inject({ method: 'POST', url: '/api/v1/auth/login', payload: credentials('super'), remoteAddress: ip })));
+      expect(results.map((r) => r.statusCode)).toEqual(Array(12).fill(200));
+      // Guessing is still stopped: five wrong passwords and the address is slowed down.
+      for (let i = 0; i < 5; i++) {
+        expect((await office.inject({ method: 'POST', url: '/api/v1/auth/login', payload: credentials('super', 'Wrong-password-1'), remoteAddress: ip })).statusCode).toBe(401);
+      }
+      expect((await office.inject({ method: 'POST', url: '/api/v1/auth/login', payload: credentials('super'), remoteAddress: ip })).statusCode).toBe(429);
+    } finally {
+      await office.close();
+    }
+  });
+
+
   it('are slowed down with a 429 and a Retry-After header', async () => {
     const strict = await startApp({ LOGIN_IP_MAX_ATTEMPTS: '5' });
     try {

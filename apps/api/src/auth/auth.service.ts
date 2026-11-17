@@ -83,7 +83,9 @@ export class AuthService {
     private readonly notifications: NotificationsService,
     private readonly mfa: MfaService,
   ) {
-    this.addressLimiter = new SlidingWindowLimiter(env.LOGIN_IP_MAX_ATTEMPTS * 2, 10 * 60_000);
+    // A cheap first gate in front of password hashing. It counts every request, so it is far looser than the limit on
+    // failed attempts, which is the real protection (together with the lock on each account).
+    this.addressLimiter = new SlidingWindowLimiter(env.LOGIN_IP_MAX_ATTEMPTS * 10, 10 * 60_000);
   }
 
   // ---------------------------------------------------------------- sign in

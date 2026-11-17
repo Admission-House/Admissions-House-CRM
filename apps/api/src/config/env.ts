@@ -50,7 +50,7 @@ const schema = z.object({
   LOGIN_MAX_FAILURES: z.coerce.number().int().min(3).max(20).default(5),
   LOGIN_LOCK_MINUTES: z.coerce.number().int().min(1).max(1440).default(15),
   /** Sign-in attempts allowed from one address in ten minutes. */
-  LOGIN_IP_MAX_ATTEMPTS: z.coerce.number().int().min(5).max(500).default(30),
+  LOGIN_IP_MAX_ATTEMPTS: z.coerce.number().int().min(5).max(500).default(100),
   /**
    * What one signed-in user may do per minute: all requests together, and the expensive ones
    * (exports, imports, uploads, file downloads) among them. Counted in this process.
