@@ -30,10 +30,10 @@ describe('who hears about what', () => {
     expect(wants(counsellor, ev('team'))).toBe(false);
   });
 
-  it('tells the holder of a lead, and whoever oversees the team, about it', () => {
+  it('tells everyone about a company-wide lead change, and about one person only that person and whoever oversees the team', () => {
     expect(wants(counsellor, ev('lead', 'c1'))).toBe(true);
     expect(wants(counsellor, ev('lead', 'c2'))).toBe(false);
-    expect(wants(counsellor, ev('lead', null))).toBe(false);
+    expect(wants(counsellor, ev('lead', null))).toBe(true); // a change to a lead is a hint for the whole company; the screen asks the API what it may see
     expect(wants(admin, ev('lead', 'c2'))).toBe(true);
   });
 

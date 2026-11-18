@@ -16,6 +16,7 @@ interface Today {
   breakMinutesToday?: number;
   breaks?: { id: string; name: string; allowedMinutes: number; usedMinutes: number }[];
   hardLimitMinutes?: number;
+  serverNow?: string;
   shift?: { start: string; end: string; idleTimeoutMin: number } | null;
 }
 
@@ -33,16 +34,25 @@ export function WorkStatus() {
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const box = useRef<HTMLDivElement>(null);
+  // How far this computer's clock is from the server's, taken each time the answer arrives, so the counting is right on any computer.
+  const skew = useRef(0);
 
   const t = today.data;
   const onBreak = t?.onBreak ?? null;
+  const answeredAt = t?.serverNow;
+  useEffect(() => { if (answeredAt) skew.current = new Date(answeredAt).getTime() - Date.now(); }, [answeredAt]);
 
-  // The break timer ticks once a minute, only while a break is running.
+  // The break timer ticks every few seconds, only while a break is running, and again as soon as the person comes back to this tab.
   useEffect(() => {
     if (!onBreak) return;
-    const id = setInterval(() => setNow(Date.now()), 30_000);
-    return () => clearInterval(id);
-  }, [onBreak]);
+    const tick = () => setNow(Date.now() + skew.current);
+    const first = setTimeout(tick, 0);
+    const id = setInterval(tick, 10_000);
+    const back = () => { if (!document.hidden) { tick(); today.reload(); } };
+    document.addEventListener('visibilitychange', back);
+    return () => { clearTimeout(first); clearInterval(id); document.removeEventListener('visibilitychange', back); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onBreak?.startedAt, answeredAt]);
 
   useEffect(() => {
     if (!open) return;
@@ -69,6 +79,11 @@ export function WorkStatus() {
 
   const minutes = onBreak ? Math.max(0, Math.floor((now - new Date(onBreak.startedAt).getTime()) / 60_000)) : 0;
   const over = onBreak ? minutes > onBreak.type.allowedMinutes : false;
+  // All of today's break time: what was counted when the answer arrived, plus what has passed since.
+  const sinceAnswer = t?.serverNow ? Math.max(0, Math.floor((now - new Date(t.serverNow).getTime()) / 60_000)) : 0;
+  const hardLimit = t?.hardLimitMinutes ?? 100;
+  const dayUsed = (t?.breakMinutesToday ?? 0) + (onBreak ? sinceAnswer : 0);
+  const signOutIn = Math.max(0, hardLimit - dayUsed);
 
   return (
     <div ref={box} className="relative">
@@ -82,7 +97,7 @@ export function WorkStatus() {
         )}
       >
         {onBreak ? <Coffee className="h-3.5 w-3.5" aria-hidden /> : <LogIn className="h-3.5 w-3.5 text-ok" aria-hidden />}
-        {onBreak ? `${onBreak.type.name} · ${minutes} of ${onBreak.type.allowedMinutes} min` : t.record ? `In since ${clock(t.record.checkInAt)}` : 'Not signed in'}
+        {onBreak ? (over ? `Time over · signing out in ${signOutIn} min` : `${onBreak.type.name} · ${minutes} of ${onBreak.type.allowedMinutes} min`) : t.record ? `In since ${clock(t.record.checkInAt)}` : 'Not signed in'}
       </button>
 
       {open && (
@@ -100,7 +115,14 @@ export function WorkStatus() {
           {error && <p role="alert" className="mt-3 text-xs text-bad">{error}</p>}
           <div className="mt-4 border-t border-line pt-4">
             {onBreak ? (
-              <Button className="w-full" loading={busy} onClick={() => void act('/attendance/breaks/end')}>End break</Button>
+              <>
+                <p className={cx('mb-3 text-sm', over ? 'font-medium text-bad' : 'text-muted')}>
+                  {over
+                    ? `Your ${onBreak.type.name.toLowerCase()} time is over. You will be signed out in ${signOutIn} min if you do not end it.`
+                    : `${Math.max(0, onBreak.type.allowedMinutes - minutes)} min left of ${onBreak.type.allowedMinutes}. Signed out after ${hardLimit} min of breaks in a day.`}
+                </p>
+                <Button className="w-full" loading={busy} onClick={() => void act('/attendance/breaks/end')}>End break</Button>
+              </>
             ) : t.checkedIn ? (
               <ul className="space-y-2" aria-label="Breaks">
                 {(t.breaks ?? []).map((b) => {

@@ -37,3 +37,19 @@ export function changedTopics(last: Pulse | null, now: Pulse, resyncDue: boolean
   if (resyncDue) changed.push('resync');
   return changed;
 }
+
+/**
+ * Which topics a screen's data depends on, read from the address it loads, so that every screen refreshes by
+ * itself when someone else changes what it shows. Things that rarely change (the lists in a drop-down) are left out.
+ */
+export function topicsForPath(path: string | null): string[] {
+  if (!path) return [];
+  const p = path.split('?')[0]!.replace(/^\/+/, '');
+  const head = p.split('/')[0]!;
+  if (head === 'leads' || head === 'followups' || head === 'imports') return ['lead'];
+  if (head === 'attendance' || head === 'leave' || head === 'salaries' || head === 'payroll') return ['work', 'team'];
+  if (head === 'reports') return ['lead', 'work', 'team'];
+  if (head === 'users' || head === 'roles' || head === 'branches' || head === 'lead-statuses' || head === 'lead-sources' || head === 'lead-policies') return ['admin'];
+  if (head === 'communications' || head === 'calls') return ['call'];
+  return [];
+}

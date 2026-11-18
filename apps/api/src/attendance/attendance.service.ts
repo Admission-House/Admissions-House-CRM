@@ -115,6 +115,8 @@ export class AttendanceService {
           ? { id: r.break_id, startedAt: r.break_started_at, type: { id: r.break_type_id, name: r.break_name, allowedMinutes: r.allowed_minutes } }
           : null,
         breakMinutesToday: r?.break_minutes ?? 0,
+        /** The server's clock at this moment, so a screen counts a running break correctly even if its own clock is wrong. */
+        serverNow: new Date().toISOString(),
         /** Each kind of break with the minutes of it used today, so a screen can show what is left. */
         hardLimitMinutes: settings?.break_hard_limit_minutes ?? 100,
         breaks: kinds.map((k) => ({ id: k.id, name: k.name, allowedMinutes: k.allowed_minutes, usedMinutes: k.used })),

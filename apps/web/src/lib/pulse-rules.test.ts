@@ -50,3 +50,16 @@ describe('what changed since the last answer', () => {
     expect(changedTopics(a, pulse({ ...a.stamps }), true)).toEqual(['resync']);
   });
 });
+
+describe('topicsForPath', () => {
+  it('refreshes a screen when what it shows can change, and leaves static lists alone', async () => {
+    const { topicsForPath } = await import('./pulse-rules');
+    expect(topicsForPath('/leads')).toEqual(['lead']);
+    expect(topicsForPath('/leads/abc/followups')).toEqual(['lead']);
+    expect(topicsForPath('/attendance/me/today')).toEqual(['work', 'team']);
+    expect(topicsForPath('/users?limit=5')).toEqual(['admin']);
+    expect(topicsForPath('/lead-statuses')).toEqual(['admin']);
+    expect(topicsForPath('/auth/me')).toEqual([]);
+    expect(topicsForPath(null)).toEqual([]);
+  });
+});

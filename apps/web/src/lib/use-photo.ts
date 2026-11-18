@@ -11,7 +11,7 @@ function load(userId: string, version: number): Promise<string | null> {
   let hit = cache.get(key);
   if (!hit) {
     hit = apiRaw(`/users/${userId}/avatar`)
-      .then(async (res) => URL.createObjectURL(await res.blob()))
+      .then(async (res) => (res.ok ? URL.createObjectURL(await res.blob()) : null))
       .catch(() => null);
     cache.set(key, hit);
   }

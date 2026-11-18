@@ -154,7 +154,8 @@ describe('live hints', () => {
     await sleep(800);
     expect(topics(theirs)).not.toContain('notification');
     // The hint carries no data, only the topic.
-    expect(mine.events.find((e) => e.type === 'event')).toEqual({ type: 'event', topics: ['notification'] });
+    const ev = mine.events.find((e) => e.type === 'event' && (e as { topics?: string[] }).topics?.includes('notification')) as Record<string, unknown>;
+    expect(Object.keys(ev).sort()).toEqual(['topics', 'type']);
   });
 
   it('tells the people who oversee the team when someone signs in, and not a counsellor', async () => {

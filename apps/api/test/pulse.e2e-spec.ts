@@ -60,6 +60,27 @@ describe('the question "what changed since last time?"', () => {
     expect(before === undefined || new Date(after!) > new Date(before)).toBe(true);
   });
 
+  it('tells everyone when anything about a lead changes, not only its status, and when work or company settings change', async () => {
+    const lead = (await owner.query(`SELECT id FROM leads WHERE tenant_id = $1 AND lead_no = 9100001`, [fx.tenantId])).rows[0].id;
+    const inCompany = async (statement: string, args: unknown[]) => {
+      await owner.query('BEGIN');
+      await owner.query(`SELECT set_config('app.tenant_id', $1, true)`, [fx.tenantId]);
+      await owner.query(statement, args);
+      await owner.query('COMMIT');
+    };
+    // A note-only change to a lead that nobody holds: a counsellor's screen must still hear about it.
+    const before = (await pulse(t.lc!)).stamps;
+    await sleep(20);
+    await inCompany(`UPDATE leads SET name = 'Pulse Lead edited' WHERE id = $1`, [lead]);
+    const afterLead = (await pulse(t.lc!)).stamps;
+    expect(new Date(afterLead.lead!) > new Date(before.lead ?? 0)).toBe(true);
+    await sleep(20);
+    await inCompany(`UPDATE break_types SET name = name WHERE tenant_id = $1`, [fx.tenantId]);
+    expect((await pulse(t.lc!)).stamps.admin).toBeDefined();
+    await inCompany(`UPDATE attendance_records SET late_minutes = late_minutes WHERE tenant_id = $1`, [fx.tenantId]);
+    expect((await pulse(t.sa!)).stamps.work).toBeDefined();
+  });
+
   it('keeps one person\'s notifications to that person', async () => {
     const mine = (await pulse(t.lc!)).stamps.notification;
     const theirs = (await pulse(t.lc2!)).stamps.notification;

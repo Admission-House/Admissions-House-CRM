@@ -347,7 +347,7 @@ function Leads() {
                   <th className="px-3 py-3 font-medium">Assigned to</th>
                   <th className="px-3 py-3 font-medium">Next follow-up</th>
                   <th className="px-3 py-3 font-medium">Updated</th>
-                  <th className="px-4 py-2.5 text-right font-semibold"><span className="sr-only">Actions</span></th>
+                  <th className="sticky right-0 z-10 bg-head px-3 py-2.5 text-right font-semibold shadow-[-8px_0_8px_-8px_rgba(15,23,42,0.12)]"><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
@@ -363,21 +363,21 @@ function Leads() {
                           <Avatar name={l.name} size={30} tone="soft" />
                           <div className="min-w-0">
                             <Link href={`/leads/${l.id}`} className="block truncate font-medium text-ink hover:text-brand-600 hover:underline">{l.name}</Link>
-                            <p className="flex items-center gap-1.5 text-xs text-muted"><span className="tabular">{fmtPhone(l.phone)}</span><span aria-hidden>·</span><span>#{l.leadNo}</span>{l.intent && <Badge tone={INTENT_TONE[l.intent]}>{l.intent}</Badge>}</p>
+                            <p className="flex items-center gap-1.5 whitespace-nowrap text-xs text-muted"><span className="tabular">{fmtPhone(l.phone)}</span><span aria-hidden>·</span><span>#{l.leadNo}</span>{l.intent && <Badge tone={INTENT_TONE[l.intent]}>{l.intent}</Badge>}</p>
                           </div>
                         </div>
                       </td>
                       <td className="max-w-[14rem] truncate px-3 py-2.5 text-muted" title={l.email ?? undefined}>{l.email ?? <span className="text-subtle">&mdash;</span>}</td>
                       <td className="max-w-[12rem] truncate px-3 py-2.5" title={l.course ?? undefined}>{l.course ?? <span className="text-subtle">&mdash;</span>}</td>
                       <td className="max-w-[10rem] truncate px-3 py-2.5" title={l.region ?? undefined}>{l.region ?? <span className="text-subtle">&mdash;</span>}</td>
-                      <td className="px-3 py-2.5"><Badge tone={queueTone(l.queue)}>{l.status.name}</Badge></td>
+                      <td className="whitespace-nowrap px-3 py-2.5"><Badge tone={queueTone(l.queue)}>{l.status.name}</Badge></td>
                       {showSource && <td className="px-3 py-2.5 text-muted">{l.source?.name}</td>}
-                      <td className="px-3 py-2.5">{l.assignedTo?.name ?? <span className="text-subtle">Unassigned</span>}</td>
-                      <td className="px-3 py-2.5">
+                      <td className="whitespace-nowrap px-3 py-2.5">{l.assignedTo?.name ?? <span className="text-subtle">Unassigned</span>}</td>
+                      <td className="whitespace-nowrap px-3 py-2.5">
                         {l.nextFollowupAt ? <span className={cx('tabular', late ? 'font-medium text-bad' : 'text-ink')} title={fmtDate(l.nextFollowupAt)}>{fromNow(l.nextFollowupAt)}</span> : <span className="text-subtle">&mdash;</span>}
                       </td>
-                      <td className="px-3 py-2.5 text-muted"><span className="tabular">{fromNow(l.updatedAt)}</span></td>
-                      <td className="px-4 py-2.5">
+                      <td className="whitespace-nowrap px-3 py-2.5 text-muted"><span className="tabular">{fromNow(l.updatedAt)}</span></td>
+                      <td className={cx('sticky right-0 z-10 px-3 py-2.5 shadow-[-8px_0_8px_-8px_rgba(15,23,42,0.12)]', selected.has(l.id) ? 'bg-mint-soft' : 'bg-surface')}>
                         <div className="flex justify-end gap-1">
                           {(can('call.place') || can('video.host')) && l.status.isOpen && (
                             <LeadCallMenu lead={{ id: l.id, name: l.name }} phone={can('call.place') && phoneReady ? { enabled: true, onCall: () => void callLead(l.id) } : undefined}

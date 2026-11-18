@@ -6,7 +6,7 @@ import { useAuth } from './auth';
 import { changedTopics, nextWaitMs, type Pulse } from './pulse-rules';
 
 /** What a hint can be about. `resync` means the connection was lost for a while, so ask for everything again. */
-export type Topic = 'notification' | 'team' | 'lead' | 'call' | 'resync';
+export type Topic = 'notification' | 'team' | 'lead' | 'call' | 'work' | 'admin' | 'resync';
 type Listener = (topics: readonly string[]) => void;
 
 interface Live {
@@ -193,6 +193,7 @@ export function useRealtime(topics: readonly Topic[], onChange: () => void, minG
   const wanted = topics.join(',');
 
   useEffect(() => {
+    if (!wanted) return;
     const mine = new Set(wanted.split(','));
     let last = 0;
     let trailing: ReturnType<typeof setTimeout> | undefined;
