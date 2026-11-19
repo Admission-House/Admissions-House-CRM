@@ -40,7 +40,7 @@ export class IdleSweepService implements OnModuleInit {
   ) {}
 
   onModuleInit(): void {
-    this.jobs.register({ name: 'idle-sweep', group: 'quarter', everySec: this.env.SWEEP_INTERVAL_SEC, run: () => this.runSafely() });
+    this.jobs.register({ name: 'idle-sweep', group: 'minute', everySec: this.env.SWEEP_INTERVAL_SEC, run: () => this.runSafely() });
   }
 
   async runSafely(): Promise<void> {

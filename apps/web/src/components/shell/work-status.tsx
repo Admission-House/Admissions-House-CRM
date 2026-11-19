@@ -12,7 +12,7 @@ interface Today {
   tracked: boolean;
   checkedIn?: boolean;
   record?: { checkInAt: string; checkOutAt: string | null; lateMinutes: number } | null;
-  onBreak?: { startedAt: string; type: { name: string; allowedMinutes: number } } | null;
+  onBreak?: { startedAt: string; type: { id: string; name: string; allowedMinutes: number } } | null;
   breakMinutesToday?: number;
   breaks?: { id: string; name: string; allowedMinutes: number; usedMinutes: number }[];
   hardLimitMinutes?: number;
@@ -78,12 +78,15 @@ export function WorkStatus() {
   }
 
   const minutes = onBreak ? Math.max(0, Math.floor((now - new Date(onBreak.startedAt).getTime()) / 60_000)) : 0;
-  const over = onBreak ? minutes > onBreak.type.allowedMinutes : false;
+  // The allowance is the day's total of this kind of break (several short breaks add up), so compare the total, not the running break alone.
+  const kindBefore = onBreak ? (t?.breaks?.find((b) => b.id === onBreak.type.id)?.usedMinutes ?? 0) : 0;
   // All of today's break time: what was counted when the answer arrived, plus what has passed since.
   const sinceAnswer = t?.serverNow ? Math.max(0, Math.floor((now - new Date(t.serverNow).getTime()) / 60_000)) : 0;
   const hardLimit = t?.hardLimitMinutes ?? 100;
   const dayUsed = (t?.breakMinutesToday ?? 0) + (onBreak ? sinceAnswer : 0);
   const signOutIn = Math.max(0, hardLimit - dayUsed);
+  const kindUsed = kindBefore + (onBreak ? sinceAnswer : 0);
+  const over = onBreak ? kindUsed > onBreak.type.allowedMinutes : false;
 
   return (
     <div ref={box} className="relative">
@@ -97,7 +100,7 @@ export function WorkStatus() {
         )}
       >
         {onBreak ? <Coffee className="h-3.5 w-3.5" aria-hidden /> : <LogIn className="h-3.5 w-3.5 text-ok" aria-hidden />}
-        {onBreak ? (over ? `Time over · signing out in ${signOutIn} min` : `${onBreak.type.name} · ${minutes} of ${onBreak.type.allowedMinutes} min`) : t.record ? `In since ${clock(t.record.checkInAt)}` : 'Not signed in'}
+        {onBreak ? (over ? `Over ${onBreak.type.allowedMinutes} min · signs out in ${signOutIn} min` : `${onBreak.type.name} · ${kindUsed} of ${onBreak.type.allowedMinutes} min today`) : t.record ? `In since ${clock(t.record.checkInAt)}` : 'Not signed in'}
       </button>
 
       {open && (
@@ -118,8 +121,8 @@ export function WorkStatus() {
               <>
                 <p className={cx('mb-3 text-sm', over ? 'font-medium text-bad' : 'text-muted')}>
                   {over
-                    ? `Your ${onBreak.type.name.toLowerCase()} time is over. You will be signed out in ${signOutIn} min if you do not end it.`
-                    : `${Math.max(0, onBreak.type.allowedMinutes - minutes)} min left of ${onBreak.type.allowedMinutes}. Signed out after ${hardLimit} min of breaks in a day.`}
+                    ? `You have used more than the ${onBreak.type.allowedMinutes} minutes allowed for the day. Your supervisors have been told. You are signed out in ${signOutIn} min if you do not end it.`
+                    : `This break: ${minutes} min. Today: ${kindUsed} of ${onBreak.type.allowedMinutes} min used, ${Math.max(0, onBreak.type.allowedMinutes - kindUsed)} left. Take it in as many parts as you like.`}
                 </p>
                 <Button className="w-full" loading={busy} onClick={() => void act('/attendance/breaks/end')}>End break</Button>
               </>
@@ -131,9 +134,9 @@ export function WorkStatus() {
                     <li key={b.id} className="flex items-center justify-between gap-3 rounded-md border border-line px-3 py-2">
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-ink">{b.name}</p>
-                        <p className="text-xs text-muted">{left > 0 ? `${left} of ${b.allowedMinutes} min left` : `All ${b.allowedMinutes} min used`}</p>
+                        <p className="text-xs text-muted">{left > 0 ? `${b.usedMinutes} of ${b.allowedMinutes} min used today, ${left} left` : `${b.allowedMinutes} min used. More time is reported to your supervisors; you are signed out at ${hardLimit} min.`}</p>
                       </div>
-                      <Button variant="secondary" size="sm" disabled={left === 0} loading={busy} onClick={() => void act('/attendance/breaks/start', { breakTypeId: b.id })}>Start</Button>
+                      <Button variant="secondary" size="sm" disabled={(t.breakMinutesToday ?? 0) >= hardLimit} loading={busy} onClick={() => void act('/attendance/breaks/start', { breakTypeId: b.id })}>Start</Button>
                     </li>
                   );
                 })}

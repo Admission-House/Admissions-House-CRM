@@ -57,7 +57,7 @@ export const ATTENDANCE_SETTINGS = {
   shiftEnd: '19:00',
   graceMinutes: 10,
   halfDayBelowHours: 4.5,
-  idleTimeoutMin: 30,
+  idleTimeoutMin: 15,
   weeklyOffDays: [0],
 };
 
