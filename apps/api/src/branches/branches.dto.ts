@@ -29,12 +29,20 @@ export class UpdateBranchDto extends createZodDto(updateBranchSchema) {}
 
 export const addNetworkSchema = z
   .object({
-    kind: z.enum(['ip_range', 'wifi']),
+    kind: z.enum(['ip_range', 'wifi', 'ddns']),
     /** A single address (203.0.113.5) or a range (203.0.113.0/28). */
     ipRange: z.string().trim().max(60).optional(),
     wifiId: z.string().trim().min(1).max(64).optional(),
+    /** A dynamic DNS name the office router keeps pointed at its current address, for example office.ddns.net. */
+    hostname: z.string().trim().min(3).max(253).optional(),
   })
-  .refine((v) => (v.kind === 'ip_range' ? !!v.ipRange && !v.wifiId : !!v.wifiId && !v.ipRange), 'Give an ipRange for an IP network, or a wifiId for a WiFi network');
+  .refine(
+    (v) =>
+      v.kind === 'ip_range' ? !!v.ipRange && !v.wifiId && !v.hostname
+      : v.kind === 'wifi' ? !!v.wifiId && !v.ipRange && !v.hostname
+      : !!v.hostname && !v.ipRange && !v.wifiId,
+    'Give an ipRange for an IP network, a wifiId for a WiFi network, or a hostname for a dynamic DNS name',
+  );
 export class AddNetworkDto extends createZodDto(addNetworkSchema) {}
 
 /** A position reading from the browser or phone, taken while standing in the office. */

@@ -1,3 +1,4 @@
+import { addressesOf, normalizeHostname } from '../auth/ddns.js';
 import { Injectable } from '@nestjs/common';
 import { sql } from 'kysely';
 import { AuditService } from '../audit/audit.service.js';
@@ -22,7 +23,7 @@ export interface BranchView {
   detectedAt: Date | null;
   isActive: boolean;
   userCount: number;
-  networks: { id: string; kind: string; ipRange: string | null; wifiId: string | null }[];
+  networks: { id: string; kind: string; ipRange: string | null; wifiId: string | null; hostname: string | null; resolvesTo: string[] }[];
 }
 
 @Injectable()
@@ -91,7 +92,12 @@ export class BranchesService {
     return this.db.withTenant(auth.tenantId, async (trx) => {
       await this.load(trx, id);
       const range = dto.kind === 'ip_range' ? normalizeAllowedRange(dto.ipRange!) : null;
-      await this.insertNetwork(trx, auth, id, dto.kind, range, dto.wifiId ?? null);
+      let hostname: string | null = null;
+      if (dto.kind === 'ddns') {
+        hostname = normalizeHostname(dto.hostname!);
+        if (!hostname) throw AppError.badRequest('INVALID_HOSTNAME', 'That is not a valid hostname. Use the name from the router, such as office.ddns.net', [{ field: 'hostname', message: 'Not a valid hostname' }]);
+      }
+      await this.insertNetwork(trx, auth, id, dto.kind, range, dto.wifiId ?? null, hostname);
       return this.load(trx, id);
     });
   }
@@ -177,7 +183,7 @@ export class BranchesService {
     if (!branch) throw AppError.notFound('Office');
     const networks = await trx
       .selectFrom('branch_networks')
-      .select(['id', 'kind', sql<string | null>`ip_range::text`.as('ip_range'), 'wifi_id'])
+      .select(['id', 'kind', sql<string | null>`ip_range::text`.as('ip_range'), 'wifi_id', 'hostname'])
       .where('branch_id', '=', id)
       .orderBy('created_at')
       .execute();
@@ -197,24 +203,24 @@ export class BranchesService {
       detectedAt: branch.detected_at,
       isActive: branch.is_active,
       userCount: Number(users.n),
-      networks: networks.map((n) => ({ id: n.id, kind: n.kind, ipRange: n.ip_range, wifiId: n.wifi_id })),
+      networks: await Promise.all(networks.map(async (n) => ({ id: n.id, kind: n.kind, ipRange: n.ip_range, wifiId: n.wifi_id, hostname: n.hostname, resolvesTo: n.hostname ? await addressesOf(n.hostname) : [] }))),
     };
   }
 
-  private async insertNetwork(trx: Trx, auth: AuthContext, branchId: string, kind: string, range: string | null, wifiId: string | null): Promise<void> {
+  private async insertNetwork(trx: Trx, auth: AuthContext, branchId: string, kind: string, range: string | null, wifiId: string | null, hostname: string | null = null): Promise<void> {
     const duplicate = await trx
       .selectFrom('branch_networks')
       .select('id')
       .where('branch_id', '=', branchId)
-      .where((eb) => (range ? eb(sql`ip_range::text`, '=', range) : eb('wifi_id', '=', wifiId)))
+      .where((eb) => (range ? eb(sql`ip_range::text`, '=', range) : hostname ? eb('hostname', '=', hostname) : eb('wifi_id', '=', wifiId)))
       .executeTakeFirst();
     if (duplicate) throw AppError.conflict('NETWORK_EXISTS', 'This network is already allowed for the office');
 
     await trx
       .insertInto('branch_networks')
-      .values({ tenant_id: auth.tenantId, branch_id: branchId, kind, ip_range: range, wifi_id: wifiId })
+      .values({ tenant_id: auth.tenantId, branch_id: branchId, kind, ip_range: range, wifi_id: wifiId, hostname })
       .execute();
-    await this.record(trx, auth, 'branch.network_add', branchId, undefined, { kind, ipRange: range, wifiId });
+    await this.record(trx, auth, 'branch.network_add', branchId, undefined, { kind, ipRange: range, wifiId, hostname });
   }
 
   private async assertNameFree(trx: Trx, name: string): Promise<void> {

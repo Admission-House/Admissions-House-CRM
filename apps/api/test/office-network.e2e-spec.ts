@@ -69,3 +69,34 @@ describe('counsellors and admins signing in from the office', () => {
     expect(res.statusCode, res.body).toBe(200);
   });
 });
+
+describe('an office named by a dynamic DNS hostname', () => {
+  let branch: string;
+  let boss: string;
+  beforeAll(async () => {
+    branch = (await owner.query(`SELECT id FROM branches WHERE tenant_id = $1 LIMIT 1`, [fx.tenantId])).rows[0].id as string;
+    boss = await api.signIn('super');
+  });
+
+  it('refuses a made-up hostname, and accepts a valid one that is listed with the address it points to', async () => {
+    const bad = await api.call('POST', `/branches/${branch}/networks`, boss, { kind: 'ddns', hostname: 'not a host!' });
+    expect(bad.statusCode).toBe(400);
+    expect(bad.json().error.code).toBe('INVALID_HOSTNAME');
+    expect((await api.call('POST', `/branches/${branch}/networks`, boss, { kind: 'ddns' })).statusCode).toBe(400);
+    const ok = await api.call('POST', `/branches/${branch}/networks`, boss, { kind: 'ddns', hostname: 'LocalHost' });
+    expect(ok.statusCode, ok.body).toBe(201);
+    const added = ok.json().networks.find((n: { kind: string }) => n.kind === 'ddns');
+    expect(added).toMatchObject({ hostname: 'localhost' });
+    expect(added.resolvesTo).toContain('127.0.0.1');
+    expect((await api.call('POST', `/branches/${branch}/networks`, boss, { kind: 'ddns', hostname: 'localhost' })).statusCode).toBe(409);
+  });
+
+  it('lets someone in from the address the hostname points to, and still refuses every other address and a wrong place', async () => {
+    const ok = await signIn('counsellor', '127.0.0.1', here);
+    expect(ok.statusCode, ok.body).toBe(200);
+    const other = await signIn('counsellor', '117.99.227.76', here);
+    expect(other.statusCode).toBe(403);
+    expect(other.json().error.details?.reason).toBe('network');
+    expect((await signIn('counsellor', '127.0.0.1', { lat: 28.62, lng: 77.45, accuracy: 20 })).json().error.details?.reason).toBe('gps_far');
+  });
+});

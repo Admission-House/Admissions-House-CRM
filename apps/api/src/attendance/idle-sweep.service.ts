@@ -134,8 +134,9 @@ export class IdleSweepService implements OnModuleInit {
       FROM break_logs b
       JOIN attendance_records a ON a.id = b.attendance_id
       JOIN users u ON u.id = a.user_id
+      JOIN roles ro ON ro.id = u.role_id
       JOIN break_types bt ON bt.id = b.break_type_id
-      WHERE b.ended_at IS NULL`.execute(trx);
+      WHERE b.ended_at IS NULL AND ro.tracks_attendance`.execute(trx); // a role whose attendance is not recorded has no breaks to police
 
     let warned = 0;
     let stopped = 0;

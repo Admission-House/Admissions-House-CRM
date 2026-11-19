@@ -1,3 +1,4 @@
+import { ddnsMatches } from './ddns.js';
 import { Inject, Injectable } from '@nestjs/common';
 import { sql } from 'kysely';
 import { AttendanceRepository } from '../attendance/attendance.repository.js';
@@ -256,7 +257,7 @@ export class AuthService {
     const result = evaluateOffice({
       branch: facts.branch,
       hasNetworks: facts.hasNetworks,
-      networkMatches: facts.networkMatches,
+      networkMatches: facts.networkMatches || (facts.ddnsHosts.length > 0 && (await ddnsMatches(facts.ddnsHosts, ip))),
       location: input.location,
       maxAccuracyM: this.env.GPS_MAX_ACCURACY_M,
     });

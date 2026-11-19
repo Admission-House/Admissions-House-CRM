@@ -137,6 +137,7 @@ export interface Branches {
 export interface BranchNetworks {
   branch_id: string;
   created_at: Generated<Timestamp>;
+  hostname: string | null;
   id: Generated<string>;
   ip_range: string | null;
   kind: string;

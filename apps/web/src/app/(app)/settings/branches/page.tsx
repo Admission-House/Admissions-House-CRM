@@ -19,7 +19,7 @@ interface Branch {
   detectedAt: string | null;
   isActive: boolean;
   userCount: number;
-  networks: { id: string; kind: 'ip_range' | 'wifi'; ipRange: string | null; wifiId: string | null }[];
+  networks: { id: string; kind: 'ip_range' | 'wifi' | 'ddns'; ipRange: string | null; wifiId: string | null; hostname: string | null; resolvesTo: string[] }[];
 }
 
 interface Detection {
@@ -108,7 +108,7 @@ function DetectModal({ branch, onClose, onSaved }: { branch: Branch; onClose: ()
 }
 
 function NetworkForm({ branch, onClose, onSaved }: { branch: Branch; onClose: () => void; onSaved: () => void }) {
-  const [kind, setKind] = useState<'ip_range' | 'wifi'>('ip_range');
+  const [kind, setKind] = useState<'ip_range' | 'wifi' | 'ddns'>('ip_range');
   const [value, setValue] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -118,7 +118,7 @@ function NetworkForm({ branch, onClose, onSaved }: { branch: Branch; onClose: ()
     setBusy(true);
     setError(null);
     try {
-      await api(`/branches/${branch.id}/networks`, { method: 'POST', body: kind === 'ip_range' ? { kind, ipRange: value.trim() } : { kind, wifiId: value.trim() } });
+      await api(`/branches/${branch.id}/networks`, { method: 'POST', body: kind === 'ip_range' ? { kind, ipRange: value.trim() } : kind === 'ddns' ? { kind, hostname: value.trim() } : { kind, wifiId: value.trim() } });
       onSaved();
     } catch (err) {
       setError(errorText(err));
@@ -129,8 +129,8 @@ function NetworkForm({ branch, onClose, onSaved }: { branch: Branch; onClose: ()
     <Modal title="Allow a network" onClose={onClose}>
       <form onSubmit={save} className="space-y-4">
         {error && <Notice tone="bad">{error}</Notice>}
-        <Field label="Kind" htmlFor="nk"><Select id="nk" value={kind} onChange={(e) => { setKind(e.target.value as 'ip_range' | 'wifi'); setValue(''); }}><option value="ip_range">Internet address (IP or range)</option><option value="wifi">WiFi name (mobile app)</option></Select></Field>
-        <Field label={kind === 'ip_range' ? 'Address or range' : 'WiFi identifier'} htmlFor="nv" hint={kind === 'ip_range' ? 'A single address such as 203.0.113.5, or a range such as 203.0.113.0/28' : 'As the phone reports it'} required>
+        <Field label="Kind" htmlFor="nk"><Select id="nk" value={kind} onChange={(e) => { setKind(e.target.value as 'ip_range' | 'wifi' | 'ddns'); setValue(''); }}><option value="ip_range">Internet address (IP or range)</option><option value="ddns">Dynamic DNS name (address changes)</option><option value="wifi">WiFi name (mobile app)</option></Select></Field>
+        <Field label={kind === 'ip_range' ? 'Address or range' : kind === 'ddns' ? 'Hostname' : 'WiFi identifier'} htmlFor="nv" hint={kind === 'ip_range' ? 'A single address such as 203.0.113.5, or a range such as 203.0.113.0/28' : kind === 'ddns' ? 'The name set in the office router, such as office.ddns.net. Only the address it points to right now is allowed.' : 'As the phone reports it'} required>
           <Input id="nv" value={value} onChange={(e) => setValue(e.target.value)} required />
         </Field>
         <div className="flex justify-end gap-2"><Button type="button" variant="secondary" onClick={onClose}>Cancel</Button><Button type="submit" loading={busy}>Allow</Button></div>
@@ -226,8 +226,8 @@ export default function BranchesPage() {
                     <ul className="divide-y divide-line">
                       {b.networks.map((n) => (
                         <li key={n.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
-                          <span className="inline-flex items-center gap-2">{n.kind === 'ip_range' ? <Globe className="h-3.5 w-3.5 text-muted" aria-hidden /> : <Wifi className="h-3.5 w-3.5 text-muted" aria-hidden />}<span className="tabular font-medium">{n.ipRange ?? n.wifiId}</span><Badge>{n.kind === 'ip_range' ? 'Internet address' : 'WiFi'}</Badge></span>
-                          {manage && <button onClick={() => void removeNetwork(b, n.id)} aria-label={`Remove ${n.ipRange ?? n.wifiId}`} className="text-bad hover:opacity-70"><Trash2 className="h-3.5 w-3.5" /></button>}
+                          <span className="inline-flex items-center gap-2">{n.kind === 'wifi' ? <Wifi className="h-3.5 w-3.5 text-muted" aria-hidden /> : <Globe className="h-3.5 w-3.5 text-muted" aria-hidden />}<span className="tabular font-medium">{n.ipRange ?? n.hostname ?? n.wifiId}</span><Badge>{n.kind === 'ip_range' ? 'Internet address' : n.kind === 'ddns' ? 'Dynamic DNS' : 'WiFi'}</Badge>{n.kind === 'ddns' && <span className={n.resolvesTo.length ? 'text-xs text-muted' : 'text-xs text-bad'}>{n.resolvesTo.length ? `now ${n.resolvesTo[0]}` : 'not found yet'}</span>}</span>
+                          {manage && <button onClick={() => void removeNetwork(b, n.id)} aria-label={`Remove ${n.ipRange ?? n.hostname ?? n.wifiId}`} className="text-bad hover:opacity-70"><Trash2 className="h-3.5 w-3.5" /></button>}
                         </li>
                       ))}
                     </ul>

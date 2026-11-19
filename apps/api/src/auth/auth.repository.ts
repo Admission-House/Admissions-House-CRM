@@ -219,6 +219,8 @@ export class AuthRepository {
     branch: { latitude: string | null; longitude: string | null; radius_m: number; is_active: boolean } | undefined;
     hasNetworks: boolean;
     networkMatches: boolean;
+    /** Dynamic DNS names of the office: the request is allowed if it comes from the address one of them points to now. */
+    ddnsHosts: string[];
   }> {
     const branch = await trx
       .selectFrom('branches')
@@ -233,6 +235,7 @@ export class AuthRepository {
           (kind = 'ip_range' AND ${ip}::inet <<= ip_range) OR
           (kind = 'wifi' AND ${wifiId ?? null}::text IS NOT NULL AND wifi_id = ${wifiId ?? null}::text)
         ), false)`.as('matches'),
+        sql<string[]>`COALESCE(array_agg(hostname) FILTER (WHERE kind = 'ddns'), '{}')`.as('hosts'),
       ])
       .where('branch_id', '=', branchId)
       .executeTakeFirstOrThrow();
@@ -240,6 +243,7 @@ export class AuthRepository {
       branch: branch as never,
       hasNetworks: Number(networks.total) > 0,
       networkMatches: networks.matches,
+      ddnsHosts: networks.hosts,
     };
   }
 
