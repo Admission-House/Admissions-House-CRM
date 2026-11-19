@@ -11,7 +11,7 @@ import { Avatar, Badge, Button, Card, Empty, Input, Notice, PageHeader, Select, 
 import { api, ApiError, download } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { usePhoneReady } from '@/lib/use-phone';
-import { fmtDate, fmtPhone, fromNow } from '@/lib/format';
+import { fmtDateTime, fmtPhone, fromNow } from '@/lib/format';
 import { useRealtime } from '@/lib/realtime';
 import type { LeadListItem, Page, Queues, SourceOption, StatusOption, UserOption } from '@/lib/types';
 import { useApi } from '@/lib/use-api';
@@ -345,6 +345,7 @@ function Leads() {
                   <th className="px-3 py-3 font-medium">Status</th>
                   {showSource && <th className="px-3 py-3 font-medium">Source</th>}
                   <th className="px-3 py-3 font-medium">Assigned to</th>
+                  <th className="px-3 py-3 font-medium">Received</th>
                   <th className="px-3 py-3 font-medium">Next follow-up</th>
                   <th className="px-3 py-3 font-medium">Updated</th>
                   <th className="sticky right-0 z-10 bg-head px-3 py-2.5 text-right font-semibold shadow-[-8px_0_8px_-8px_rgba(15,23,42,0.12)]"><span className="sr-only">Actions</span></th>
@@ -374,9 +375,19 @@ function Leads() {
                       {showSource && <td className="px-3 py-2.5 text-muted">{l.source?.name}</td>}
                       <td className="whitespace-nowrap px-3 py-2.5">{l.assignedTo?.name ?? <span className="text-subtle">Unassigned</span>}</td>
                       <td className="whitespace-nowrap px-3 py-2.5">
-                        {l.nextFollowupAt ? <span className={cx('tabular', late ? 'font-medium text-bad' : 'text-ink')} title={fmtDate(l.nextFollowupAt)}>{fromNow(l.nextFollowupAt)}</span> : <span className="text-subtle">&mdash;</span>}
+                        {l.nextFollowupAt ? (
+                          <div className={cx('tabular leading-tight', late ? 'text-bad' : 'text-ink')}>
+                            <p className="font-medium">{fmtDateTime(l.nextFollowupAt)}</p>
+                            <p className={cx('text-xs', late ? 'text-bad' : 'text-muted')}>{fromNow(l.nextFollowupAt)}</p>
+                          </div>
+                        ) : <span className="text-subtle">&mdash;</span>}
                       </td>
-                      <td className="whitespace-nowrap px-3 py-2.5 text-muted"><span className="tabular">{fromNow(l.updatedAt)}</span></td>
+                      <td className="whitespace-nowrap px-3 py-2.5">
+                        <div className="tabular leading-tight"><p className="font-medium text-ink">{fmtDateTime(l.createdAt)}</p><p className="text-xs text-muted">{fromNow(l.createdAt)}</p></div>
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-2.5 text-muted">
+                        <div className="tabular leading-tight"><p>{fmtDateTime(l.updatedAt)}</p><p className="text-xs text-subtle">{fromNow(l.updatedAt)}</p></div>
+                      </td>
                       <td className={cx('sticky right-0 z-10 px-3 py-2.5 shadow-[-8px_0_8px_-8px_rgba(15,23,42,0.12)]', selected.has(l.id) ? 'bg-mint-soft' : 'bg-surface')}>
                         <div className="flex justify-end gap-1">
                           {(can('call.place') || can('video.host')) && l.status.isOpen && (
@@ -410,7 +421,8 @@ function Leads() {
                     {l.region && <span>{l.region}</span>}
                     {l.email && <span className="max-w-full truncate">{l.email}</span>}
                     <span>{l.assignedTo?.name ?? 'Not assigned'}</span>
-                    {l.nextFollowupAt && <span className={cx(new Date(l.nextFollowupAt) < new Date() && l.status.isOpen && 'font-medium text-bad')}>Follow-up {fromNow(l.nextFollowupAt)}</span>}
+                    <span>Received {fmtDateTime(l.createdAt)}</span>
+                    {l.nextFollowupAt && <span className={cx(new Date(l.nextFollowupAt) < new Date() && l.status.isOpen && 'font-medium text-bad')}>Follow-up {fmtDateTime(l.nextFollowupAt)}</span>}
                   </div>
                 </Link>
               </li>

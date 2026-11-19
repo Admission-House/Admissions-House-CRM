@@ -100,7 +100,11 @@ const schema = z.object({
   EXPO_ACCESS_TOKEN: z.string().optional(),
 
   /** Where uploaded files are kept. "local" is a folder on the server; a cloud store is added behind the same interface. */
-  STORAGE_DRIVER: z.enum(['local', 's3']).default('local'),
+  STORAGE_DRIVER: z.enum(['local', 's3', 'blob']).default('local'),
+  /** For STORAGE_DRIVER=blob: the read-write token of a private Vercel Blob store (the SDK also reads it from the environment by itself). */
+  BLOB_READ_WRITE_TOKEN: z.string().min(1).optional(),
+  /** The store a Vercel project is connected to; with it the SDK signs in by itself (OIDC), so no token is needed. */
+  BLOB_STORE_ID: z.string().min(1).optional(),
   /** For STORAGE_DRIVER=s3: any S3-compatible store (AWS, MinIO, Cloudflare R2, DigitalOcean Spaces). */
   S3_BUCKET: z.string().optional(),
   S3_REGION: z.string().default('auto'),
@@ -218,6 +222,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     throw new Error('DATABASE_URL must use the restricted application role, not an owner or admin account');
   }
   if (env.STORAGE_DRIVER === 's3' && (!env.S3_BUCKET || !env.S3_ACCESS_KEY_ID || !env.S3_SECRET_ACCESS_KEY)) throw new Error('S3_BUCKET, S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY are required when STORAGE_DRIVER=s3');
+  if (env.STORAGE_DRIVER === 'blob' && !env.BLOB_READ_WRITE_TOKEN && !env.BLOB_STORE_ID) throw new Error('BLOB_READ_WRITE_TOKEN or BLOB_STORE_ID is required when STORAGE_DRIVER=blob');
   if (env.MAIL_DRIVER === 'smtp' && !env.SMTP_HOST) throw new Error('SMTP_HOST is required when MAIL_DRIVER=smtp');
   if (env.COLLEGE_API_URL) {
     if (env.NODE_ENV === 'production' && !env.COLLEGE_API_URL.startsWith('https://')) throw new Error('COLLEGE_API_URL must use https in production');
