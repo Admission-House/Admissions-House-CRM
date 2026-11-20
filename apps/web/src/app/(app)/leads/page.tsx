@@ -375,15 +375,15 @@ function Leads() {
                       {showSource && <td className="px-3 py-2.5 text-muted">{l.source?.name}</td>}
                       <td className="whitespace-nowrap px-3 py-2.5">{l.assignedTo?.name ?? <span className="text-subtle">Unassigned</span>}</td>
                       <td className="whitespace-nowrap px-3 py-2.5">
+                        <div className="tabular leading-tight"><p className="font-medium text-ink">{fmtDateTime(l.createdAt)}</p><p className="text-xs text-muted">{fromNow(l.createdAt)}</p></div>
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-2.5">
                         {l.nextFollowupAt ? (
                           <div className={cx('tabular leading-tight', late ? 'text-bad' : 'text-ink')}>
                             <p className="font-medium">{fmtDateTime(l.nextFollowupAt)}</p>
                             <p className={cx('text-xs', late ? 'text-bad' : 'text-muted')}>{fromNow(l.nextFollowupAt)}</p>
                           </div>
                         ) : <span className="text-subtle">&mdash;</span>}
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-2.5">
-                        <div className="tabular leading-tight"><p className="font-medium text-ink">{fmtDateTime(l.createdAt)}</p><p className="text-xs text-muted">{fromNow(l.createdAt)}</p></div>
                       </td>
                       <td className="whitespace-nowrap px-3 py-2.5 text-muted">
                         <div className="tabular leading-tight"><p>{fmtDateTime(l.updatedAt)}</p><p className="text-xs text-subtle">{fromNow(l.updatedAt)}</p></div>

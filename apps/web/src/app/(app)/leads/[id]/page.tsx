@@ -9,6 +9,7 @@ import { CallsTab } from '@/components/leads/calls-tab';
 import { CustomFieldsPanel } from '@/components/leads/custom-fields-panel';
 import { DocumentsTab } from '@/components/leads/documents-tab';
 import { AssignPanel, FollowUpsPanel, StatusPanel, Timeline, type LeadDetail } from '@/components/leads/lead-panels';
+import { PartnerPanel } from '@/components/leads/partner-panel';
 import { ProfileTab } from '@/components/leads/profile-tab';
 import { VideoModal } from '@/components/leads/video-modal';
 import { Avatar, Badge, Button, Card, Notice, Panel, Spinner, Tabs } from '@/components/ui';
@@ -145,6 +146,7 @@ function Workspace() {
               </dl>
               {l.interestNote && <p className="mt-3 rounded-md bg-head px-3 py-2 text-xs text-muted">{l.interestNote}</p>}
             </Panel>
+            <PartnerPanel lead={l} />
             <CustomFieldsPanel lead={l} />
           </div>
         </div>

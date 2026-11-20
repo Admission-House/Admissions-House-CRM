@@ -12,7 +12,8 @@ export type ActivityType =
   | 'shortlist'
   | 'enquiry'
   | 'field_change'
-  | 'followup';
+  | 'followup'
+  | 'partner';
 
 export interface NewLead {
   tenantId: string;

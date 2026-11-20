@@ -90,3 +90,25 @@ const built = (href?: string) => !!href && BUILT.has(href.split('?')[0]!);
 export const NAV: NavItem[] = ALL.map((item) => (item.children ? { ...item, children: item.children.filter((c) => built(c.href)) } : item)).filter((item) =>
   item.children ? item.children.length > 0 : built(item.href),
 );
+
+/**
+ * The permissions a screen needs, read from the menu so there is one list and it cannot drift: the most specific menu
+ * entry whose address the page falls under. null means no particular permission (the person's own account, the bell).
+ * The API is what really protects the data; this only stops a screen from opening, and calling the API, for someone
+ * who has no business there (for example a counsellor typing /settings/roles).
+ */
+export function permissionsForPath(pathname: string): string[] | null {
+  const items = NAV.flatMap((i) => [i, ...(i.children ?? [])]);
+  if (pathname === '/settings') return NAV.find((i) => i.label === 'Settings')?.any ?? null;
+  let best: NavItem | undefined;
+  let length = -1;
+  for (const i of items) {
+    if (!i.href) continue;
+    const base = i.href.split('?')[0]!;
+    if ((pathname === base || pathname.startsWith(base + '/')) && base.length > length) {
+      best = i;
+      length = base.length;
+    }
+  }
+  return best ? best.any : null;
+}

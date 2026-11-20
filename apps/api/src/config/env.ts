@@ -146,6 +146,13 @@ const schema = z.object({
   FILE_LINK_TTL_SEC: z.coerce.number().int().min(30).max(3600).default(300),
 
   /** The college data provider's list endpoint. Leave out until the provider is chosen. */
+  /**
+   * Sending a lead to Universal AI University through its own API (a NoPaperForms data-porting address). The secret key is the college's, given to
+   * this company; it lives only here, never in the code. The address can be left out: the one in the college's document is built in.
+   */
+  PARTNER_UAU_SECRET_KEY: z.string().min(8).optional(),
+  PARTNER_UAU_URL: z.string().url().optional(),
+  PARTNER_TIMEOUT_SEC: z.coerce.number().int().min(3).max(60).default(15),
   COLLEGE_API_URL: z.string().url().optional(),
   /** Agora project credentials for video counselling (console.agora.io). Leave empty to switch the feature off. */
   AGORA_APP_ID: z.string().trim().optional(),

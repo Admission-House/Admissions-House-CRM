@@ -26,3 +26,21 @@ describe('the sidebar', () => {
     expect(NAV.filter((i) => i.needsPhone).map((i) => i.label)).toEqual(['Calling']);
   });
 });
+
+describe('permissionsForPath', () => {
+  it('asks for the permission of the menu entry a page falls under, including pages inside it', async () => {
+    const { permissionsForPath } = await import('./nav');
+    expect(permissionsForPath('/settings/roles')).toEqual(['role.manage']);
+    expect(permissionsForPath('/settings/users/abc-123')).toEqual(['user.read', 'user.manage']);
+    expect(permissionsForPath('/leads/abc-123')).toEqual(['lead.read']);
+    expect(permissionsForPath('/imports')).toEqual(['lead.import', 'lead.export', 'master.manage']);
+    expect(permissionsForPath('/settings')).toContain('settings.manage');
+  });
+
+  it('asks for nothing for a person\'s own pages', async () => {
+    const { permissionsForPath } = await import('./nav');
+    expect(permissionsForPath('/account')).toBeNull();
+    expect(permissionsForPath('/notifications')).toBeNull();
+    expect(permissionsForPath('/video/some-room')).toBeNull();
+  });
+});

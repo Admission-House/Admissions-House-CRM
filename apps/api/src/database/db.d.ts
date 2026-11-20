@@ -72,8 +72,8 @@ export interface AttendanceExceptions {
 }
 
 export interface AttendanceRecords {
-  break_warned_at: Timestamp | null;
   branch_id: string | null;
+  break_warned_at: Timestamp | null;
   check_in_accuracy_m: Numeric | null;
   check_in_at: Timestamp;
   check_in_ip: string | null;
@@ -419,6 +419,20 @@ export interface LeadImportBatches {
   updated_at: Generated<Timestamp>;
 }
 
+export interface LeadPartnerSubmissions {
+  created_at: Generated<Timestamp>;
+  http_status: number | null;
+  id: Generated<string>;
+  lead_id: string;
+  ok: boolean;
+  partner: string;
+  request: Json;
+  response: string | null;
+  state: Generated<string>;
+  submitted_by: string | null;
+  tenant_id: string;
+}
+
 export interface LeadPhones {
   id: Generated<string>;
   label: Generated<string>;
@@ -528,7 +542,6 @@ export interface LeadSources {
 }
 
 export interface LeadStatuses {
-  requires_substatus: Generated<boolean>;
   created_at: Generated<Timestamp>;
   id: Generated<string>;
   is_active: Generated<boolean>;
@@ -536,15 +549,16 @@ export interface LeadStatuses {
   name: string;
   queue: string;
   requires_followup: Generated<boolean>;
+  requires_substatus: Generated<boolean>;
   sort_order: Generated<number>;
   tenant_id: string;
   updated_at: Generated<Timestamp>;
 }
 
 export interface LeadSubstatuses {
-  requires_comment: Generated<boolean>;
   id: Generated<string>;
   name: string;
+  requires_comment: Generated<boolean>;
   sort_order: Generated<number>;
   status_id: string;
   tenant_id: string;
@@ -560,12 +574,12 @@ export interface LeaveBalances {
 
 export interface LeaveRequests {
   created_at: Generated<Timestamp>;
-  half: string | null;
   days: Numeric;
   decided_at: Timestamp | null;
   decided_by: string | null;
   decision_note: string | null;
   from_date: string;
+  half: string | null;
   id: Generated<string>;
   leave_type_id: string;
   reason: string | null;
@@ -582,6 +596,13 @@ export interface LeaveTypes {
   name: string;
   tenant_id: string;
   yearly_quota: Generated<Numeric>;
+}
+
+export interface LiveStamps {
+  bumped_at: Generated<Timestamp>;
+  scope: Generated<string>;
+  tenant_id: string;
+  topic: string;
 }
 
 export interface Locations {
@@ -741,9 +762,9 @@ export interface Roles {
   is_system: Generated<boolean>;
   name: string;
   requires_office: Generated<boolean>;
-  tracks_attendance: Generated<boolean>;
   system_key: string | null;
   tenant_id: string;
+  tracks_attendance: Generated<boolean>;
   updated_at: Generated<Timestamp>;
 }
 
@@ -901,6 +922,17 @@ export interface UserMfa {
   user_id: string;
 }
 
+export interface UserPreferences {
+  avatar: Buffer | null;
+  avatar_type: string | null;
+  avatar_updated_at: Timestamp | null;
+  notify: Generated<Json>;
+  start_page: string | null;
+  tenant_id: string;
+  updated_at: Generated<Timestamp>;
+  user_id: string;
+}
+
 export interface UserProfiles {
   address: string | null;
   bank_account_no_enc: string | null;
@@ -1055,6 +1087,7 @@ export interface DB {
   lead_exams: LeadExams;
   lead_guardians: LeadGuardians;
   lead_import_batches: LeadImportBatches;
+  lead_partner_submissions: LeadPartnerSubmissions;
   lead_phones: LeadPhones;
   lead_policies: LeadPolicies;
   lead_preferred_locations: LeadPreferredLocations;
@@ -1069,6 +1102,7 @@ export interface DB {
   leave_balances: LeaveBalances;
   leave_requests: LeaveRequests;
   leave_types: LeaveTypes;
+  live_stamps: LiveStamps;
   locations: Locations;
   login_attempts: LoginAttempts;
   notifications: Notifications;
@@ -1096,6 +1130,7 @@ export interface DB {
   tenants: Tenants;
   user_devices: UserDevices;
   user_mfa: UserMfa;
+  user_preferences: UserPreferences;
   user_profiles: UserProfiles;
   user_recovery_codes: UserRecoveryCodes;
   user_sessions: UserSessions;

@@ -8,7 +8,7 @@ import { Avatar, Spinner, cx } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { IncomingCalls } from '@/components/communications/incoming-calls';
 import { RealtimeProvider } from '@/lib/realtime';
-import { NAV, type NavItem } from '@/lib/nav';
+import { NAV, permissionsForPath, type NavItem } from '@/lib/nav';
 import { usePhoneReady } from '@/lib/use-phone';
 import { usePhoto } from '@/lib/use-photo';
 import { themeStyle } from '@/lib/brand-theme';
@@ -205,8 +205,11 @@ function UserMenu() {
 
 /** The frame around every signed-in screen. Sends people who are not signed in (or must change their password) elsewhere. */
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const { status, me } = useAuth();
+  const { status, me, canAny } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
+  const needs = permissionsForPath(pathname);
+  const allowed = !needs || canAny(...needs);
   const [drawer, setDrawer] = useState(false);
   const narrow = useSyncExternalStore(subscribeCollapsed, readCollapsed, () => false);
 
@@ -250,7 +253,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <UserMenu />
           </div>
         </header>
-        <main id="content" className="mx-auto w-full max-w-[1500px] flex-1 px-4 py-6 sm:px-8">{children}</main>
+        <main id="content" className="mx-auto w-full max-w-[1500px] flex-1 px-4 py-6 sm:px-8">
+          {allowed ? children : (
+            <div role="alert" className="mx-auto mt-16 max-w-md rounded-xl border border-line bg-surface p-8 text-center shadow-sm">
+              <h1 className="text-lg font-semibold text-ink">You do not have access to this page</h1>
+              <p className="mt-2 text-sm text-muted">Your role does not include it. If you need it, ask your Super Admin.</p>
+              <Link href="/dashboard" className="mt-5 inline-flex h-9 items-center rounded-md bg-brand px-4 text-sm font-medium text-white hover:opacity-90">Go to the dashboard</Link>
+            </div>
+          )}
+        </main>
         <footer className="glass-bar px-6 py-3 text-center text-xs text-muted">
           © {new Date().getFullYear()} <span className="font-semibold text-ink">{me.company.name}</span>{VERSION && <> · Version {VERSION}</>}
         </footer>

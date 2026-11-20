@@ -14,6 +14,7 @@ import type { Env } from './config/env.js';
 import { DatabaseModule } from './database/database.module.js';
 import { DevicesModule } from './devices/devices.module.js';
 import { DocumentsModule } from './documents/documents.module.js';
+import { PartnersModule } from './partners/partners.module.js';
 import { MailModule } from './mail/mail.module.js';
 import { CryptoModule } from './crypto/crypto.module.js';
 import { CustomFieldsModule } from './custom-fields/custom-fields.module.js';
@@ -89,6 +90,7 @@ export const safeUrl = (url: string): string => url.replace(/(\/telephony\/hooks
     MastersModule,
     AdmissionsModule,
     DocumentsModule,
+    PartnersModule,
     ImportsModule,
     CryptoModule,
     MailModule,
