@@ -22,6 +22,17 @@ export interface Partner {
   credentials(env: Env): { secret: string | undefined; url: string };
 }
 
+/**
+ * The dual specialization MBA. The document lists its Major and Minor options but not how to send both. The university said (20 Nov 2026)
+ * that one specialization is enough: the aim is to pass on the student's email and number first, and the course can be changed later.
+ * So it is offered with one specialization, any of the options the document names for either part, sent as that plain name.
+ */
+const UNIVERSAL_AI_DUAL: PartnerProgram = {
+  campus: 'PG',
+  course: 'MBA with Ai Dual Specialization (Major & Minor - any combination )',
+  specializations: ['Business Analytics & AI', 'Marketing', 'Finance', 'Operations & Supply Chain'],
+};
+
 /** Universal AI University, through NoPaperForms. The values are the ones in its API document for this company. */
 const UNIVERSAL_AI: Partner = {
   key: 'universal-ai',
@@ -29,7 +40,7 @@ const UNIVERSAL_AI: Partner = {
   defaultUrl: 'https://api.nopaperforms.com/dataporting/382/admissions_house',
   collegeId: '382',
   source: 'admissions_house',
-  programs: UNIVERSAL_AI_PROGRAMS,
+  programs: [...UNIVERSAL_AI_PROGRAMS, UNIVERSAL_AI_DUAL],
   locations: UNIVERSAL_AI_LOCATIONS,
   credentials: (env) => ({ secret: env.PARTNER_UAU_SECRET_KEY, url: env.PARTNER_UAU_URL ?? 'https://api.nopaperforms.com/dataporting/382/admissions_house' }),
 };

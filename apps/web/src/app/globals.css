@@ -116,3 +116,19 @@
  * sideways on a phone.
  */
 .overflow-x-auto { position: relative; }
+
+/*
+ * The buttons at the end of a form in a dialog stay in view at the bottom while the rest of the form scrolls. On a short screen,
+ * or with the browser zoomed in, a long form (for example "Send to a college") otherwise pushes Send below the fold and it looks
+ * as if there is no button.
+ */
+.modal-body form > .justify-end:last-child,
+.modal-body > .justify-end:last-child {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  margin: 1rem -1.5rem -1.25rem;
+  padding: 0.75rem 1.5rem;
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-line);
+}

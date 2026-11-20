@@ -67,7 +67,7 @@ export function WrapUp({ call, onClose, onDone }: { call: Call; onClose: () => v
         <Field label="Status now" htmlFor="ws" required>
           <Select id="ws" value={statusId} onChange={(e) => setStatusId(e.target.value)} required>
             <option value="">Choose a status</option>
-            {statuses.data?.filter((s) => s.isActive !== false).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            {statuses.data?.filter((s) => s.isActive !== false && s.selectable !== false).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </Select>
         </Field>
         {can('followup.manage') && chosen?.isOpen && (

@@ -2,8 +2,9 @@
 
 import { ArrowDownLeft, ArrowUpRight, ClipboardCheck } from 'lucide-react';
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Badge, Button, Card, Empty, Input, Notice, PageHeader, Select, Spinner } from '@/components/ui';
+import { MovableTh, useColumnOrder } from '@/components/ui/movable-columns';
 import { OUTCOME, Recording, WrapUp, length, type Call } from '@/components/leads/calls-tab';
 import { useAuth } from '@/lib/auth';
 import { fmtDateTime, fmtPhone } from '@/lib/format';
@@ -14,8 +15,23 @@ interface CallRow extends Call {
   lead: { id: string; leadNo: string; name: string } | null;
 }
 
+type ColId = 'when' | 'lead' | 'call' | 'by' | 'outcome' | 'length' | 'remark';
+const DEFAULT_COLUMNS: ColId[] = ['when', 'lead', 'call', 'by', 'outcome', 'length', 'remark'];
+
+/** The columns of the table, each with its heading and what it shows for a call. The order is the person's own. */
+const COLUMNS: Record<ColId, { label: string; td: string; title?: (c: CallRow) => string | undefined; cell: (c: CallRow) => ReactNode }> = {
+  when: { label: 'When', td: 'whitespace-nowrap px-4 py-3 text-muted', cell: (c) => <>{fmtDateTime(c.startedAt)}</> },
+  lead: { label: 'Lead', td: 'px-3 py-3', cell: (c) => <>{c.lead ? <Link href={`/leads/${c.lead.id}`} className="font-medium text-ink hover:text-brand-600">{c.lead.name}</Link> : <span className="text-subtle">Not a lead</span>}<p className="tabular text-xs text-muted">{fmtPhone(c.number)}</p></> },
+  call: { label: 'Call', td: 'px-3 py-3', cell: (c) => <><span className="inline-flex items-center gap-1.5">{c.direction === 'incoming' ? <ArrowDownLeft className="h-4 w-4 text-info" aria-hidden /> : <ArrowUpRight className="h-4 w-4 text-ok" aria-hidden />}{c.direction === 'incoming' ? 'Incoming' : 'Outgoing'}</span></> },
+  by: { label: 'By', td: 'px-3 py-3', cell: (c) => <>{c.user?.name ?? <span className="text-subtle">Unknown</span>}</> },
+  outcome: { label: 'Outcome', td: 'px-3 py-3', cell: (c) => <><Badge tone={(OUTCOME[c.outcome] ?? { label: c.outcome, tone: 'neutral' as const }).tone}>{(OUTCOME[c.outcome] ?? { label: c.outcome, tone: 'neutral' as const }).label}</Badge></> },
+  length: { label: 'Length', td: 'tabular px-3 py-3', cell: (c) => <>{length(c.durationSec)}</> },
+  remark: { label: 'Remark', td: 'max-w-56 truncate px-3 py-3 text-muted', title: (c) => c.remark ?? '', cell: (c) => <>{c.remark ?? ''}</> },
+};
+
 export default function CallsPage() {
-  const { can } = useAuth();
+  const { can, me } = useAuth();
+  const columns = useColumnOrder(`calls:${me?.user.id ?? 'me'}`, DEFAULT_COLUMNS);
   const [userId, setUserId] = useState('');
   const [direction, setDirection] = useState('');
   const [outcome, setOutcome] = useState('');
@@ -49,22 +65,16 @@ export default function CallsPage() {
 
         {calls.error ? <div className="p-4"><Notice tone="bad">{calls.error.message}</Notice></div> : calls.loading && !calls.data ? <Spinner /> : items.length === 0 ? <Empty title="No calls match">Change the filters, or place a call from a lead.</Empty> : (
           <div className="overflow-x-auto">
+            {columns.changed && <div className="flex justify-end px-3 pt-2 text-xs"><button type="button" onClick={columns.reset} className="font-medium text-info hover:underline">Reset column order</button></div>}
             <table className="w-full text-left text-sm">
               <thead className="bg-head text-xs uppercase tracking-wide text-muted">
-                <tr><th className="px-4 py-2.5 font-semibold">When</th><th className="px-3 py-2.5 font-semibold">Lead</th><th className="px-3 py-2.5 font-semibold">Call</th><th className="px-3 py-2.5 font-semibold">By</th><th className="px-3 py-2.5 font-semibold">Outcome</th><th className="px-3 py-2.5 font-semibold">Length</th><th className="px-3 py-2.5 font-semibold">Remark</th><th className="px-4 py-2.5"><span className="sr-only">Actions</span></th></tr>
+                <tr>{columns.order.map((id) => <MovableTh key={id} id={id} columns={columns} className="px-3 py-2.5 text-left font-semibold">{COLUMNS[id as ColId].label}</MovableTh>)}<th className="px-4 py-2.5"><span className="sr-only">Actions</span></th></tr>
               </thead>
               <tbody className="divide-y divide-line">
                 {items.map((c) => {
-                  const o = OUTCOME[c.outcome] ?? { label: c.outcome, tone: 'neutral' as const };
                   return (
                     <tr key={c.id} className="hover:bg-mint-50">
-                      <td className="whitespace-nowrap px-4 py-3 text-muted">{fmtDateTime(c.startedAt)}</td>
-                      <td className="px-3 py-3">{c.lead ? <Link href={`/leads/${c.lead.id}`} className="font-medium text-ink hover:text-brand-600">{c.lead.name}</Link> : <span className="text-subtle">Not a lead</span>}<p className="tabular text-xs text-muted">{fmtPhone(c.number)}</p></td>
-                      <td className="px-3 py-3"><span className="inline-flex items-center gap-1.5">{c.direction === 'incoming' ? <ArrowDownLeft className="h-4 w-4 text-info" aria-hidden /> : <ArrowUpRight className="h-4 w-4 text-ok" aria-hidden />}{c.direction === 'incoming' ? 'Incoming' : 'Outgoing'}</span></td>
-                      <td className="px-3 py-3">{c.user?.name ?? <span className="text-subtle">Unknown</span>}</td>
-                      <td className="px-3 py-3"><Badge tone={o.tone}>{o.label}</Badge></td>
-                      <td className="tabular px-3 py-3">{length(c.durationSec)}</td>
-                      <td className="max-w-56 truncate px-3 py-3 text-muted" title={c.remark ?? ''}>{c.remark ?? ''}</td>
+                      {columns.order.map((id) => { const col = COLUMNS[id as ColId]; return <td key={id} className={col.td} title={col.title?.(c)}>{col.cell(c)}</td>; })}
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-2">
                           {c.recording === 'stored' && can('call.listen') && <Recording callId={c.id} />}

@@ -2,6 +2,7 @@
 
 import { X } from 'lucide-react';
 import { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 
 /** A dialog on a dimmed page. Closes with Escape or a click outside, keeps focus inside, and gives focus back. */
 export function Modal({ title, onClose, children, width = 'max-w-lg' }: { title: string; onClose: () => void; children: React.ReactNode; width?: string }) {
@@ -30,7 +31,10 @@ export function Modal({ title, onClose, children, width = 'max-w-lg' }: { title:
     };
   }, [onClose]);
 
-  return (
+  if (typeof document === 'undefined') return null;
+  // Drawn on the page itself, not inside whatever opened it. A panel with the frosted-glass look would otherwise hold the dialog
+  // inside its own edges, small and cut off (its blur makes it the frame that "fixed" is measured against).
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4" role="presentation">
       <button aria-label="Close" className="absolute inset-0 bg-ink/50" onClick={onClose} tabIndex={-1} />
       <div ref={box} role="dialog" aria-modal="true" aria-label={title} className={`relative flex max-h-[92dvh] w-full ${width} flex-col overflow-hidden rounded-t-2xl bg-surface shadow-2xl sm:rounded-2xl`}>
@@ -38,8 +42,9 @@ export function Modal({ title, onClose, children, width = 'max-w-lg' }: { title:
           <h2 className="text-lg font-semibold text-brand">{title}</h2>
           <button type="button" onClick={onClose} aria-label="Close" className="grid h-8 w-8 place-items-center rounded-lg text-muted hover:bg-mint-soft hover:text-brand"><X className="h-5 w-5" /></button>
         </div>
-        <div className="overflow-y-auto px-6 py-5">{children}</div>
+        <div className="modal-body overflow-y-auto px-6 py-5">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

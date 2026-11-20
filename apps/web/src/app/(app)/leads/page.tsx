@@ -5,9 +5,10 @@ import { NewMeetingModal } from '@/components/communications/session-modals';
 import { Download, ExternalLink, Plus, Search, SlidersHorizontal, X } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { AddLeadModal } from '@/components/leads/add-lead-modal';
 import { Avatar, Badge, Button, Card, Empty, Input, Notice, PageHeader, Select, Spinner, cx } from '@/components/ui';
+import { MovableTh, useColumnOrder } from '@/components/ui/movable-columns';
 import { api, ApiError, download } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { usePhoneReady } from '@/lib/use-phone';
@@ -32,6 +33,57 @@ const PAGE_SIZE = 25;
 
 const INTENT_TONE = { hot: 'bad', warm: 'warn', cold: 'info' } as const;
 const queueTone = (q: string) => (q === 'missed' ? 'bad' : q === 'fee_paid' ? 'ok' : q === 'closed' ? 'neutral' : q === 'fresh' ? 'brand' : 'info');
+
+type ColId = 'lead' | 'email' | 'course' | 'region' | 'status' | 'source' | 'assigned' | 'received' | 'followup' | 'updated';
+
+const dash = <span className="text-subtle">&mdash;</span>;
+
+/** The columns of the table, each with its heading and what it shows for a lead. The order is the person's own (see useColumnOrder). */
+const COLUMNS: Record<ColId, { label: string; td: string; title?: (l: LeadListItem) => string | undefined; cell: (l: LeadListItem) => ReactNode }> = {
+  lead: {
+    label: 'Lead',
+    td: 'px-3 py-2.5',
+    cell: (l) => (
+      <div className="flex items-center gap-2.5">
+        <Avatar name={l.name} size={30} tone="soft" />
+        <div className="min-w-0">
+          <Link href={`/leads/${l.id}`} className="block truncate font-medium text-ink hover:text-brand-600 hover:underline">{l.name}</Link>
+          <p className="flex items-center gap-1.5 whitespace-nowrap text-xs text-muted"><span className="tabular">{fmtPhone(l.phone)}</span><span aria-hidden>·</span><span>#{l.leadNo}</span>{l.intent && <Badge tone={INTENT_TONE[l.intent]}>{l.intent}</Badge>}</p>
+        </div>
+      </div>
+    ),
+  },
+  email: { label: 'Email', td: 'max-w-[14rem] truncate px-3 py-2.5 text-muted', title: (l) => l.email ?? undefined, cell: (l) => l.email ?? dash },
+  course: { label: 'Course', td: 'max-w-[12rem] truncate px-3 py-2.5', title: (l) => l.course ?? undefined, cell: (l) => l.course ?? dash },
+  region: { label: 'Region', td: 'max-w-[10rem] truncate px-3 py-2.5', title: (l) => l.region ?? undefined, cell: (l) => l.region ?? dash },
+  status: { label: 'Status', td: 'whitespace-nowrap px-3 py-2.5', cell: (l) => <Badge tone={queueTone(l.queue)}>{l.status.name}</Badge> },
+  source: { label: 'Source', td: 'px-3 py-2.5 text-muted', cell: (l) => l.source?.name },
+  assigned: { label: 'Assigned to', td: 'whitespace-nowrap px-3 py-2.5', cell: (l) => l.assignedTo?.name ?? <span className="text-subtle">Unassigned</span> },
+  received: {
+    label: 'Received',
+    td: 'whitespace-nowrap px-3 py-2.5',
+    cell: (l) => <div className="tabular leading-tight"><p className="font-medium text-ink">{fmtDateTime(l.createdAt)}</p><p className="text-xs text-muted">{fromNow(l.createdAt)}</p></div>,
+  },
+  followup: {
+    label: 'Next follow-up',
+    td: 'whitespace-nowrap px-3 py-2.5',
+    cell: (l) => {
+      if (!l.nextFollowupAt) return dash;
+      const late = new Date(l.nextFollowupAt) < new Date() && l.status.isOpen;
+      return (
+        <div className={cx('tabular leading-tight', late ? 'text-bad' : 'text-ink')}>
+          <p className="font-medium">{fmtDateTime(l.nextFollowupAt)}</p>
+          <p className={cx('text-xs', late ? 'text-bad' : 'text-muted')}>{fromNow(l.nextFollowupAt)}</p>
+        </div>
+      );
+    },
+  },
+  updated: {
+    label: 'Updated',
+    td: 'whitespace-nowrap px-3 py-2.5 text-muted',
+    cell: (l) => <div className="tabular leading-tight"><p>{fmtDateTime(l.updatedAt)}</p><p className="text-xs text-subtle">{fromNow(l.updatedAt)}</p></div>,
+  },
+};
 
 function BulkBar({ ids, statuses, people, onDone, onClear }: { ids: string[]; statuses: StatusOption[]; people: UserOption[]; onDone: (message: string) => void; onClear: () => void }) {
   const { can } = useAuth();
@@ -74,7 +126,7 @@ function BulkBar({ ids, statuses, people, onDone, onClear }: { ids: string[]; st
         <div className="flex gap-2">
           <Select aria-label="Change status of selected leads" value={statusId} onChange={(e) => setStatusId(e.target.value)} className="w-44">
             <option value="">Change status to…</option>
-            {statuses.filter((s) => s.isActive !== false && !(s.isOpen && s.requiresFollowup)).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            {statuses.filter((s) => s.isActive !== false && s.selectable !== false && !(s.isOpen && s.requiresFollowup)).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </Select>
           <Button size="sm" variant="secondary" disabled={!statusId} loading={busy} onClick={() => void run('Status changed', '/leads/bulk/status', { statusId })}>Apply</Button>
         </div>
@@ -97,6 +149,8 @@ function Leads() {
   const params = useSearchParams();
   const { can } = useAuth();
   const showSource = can('lead.source');
+  const { me } = useAuth();
+  const columns = useColumnOrder(`leads:${me?.user.id ?? 'me'}`, useMemo<ColId[]>(() => ['lead', 'email', 'course', 'region', 'status', ...(showSource ? (['source'] as const) : []), 'assigned', 'received', 'followup', 'updated'], [showSource]));
   const phoneReady = usePhoneReady();
   const filters = useMemo(() => Object.fromEntries(FILTER_KEYS.map((k) => [k, params.get(k) ?? ''])) as Record<FilterKey, string>, [params]);
 
@@ -338,56 +392,18 @@ function Leads() {
                   <th className="w-10 px-4 py-2.5">
                     <input type="checkbox" aria-label="Select all leads on this page" checked={allSelected} onChange={(e) => setSelected(e.target.checked ? new Set(items.map((l) => l.id)) : new Set())} className="h-3.5 w-3.5 accent-[#0f625e]" />
                   </th>
-                  <th className="px-3 py-3 font-medium">Lead</th>
-                  <th className="px-3 py-3 font-medium">Email</th>
-                  <th className="px-3 py-3 font-medium">Course</th>
-                  <th className="px-3 py-3 font-medium">Region</th>
-                  <th className="px-3 py-3 font-medium">Status</th>
-                  {showSource && <th className="px-3 py-3 font-medium">Source</th>}
-                  <th className="px-3 py-3 font-medium">Assigned to</th>
-                  <th className="px-3 py-3 font-medium">Received</th>
-                  <th className="px-3 py-3 font-medium">Next follow-up</th>
-                  <th className="px-3 py-3 font-medium">Updated</th>
+                  {columns.order.map((id) => <MovableTh key={id} id={id} columns={columns} className="px-3 py-3 text-left font-medium">{COLUMNS[id as ColId].label}</MovableTh>)}
                   <th className="sticky right-0 z-10 bg-head px-3 py-2.5 text-right font-semibold shadow-[-8px_0_8px_-8px_rgba(15,23,42,0.12)]"><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
                 {items.map((l) => {
-                  const late = !!l.nextFollowupAt && new Date(l.nextFollowupAt) < new Date() && l.status.isOpen;
                   return (
                     <tr key={l.id} className={cx('transition-colors hover:bg-mint-50', selected.has(l.id) && 'bg-mint-soft')}>
                       <td className="px-4 py-2.5">
                         <input type="checkbox" aria-label={`Select ${l.name}`} checked={selected.has(l.id)} onChange={(e) => setSelected((s) => { const n = new Set(s); if (e.target.checked) n.add(l.id); else n.delete(l.id); return n; })} className="h-3.5 w-3.5 accent-[#0f625e]" />
                       </td>
-                      <td className="px-3 py-2.5">
-                        <div className="flex items-center gap-2.5">
-                          <Avatar name={l.name} size={30} tone="soft" />
-                          <div className="min-w-0">
-                            <Link href={`/leads/${l.id}`} className="block truncate font-medium text-ink hover:text-brand-600 hover:underline">{l.name}</Link>
-                            <p className="flex items-center gap-1.5 whitespace-nowrap text-xs text-muted"><span className="tabular">{fmtPhone(l.phone)}</span><span aria-hidden>·</span><span>#{l.leadNo}</span>{l.intent && <Badge tone={INTENT_TONE[l.intent]}>{l.intent}</Badge>}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="max-w-[14rem] truncate px-3 py-2.5 text-muted" title={l.email ?? undefined}>{l.email ?? <span className="text-subtle">&mdash;</span>}</td>
-                      <td className="max-w-[12rem] truncate px-3 py-2.5" title={l.course ?? undefined}>{l.course ?? <span className="text-subtle">&mdash;</span>}</td>
-                      <td className="max-w-[10rem] truncate px-3 py-2.5" title={l.region ?? undefined}>{l.region ?? <span className="text-subtle">&mdash;</span>}</td>
-                      <td className="whitespace-nowrap px-3 py-2.5"><Badge tone={queueTone(l.queue)}>{l.status.name}</Badge></td>
-                      {showSource && <td className="px-3 py-2.5 text-muted">{l.source?.name}</td>}
-                      <td className="whitespace-nowrap px-3 py-2.5">{l.assignedTo?.name ?? <span className="text-subtle">Unassigned</span>}</td>
-                      <td className="whitespace-nowrap px-3 py-2.5">
-                        <div className="tabular leading-tight"><p className="font-medium text-ink">{fmtDateTime(l.createdAt)}</p><p className="text-xs text-muted">{fromNow(l.createdAt)}</p></div>
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-2.5">
-                        {l.nextFollowupAt ? (
-                          <div className={cx('tabular leading-tight', late ? 'text-bad' : 'text-ink')}>
-                            <p className="font-medium">{fmtDateTime(l.nextFollowupAt)}</p>
-                            <p className={cx('text-xs', late ? 'text-bad' : 'text-muted')}>{fromNow(l.nextFollowupAt)}</p>
-                          </div>
-                        ) : <span className="text-subtle">&mdash;</span>}
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-2.5 text-muted">
-                        <div className="tabular leading-tight"><p>{fmtDateTime(l.updatedAt)}</p><p className="text-xs text-subtle">{fromNow(l.updatedAt)}</p></div>
-                      </td>
+                      {columns.order.map((id) => { const c = COLUMNS[id as ColId]; return <td key={id} className={c.td} title={c.title?.(l)}>{c.cell(l)}</td>; })}
                       <td className={cx('sticky right-0 z-10 px-3 py-2.5 shadow-[-8px_0_8px_-8px_rgba(15,23,42,0.12)]', selected.has(l.id) ? 'bg-mint-soft' : 'bg-surface')}>
                         <div className="flex justify-end gap-1">
                           {(can('call.place') || can('video.host')) && l.status.isOpen && (
@@ -430,6 +446,7 @@ function Leads() {
           </ul>
 
           <div className="mt-3 flex items-center justify-between text-xs text-muted">
+            {columns.changed && <button type="button" onClick={columns.reset} className="font-medium text-info hover:underline">Reset column order</button>}
             <span className="tabular">Showing {items.length} lead{items.length === 1 ? '' : 's'}</span>
             {next && <Button variant="secondary" loading={more} onClick={() => void showMore()}>Show more</Button>}
           </div>

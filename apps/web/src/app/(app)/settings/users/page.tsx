@@ -2,9 +2,10 @@
 
 import { Check, Copy, IdCard, KeyRound, Pencil, Plus, Power, Search } from 'lucide-react';
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Avatar, Badge, Button, Empty, Field, Input, Notice, Panel, Select, Spinner } from '@/components/ui';
 import { Modal } from '@/components/ui/modal';
+import { MovableTh, useColumnOrder } from '@/components/ui/movable-columns';
 import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { fmtDate, fromNow } from '@/lib/format';
@@ -126,9 +127,27 @@ function UserForm({ user, roles, branches, managers, onClose, onSaved }: {
   );
 }
 
+type ColId = 'person' | 'role' | 'manager' | 'branch' | 'signin' | 'status';
+const DEFAULT_COLUMNS: ColId[] = ['person', 'role', 'manager', 'branch', 'signin', 'status'];
+
+/** The columns of the table, each with its heading and what it shows for a person. The order is the viewer's own. */
+const COLUMNS: Record<ColId, { label: string; td: string; title?: (u: UserRow) => string | undefined; cell: (u: UserRow) => ReactNode }> = {
+  person: { label: 'Person', td: 'px-4 py-2.5', cell: (u) => <><div className="flex items-center gap-2.5">
+                        <Avatar name={u.name} size={32} tone="soft" />
+                        <div className="min-w-0"><p className="truncate font-medium text-ink">{u.name}</p><p className="truncate text-xs text-muted">{u.email}{u.designation ? ` · ${u.designation}` : ''}</p></div>
+                      </div></> },
+  role: { label: 'Role', td: 'px-3 py-2.5', cell: (u) => <><Badge tone="brand">{u.role.name}</Badge></> },
+  manager: { label: 'Reports to', td: 'px-3 py-2.5 text-muted', cell: (u) => <>{u.manager?.name ?? '—'}</> },
+  branch: { label: 'Branch', td: 'px-3 py-2.5 text-muted', cell: (u) => <>{u.branch?.name ?? '—'}</> },
+  signin: { label: 'Last sign-in', td: 'px-3 py-2.5 text-muted', title: (u) => u.lastLoginAt ? fmtDate(u.lastLoginAt) : '', cell: (u) => <>{u.lastLoginAt ? fromNow(u.lastLoginAt) : u.mustChangePassword ? 'Not yet' : 'Never'}</> },
+  status: { label: 'Status', td: 'px-3 py-2.5', cell: (u) => <>{u.status === 'active' ? <Badge tone="ok">Active</Badge> : <Badge>Switched off</Badge>}</> },
+};
+
 export default function UsersPage() {
   const { can } = useAuth();
   const manage = can('user.manage');
+  const { me } = useAuth();
+  const columns = useColumnOrder(`users:${me?.user.id ?? 'me'}`, DEFAULT_COLUMNS);
   const [q, setQ] = useState('');
   const [debounced, setDebounced] = useState('');
   const [roleId, setRoleId] = useState('');
@@ -189,24 +208,15 @@ export default function UsersPage() {
 
         {users.error ? <div className="p-4"><Notice tone="bad">{users.error.message}</Notice></div> : users.loading && !users.data ? <Spinner /> : items.length === 0 ? <Empty title="No one matches" /> : (
           <div className="overflow-x-auto">
+            {columns.changed && <div className="flex justify-end px-3 pt-2 text-xs"><button type="button" onClick={columns.reset} className="font-medium text-info hover:underline">Reset column order</button></div>}
             <table className="w-full text-left text-sm">
               <thead className="bg-head text-xs uppercase tracking-wide text-muted">
-                <tr><th className="px-4 py-2.5 font-semibold">Person</th><th className="px-3 py-2.5 font-semibold">Role</th><th className="px-3 py-2.5 font-semibold">Reports to</th><th className="px-3 py-2.5 font-semibold">Branch</th><th className="px-3 py-2.5 font-semibold">Last sign-in</th><th className="px-3 py-2.5 font-semibold">Status</th>{manage && <th className="px-4 py-2.5 text-right font-semibold"><span className="sr-only">Actions</span></th>}</tr>
+                <tr>{columns.order.map((id) => <MovableTh key={id} id={id} columns={columns} className="px-3 py-2.5 text-left font-semibold">{COLUMNS[id as ColId].label}</MovableTh>)}{manage && <th className="px-4 py-2.5 text-right font-semibold"><span className="sr-only">Actions</span></th>}</tr>
               </thead>
               <tbody className="divide-y divide-line">
                 {items.map((u) => (
                   <tr key={u.id} className="hover:bg-mint-50">
-                    <td className="px-4 py-2.5">
-                      <div className="flex items-center gap-2.5">
-                        <Avatar name={u.name} size={32} tone="soft" />
-                        <div className="min-w-0"><p className="truncate font-medium text-ink">{u.name}</p><p className="truncate text-xs text-muted">{u.email}{u.designation ? ` · ${u.designation}` : ''}</p></div>
-                      </div>
-                    </td>
-                    <td className="px-3 py-2.5"><Badge tone="brand">{u.role.name}</Badge></td>
-                    <td className="px-3 py-2.5 text-muted">{u.manager?.name ?? '—'}</td>
-                    <td className="px-3 py-2.5 text-muted">{u.branch?.name ?? '—'}</td>
-                    <td className="px-3 py-2.5 text-muted" title={u.lastLoginAt ? fmtDate(u.lastLoginAt) : ''}>{u.lastLoginAt ? fromNow(u.lastLoginAt) : u.mustChangePassword ? 'Not yet' : 'Never'}</td>
-                    <td className="px-3 py-2.5">{u.status === 'active' ? <Badge tone="ok">Active</Badge> : <Badge>Switched off</Badge>}</td>
+                    {columns.order.map((id) => { const col = COLUMNS[id as ColId]; return <td key={id} className={col.td} title={col.title?.(u)}>{col.cell(u)}</td>; })}
                     {manage && (
                       <td className="px-4 py-2.5">
                         <div className="flex justify-end gap-1">

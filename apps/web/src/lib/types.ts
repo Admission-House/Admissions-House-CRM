@@ -49,6 +49,8 @@ export interface StatusOption {
   requiresFollowup?: boolean;
   /** A reason (sub-status) must be chosen when a lead is moved to this status. */
   requiresSubstatus?: boolean;
+  /** Offered when disposing a lead; false for a status the system uses or an older one. */
+  selectable?: boolean;
   isActive?: boolean;
   substatuses?: { id: string; name: string; requiresComment?: boolean }[];
 }

@@ -76,7 +76,7 @@ describe('what a counsellor can see', () => {
     expect(res.statusCode).toBe(200);
     const [p] = res.json();
     expect(p).toMatchObject({ key: 'universal-ai', name: 'Universal AI University', configured: true });
-    expect(p.programs.length).toBe(6);
+    expect(p.programs.length).toBe(7);
     expect(p.states.length).toBe(37);
     expect(res.body).not.toContain(SECRET);
   });

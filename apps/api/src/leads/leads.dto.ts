@@ -137,6 +137,8 @@ export const createStatusSchema = z.object({
   requiresFollowup: z.boolean(),
   /** Ask for a sub-status (the reason) whenever a lead is moved to this status. */
   requiresSubstatus: z.boolean().optional(),
+  /** Offered in "Dispose lead". Off for a status the system uses or an older one, which stays on the leads that hold it. */
+  selectable: z.boolean().optional(),
   sortOrder: z.number().int().min(0).max(10_000).optional(),
 });
 export class CreateStatusDto extends createZodDto(createStatusSchema) {}

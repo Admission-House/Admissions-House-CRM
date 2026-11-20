@@ -14,6 +14,8 @@ export interface StatusView {
   requiresFollowup: boolean;
   /** A sub-status (the reason) must be chosen when a lead is moved to this status. */
   requiresSubstatus: boolean;
+  /** Offered when disposing a lead. */
+  selectable: boolean;
   sortOrder: number;
   isActive: boolean;
   substatuses: { id: string; name: string; sortOrder: number; requiresComment: boolean }[];
@@ -37,7 +39,7 @@ export class LeadStatusesService {
       const next = dto.sortOrder ?? (await trx.selectFrom('lead_statuses').select(sql<number>`COALESCE(max(sort_order), -1) + 1`.as('n')).executeTakeFirstOrThrow()).n;
       const row = await trx
         .insertInto('lead_statuses')
-        .values({ tenant_id: auth.tenantId, name: dto.name, queue: dto.queue, is_open: dto.isOpen, requires_followup: dto.requiresFollowup, requires_substatus: dto.requiresSubstatus ?? false, sort_order: next })
+        .values({ tenant_id: auth.tenantId, name: dto.name, queue: dto.queue, is_open: dto.isOpen, requires_followup: dto.requiresFollowup, requires_substatus: dto.requiresSubstatus ?? false, selectable: dto.selectable ?? true, sort_order: next })
         .returning('id')
         .executeTakeFirstOrThrow();
       await this.record(trx, auth, 'lead_status.create', row.id, undefined, dto);
@@ -62,6 +64,7 @@ export class LeadStatusesService {
         ...(dto.isOpen !== undefined && { is_open: dto.isOpen }),
         ...(dto.requiresFollowup !== undefined && { requires_followup: dto.requiresFollowup }),
         ...(dto.requiresSubstatus !== undefined && { requires_substatus: dto.requiresSubstatus }),
+        ...(dto.selectable !== undefined && { selectable: dto.selectable }),
         ...(dto.sortOrder !== undefined && { sort_order: dto.sortOrder }),
         ...(dto.isActive !== undefined && { is_active: dto.isActive }),
       };
@@ -117,17 +120,17 @@ export class LeadStatusesService {
 
   private async load(trx: Trx, includeInactive: boolean, onlyId?: string): Promise<StatusView[]> {
     const { rows } = await sql<{
-      id: string; name: string; queue: string; is_open: boolean; requires_followup: boolean; requires_substatus: boolean; sort_order: number; is_active: boolean;
+      id: string; name: string; queue: string; is_open: boolean; requires_followup: boolean; requires_substatus: boolean; selectable: boolean; sort_order: number; is_active: boolean;
       subs: { id: string; name: string; sortOrder: number; requiresComment: boolean }[];
     }>`
-      SELECT s.id, s.name, s.queue, s.is_open, s.requires_followup, s.requires_substatus, s.sort_order, s.is_active,
+      SELECT s.id, s.name, s.queue, s.is_open, s.requires_followup, s.requires_substatus, s.selectable, s.sort_order, s.is_active,
              COALESCE(jsonb_agg(jsonb_build_object('id', ss.id, 'name', ss.name, 'sortOrder', ss.sort_order, 'requiresComment', ss.requires_comment) ORDER BY ss.sort_order, ss.name)
                       FILTER (WHERE ss.id IS NOT NULL), '[]'::jsonb) AS subs
       FROM lead_statuses s LEFT JOIN lead_substatuses ss ON ss.status_id = s.id
       WHERE ${onlyId ? sql`s.id = ${onlyId}` : sql`true`} ${includeInactive ? sql`` : sql`AND s.is_active`}
       GROUP BY s.id ORDER BY s.sort_order, s.name`.execute(trx);
     return rows.map((r) => ({
-      id: r.id, name: r.name, queue: r.queue, isOpen: r.is_open, requiresFollowup: r.requires_followup, requiresSubstatus: r.requires_substatus,
+      id: r.id, name: r.name, queue: r.queue, isOpen: r.is_open, requiresFollowup: r.requires_followup, requiresSubstatus: r.requires_substatus, selectable: r.selectable,
       sortOrder: r.sort_order, isActive: r.is_active, substatuses: r.subs,
     }));
   }

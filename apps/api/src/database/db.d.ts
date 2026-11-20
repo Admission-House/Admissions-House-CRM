@@ -550,6 +550,7 @@ export interface LeadStatuses {
   queue: string;
   requires_followup: Generated<boolean>;
   requires_substatus: Generated<boolean>;
+  selectable: Generated<boolean>;
   sort_order: Generated<number>;
   tenant_id: string;
   updated_at: Generated<Timestamp>;

@@ -5,16 +5,19 @@ const ok = { course: 'MBA Single Specialization', specialization: 'Marketing', s
 
 describe("the college's own lists", () => {
   it('are loaded in full from its document', () => {
-    expect(uau.programs.length).toBe(6);
-    expect(uau.programs.flatMap((p) => p.specializations)).toHaveLength(14);
+    expect(uau.programs.length).toBe(7);
+    expect(uau.programs.flatMap((p) => p.specializations)).toHaveLength(18);
     expect(Object.keys(uau.locations)).toHaveLength(37);
     expect(Object.values(uau.locations).flat()).toHaveLength(7552);
     for (const p of uau.programs) expect(p.specializations.length).toBeGreaterThan(0);
     for (const [state, cities] of Object.entries(uau.locations)) expect(cities.length, state).toBeGreaterThan(0);
   });
 
-  it('leave out the dual specialization course, which the document does not say how to send', () => {
-    expect(uau.programs.some((p) => /dual/i.test(p.course))).toBe(false);
+  it('offer the dual specialization course with one specialization, as the university asked', () => {
+    const dual = uau.programs.find((p) => /dual/i.test(p.course))!;
+    expect(dual.course).toBe('MBA with Ai Dual Specialization (Major & Minor - any combination )');
+    expect(dual.specializations).toEqual(['Business Analytics & AI', 'Marketing', 'Finance', 'Operations & Supply Chain']);
+    expect(checkChoices(uau, { course: dual.course, specialization: 'Finance', state: 'Delhi', city: 'Central Delhi' })).toEqual({ campus: 'PG' });
   });
 
   it('have one entry per key', () => {

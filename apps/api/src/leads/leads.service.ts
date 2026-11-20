@@ -547,6 +547,7 @@ export class LeadsService {
         (dto.substatusId === undefined || dto.substatusId === lead.substatus_id);
 
       if (!sameStatus) {
+        if (!status.selectable) throw invalid('STATUS_NOT_OFFERED', 'statusId', `"${status.name}" is not one of the statuses to choose from`);
         this.assertDisposition(status, !!dto.substatusId, dto.remark);
         assertFollowUpForStatus(
           { name: status.name, requiresFollowup: status.requires_followup, isOpen: status.is_open },
@@ -613,6 +614,7 @@ export class LeadsService {
   bulkStatus(auth: AuthContext, dto: BulkStatusDto) {
     return this.db.withTenant(auth.tenantId, async (trx) => {
       const status = await this.requireStatus(trx, dto.statusId, dto.substatusId);
+      if (!status.selectable) throw invalid('STATUS_NOT_OFFERED', 'statusId', `"${status.name}" is not one of the statuses to choose from`);
       this.assertDisposition(status, !!dto.substatusId, dto.remark);
       if (status.requires_followup && status.is_open) {
         throw AppError.badRequest(
@@ -1089,9 +1091,10 @@ export class LeadsService {
       requires_followup: boolean;
       substatus_name: string | null;
       requires_substatus: boolean;
+      selectable: boolean;
       substatus_requires_comment: boolean;
     }>`
-      SELECT s.id, s.name, s.is_open, s.requires_followup, s.requires_substatus, ss.name AS substatus_name,
+      SELECT s.id, s.name, s.is_open, s.requires_followup, s.requires_substatus, s.selectable, ss.name AS substatus_name,
              COALESCE(ss.requires_comment, false) AS substatus_requires_comment
       FROM lead_statuses s
       LEFT JOIN lead_substatuses ss ON ss.id = ${substatusId ?? null}::uuid AND ss.status_id = s.id

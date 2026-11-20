@@ -15,7 +15,7 @@ const QUEUES: Record<string, string> = { fresh: 'Fresh', missed: 'Missed', follo
 const CHANNELS: Record<string, string> = { website: 'Website', ads: 'Ads', portal: 'Portal', call: 'Phone call', referral: 'Referral', walk_in: 'Walk-in', import: 'Import', other: 'Other' };
 const STRATEGY: Record<string, string> = { round_robin: 'Take turns', least_busy: 'Least busy first', fixed: 'Always the first person' };
 
-interface Status { id: string; name: string; queue: string; isOpen: boolean; requiresFollowup: boolean; requiresSubstatus: boolean; sortOrder: number; isActive: boolean; substatuses: { id: string; name: string; requiresComment: boolean }[] }
+interface Status { id: string; name: string; queue: string; isOpen: boolean; requiresFollowup: boolean; requiresSubstatus: boolean; selectable: boolean; sortOrder: number; isActive: boolean; substatuses: { id: string; name: string; requiresComment: boolean }[] }
 interface Source { id: string; name: string; channelType: string; isActive: boolean }
 interface Rule { id: string; name: string; priority: number; sourceId: string | null; courseId: string | null; locationId: string | null; studyMode: string | null; strategy: string; isActive: boolean; users: { id: string; name: string }[] }
 interface Policy { duplicateAction: 'attach' | 'reject'; autoAssign: boolean; downloadForms: string[] }
@@ -111,6 +111,7 @@ function StatusesTab() {
                 </div>
                 <div className="flex items-center gap-2">
                   <label className="flex items-center gap-1.5 text-xs text-muted"><input type="checkbox" checked={s.requiresSubstatus} disabled={s.substatuses.length === 0} onChange={(e) => void toggle(`/lead-statuses/${s.id}`, { requiresSubstatus: e.target.checked })} className="h-3.5 w-3.5 accent-[#0f625e]" /> Reason required</label>
+                  <label className="flex items-center gap-1.5 text-xs text-muted" title="Show this status in the Dispose lead list. Switch off for a status the system uses, or an old one that still holds leads."><input type="checkbox" checked={s.selectable} onChange={(e) => void toggle(`/lead-statuses/${s.id}`, { selectable: e.target.checked })} className="h-3.5 w-3.5 accent-[#0f625e]" /> In the Dispose list</label>
                   <Button size="sm" variant="secondary" onClick={() => setForm(s)}>Edit</Button>
                 </div>
               </div>

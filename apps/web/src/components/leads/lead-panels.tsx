@@ -58,7 +58,8 @@ export function StatusPanel({ lead, onChanged }: { lead: LeadDetail; onChanged: 
   const [saved, setSaved] = useState(false);
   const [map, setMap] = useState(false);
 
-  const options = statuses.data?.filter((s) => s.isActive !== false) ?? [];
+  // The company's own list to choose from, plus the status the lead already has (so it still shows, even if it is no longer offered).
+  const options = statuses.data?.filter((s) => s.isActive !== false && (s.selectable !== false || s.id === lead.status.id)) ?? [];
   const chosen = options.find((s) => s.id === (statusId || lead.status.id));
   const changing = !!statusId && statusId !== lead.status.id;
   const reasonNeeded = !!chosen?.requiresSubstatus && changing;
@@ -70,6 +71,12 @@ export function StatusPanel({ lead, onChanged }: { lead: LeadDetail; onChanged: 
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
+    // Say what is missing, here, in words. The browser's own "fill this in" bubble is easy to miss, and then Save looks as if it does nothing.
+    const missing = reasonNeeded && !substatusId ? 'Choose a reason in "Lead sub-status" for this status.'
+      : commentNeeded && !remark.trim() ? 'This reason needs a comment. Write it in "Comments".'
+      : needsDate && !due ? 'Choose the next follow-up date and time.'
+      : null;
+    if (missing) { setSaved(false); setError(missing); return; }
     setBusy(true);
     setError(null);
     setSaved(false);
@@ -99,7 +106,7 @@ export function StatusPanel({ lead, onChanged }: { lead: LeadDetail; onChanged: 
   return (
     <Card className="p-5">
       <h2 className="text-sm font-semibold text-ink">Dispose lead</h2>
-      <form onSubmit={save} className="mt-4 space-y-4">
+      <form onSubmit={save} noValidate className="mt-4 space-y-4">
         {error && <Notice tone="bad">{error}</Notice>}
         {saved && <Notice tone="ok">Saved.</Notice>}
         <Field label="Lead status" htmlFor="st" required>
@@ -107,14 +114,12 @@ export function StatusPanel({ lead, onChanged }: { lead: LeadDetail; onChanged: 
             {options.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </Select>
         </Field>
-        {chosen?.substatuses && chosen.substatuses.length > 0 && (
-          <Field label="Lead sub-status" htmlFor="sub" required={reasonNeeded}>
-            <Select id="sub" value={substatusId} onChange={(e) => setSubstatusId(e.target.value)} required={reasonNeeded}>
-              <option value="">{reasonNeeded ? 'Select a reason' : 'None'}</option>
-              {chosen.substatuses.map((s) => <option key={s.id} value={s.id}>{s.name}{s.requiresComment ? ' (comments required)' : ''}</option>)}
-            </Select>
-          </Field>
-        )}
+        <Field label="Lead sub-status" htmlFor="sub" required={reasonNeeded}>
+          <Select id="sub" value={substatusId} onChange={(e) => setSubstatusId(e.target.value)} required={reasonNeeded} disabled={!(chosen?.substatuses && chosen.substatuses.length > 0)}>
+            <option value="">{!(chosen?.substatuses && chosen.substatuses.length > 0) ? 'No reasons for this status' : reasonNeeded ? 'Select a reason' : 'None'}</option>
+            {(chosen?.substatuses ?? []).map((s) => <option key={s.id} value={s.id}>{s.name}{s.requiresComment ? ' (comments required)' : ''}</option>)}
+          </Select>
+        </Field>
         <button type="button" onClick={() => setMap(true)} className="-mt-2 text-xs font-medium text-info hover:underline">View all dependencies</button>
         {can('followup.manage') && chosen?.isOpen && (
           <Field label={needsDate ? 'Next follow-up (required)' : 'Next follow-up (optional)'} htmlFor="due">

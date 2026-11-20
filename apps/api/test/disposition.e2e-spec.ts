@@ -120,3 +120,38 @@ describe('disposing a lead', () => {
     expect((await api.call('PATCH', `/lead-statuses/${ids.status}`, t.lc1!, { requiresSubstatus: true }, OFFICE_IP)).statusCode).toBe(403);
   });
 });
+
+describe('the list a person can choose from', () => {
+  it('shows every status with whether it is offered, and a status can be switched out of the list', async () => {
+    const hidden = await api.call('POST', '/lead-statuses', t.sa!, { name: 'Old Legacy Status', queue: 'followup', isOpen: true, requiresFollowup: false, selectable: false });
+    expect(hidden.statusCode, hidden.body).toBe(201);
+    ids.hidden = hidden.json().id;
+    const list = (await api.call('GET', '/lead-statuses', t.lc1!, undefined, OFFICE_IP)).json() as { id: string; selectable: boolean }[];
+    expect(list.find((x) => x.id === ids.hidden)!.selectable).toBe(false);
+    expect(list.find((x) => x.id === ids.status)!.selectable).toBe(true);
+    const flip = await api.call('PATCH', `/lead-statuses/${ids.hidden}`, t.sa!, { selectable: true });
+    expect(flip.statusCode, flip.body).toBe(200);
+    expect(flip.json().selectable).toBe(true);
+    await api.call('PATCH', `/lead-statuses/${ids.hidden}`, t.sa!, { selectable: false });
+  });
+
+  it('refuses a status that is not offered, for one lead and for many', async () => {
+    const lead = await newLead();
+    const one = await api.call('POST', `/leads/${lead}/status`, t.lc1!, { statusId: ids.hidden }, OFFICE_IP);
+    expect(one.statusCode).toBe(400);
+    expect(errorCode(one)).toBe('STATUS_NOT_OFFERED');
+    const many = await api.call('POST', '/leads/bulk/status', t.sa!, { leadIds: [lead], statusId: ids.hidden });
+    expect(many.statusCode).toBe(400);
+    expect(errorCode(many)).toBe('STATUS_NOT_OFFERED');
+    expect((await api.call('GET', `/leads/${lead}`, t.lc1!, undefined, OFFICE_IP)).json().status.id).not.toBe(ids.hidden);
+  });
+
+  it('leaves a lead that already holds such a status alone, and still lets it be saved with a note', async () => {
+    const lead = await newLead();
+    await owner.query(`UPDATE leads SET status_id = $1 WHERE id = $2`, [ids.hidden, lead]);
+    const same = await api.call('POST', `/leads/${lead}/status`, t.lc1!, { statusId: ids.hidden, remark: 'called, no answer' }, OFFICE_IP);
+    expect(same.statusCode, same.body).toBe(200);
+    const away = await api.call('POST', `/leads/${lead}/status`, t.lc1!, { statusId: ids.status, substatusId: ids.busy }, OFFICE_IP);
+    expect(away.statusCode, away.body).toBe(200);
+  });
+});
