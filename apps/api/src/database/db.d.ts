@@ -163,6 +163,19 @@ export interface BreakTypes {
   tenant_id: string;
 }
 
+export interface CallLog {
+  direction: string | null;
+  duration_sec: number | null;
+  ended_at: Timestamp | null;
+  id: string | null;
+  lead_id: string | null;
+  outcome: string | null;
+  started_at: Timestamp | null;
+  tenant_id: string | null;
+  user_id: string | null;
+  via: string | null;
+}
+
 export interface CallRecordings {
   attempts: Generated<number>;
   call_id: string;
@@ -1090,6 +1103,7 @@ export interface DB {
   branches: Branches;
   break_logs: BreakLogs;
   break_types: BreakTypes;
+  call_log: CallLog;
   call_recordings: CallRecordings;
   calls: Calls;
   college_courses: CollegeCourses;

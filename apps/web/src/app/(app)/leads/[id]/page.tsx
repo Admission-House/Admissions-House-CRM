@@ -51,6 +51,9 @@ function Workspace() {
   const { can } = useAuth();
   const phoneReady = usePhoneReady();
   const lead = useApi<LeadDetail>(`/leads/${id}`);
+  // How many colleges sit in each list, shown on the tabs so the counsellor sees at once what is shortlisted and what is DNP.
+  const shortlisted = useApi<unknown[]>(can('lead.read') ? `/leads/${id}/shortlists` : null, { view: 'active' });
+  const dnp = useApi<unknown[]>(can('lead.read') ? `/leads/${id}/shortlists` : null, { view: 'ni_dnp' });
   const [version, setVersion] = useState(0);
   const [calling, setCalling] = useState(false);
   const [videoOpen, setVideoOpen] = useState(false);
@@ -64,6 +67,8 @@ function Workspace() {
 
   const changed = () => {
     lead.reload();
+    shortlisted.reload();
+    dnp.reload();
     setVersion((v) => v + 1);
   };
 
@@ -124,7 +129,7 @@ function Workspace() {
         </div>
         {videoOpen && <VideoModal leadId={id} leadName={l.name} phone={l.phone} onClose={() => setVideoOpen(false)} />}
         {callMessage && <div className="border-t border-line px-4 py-2.5"><Notice tone={callMessage.tone}>{callMessage.text}</Notice></div>}
-        <Tabs label="Lead sections" tabs={TABS.map((t) => ({ key: t.key, label: t.label }))} value={tab} onChange={setTab} />
+        <Tabs label="Lead sections" tabs={TABS.map((t) => ({ key: t.key, label: t.label, count: t.key === 'shortlisted' ? shortlisted.data?.length : t.key === 'nidnp' ? dnp.data?.length : undefined }))} value={tab} onChange={setTab} />
       </Card>
 
       {tab === 'activity' && (

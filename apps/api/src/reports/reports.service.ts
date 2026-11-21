@@ -46,7 +46,7 @@ export class ReportsService {
       const { rows } = await sql<{ total: string; connected: string; missed: string; talk: string }>`
         SELECT count(*) AS total, count(*) FILTER (WHERE c.outcome = 'connected') AS connected,
                count(*) FILTER (WHERE c.outcome = 'missed') AS missed, coalesce(sum(c.duration_sec), 0) AS talk
-        FROM calls c WHERE c.started_at >= now() - interval '1 day' AND c.started_at >= ${range.todayStart}::timestamptz ${scoped ? sql`AND ${scoped}` : sql``}`.execute(trx);
+        FROM call_log c WHERE c.started_at >= now() - interval '1 day' AND c.started_at >= ${range.todayStart}::timestamptz ${scoped ? sql`AND ${scoped}` : sql``}`.execute(trx);
       const overdue = await sql<{ n: string }>`
         SELECT count(*) AS n FROM followups f JOIN leads l ON l.id = f.lead_id
         WHERE f.done_at IS NULL AND f.due_at < now() AND l.deleted_at IS NULL ${this.vis(auth, 'f.user_id')}`.execute(trx);
@@ -77,7 +77,7 @@ export class ReportsService {
         SELECT u.id, u.name, r.name AS role, x.last_active_at AS since,
           CASE
             WHEN x.last_active_at IS NULL THEN 'not_logged_in'
-            WHEN EXISTS (SELECT 1 FROM calls c WHERE c.user_id = u.id AND c.ended_at IS NULL
+            WHEN EXISTS (SELECT 1 FROM call_log c WHERE c.user_id = u.id AND c.ended_at IS NULL
                            AND ((c.outcome = 'connected' AND c.started_at > now() - interval '3 hours')
                              OR (c.outcome IN ('requested', 'ringing') AND c.started_at > now() - interval '2 minutes'))) THEN 'on_call'
             WHEN EXISTS (SELECT 1 FROM break_logs b JOIN attendance_records a ON a.id = b.attendance_id
@@ -109,7 +109,7 @@ export class ReportsService {
       const key = q.groupBy === 'user' ? sql`coalesce(u.name, 'Unassigned')` : sql`src.name`;
       const { rows } = await sql<{ name: string; leads: string; called: string; avg: string | null; median: string | null }>`
         WITH first_call AS (
-          SELECT lead_id, min(started_at) AS at FROM calls
+          SELECT lead_id, min(started_at) AS at FROM call_log
           WHERE direction = 'outgoing' AND lead_id IS NOT NULL AND started_at >= ${r.fromTs}::timestamptz GROUP BY lead_id)
         SELECT ${key} AS name, count(*) AS leads, count(fc.at) AS called,
                avg(extract(epoch FROM fc.at - l.created_at) / 60) AS avg,
@@ -145,7 +145,7 @@ export class ReportsService {
       const { rows } = await sql<{ name: string; day: string; calls: string; connected: string; talk: string; changes: string; followups: string }>`
         WITH m AS (
           SELECT c.user_id, (c.started_at AT TIME ZONE ${tz})::date AS day, 1 AS calls, (c.outcome = 'connected')::int AS connected, coalesce(c.duration_sec, 0) AS talk, 0 AS changes, 0 AS followups
-          FROM calls c WHERE c.user_id IS NOT NULL AND c.started_at >= ${r.fromTs}::timestamptz AND c.started_at < ${r.toTs}::timestamptz AND ${who('c.user_id')}
+          FROM call_log c WHERE c.user_id IS NOT NULL AND c.started_at >= ${r.fromTs}::timestamptz AND c.started_at < ${r.toTs}::timestamptz AND ${who('c.user_id')}
           UNION ALL
           SELECT a.user_id, (a.created_at AT TIME ZONE ${tz})::date, 0, 0, 0, 1, 0
           FROM lead_activities a WHERE a.type = 'status_change' AND a.user_id IS NOT NULL AND a.created_at >= ${r.fromTs}::timestamptz AND a.created_at < ${r.toTs}::timestamptz AND ${who('a.user_id')}
@@ -228,18 +228,18 @@ export class ReportsService {
       const { rows } = await sql<Record<string, string>>`
         SELECT coalesce(u.name, 'Unknown') AS name, count(*) AS total, count(*) FILTER (WHERE c.direction = 'outgoing') AS outgoing,
                count(*) FILTER (WHERE c.direction = 'incoming') AS incoming, count(*) FILTER (WHERE c.outcome = 'connected') AS connected,
-               count(*) FILTER (WHERE c.outcome = 'missed') AS missed, coalesce(sum(c.duration_sec), 0) AS talk,
+               count(*) FILTER (WHERE c.outcome = 'missed') AS missed, count(*) FILTER (WHERE c.via = 'app') AS app, coalesce(sum(c.duration_sec), 0) AS talk,
                avg(c.duration_sec) FILTER (WHERE c.outcome = 'connected') AS avg_secs
-        FROM calls c LEFT JOIN users u ON u.id = c.user_id
+        FROM call_log c LEFT JOIN users u ON u.id = c.user_id
         WHERE c.started_at >= ${r.fromTs}::timestamptz AND c.started_at < ${r.toTs}::timestamptz ${scoped ? sql`AND ${scoped}` : sql``}
         GROUP BY 1 ORDER BY 1`.execute(trx);
       return {
         title: 'Call activity', from: r.from, to: r.to,
         columns: [
           { key: 'name', label: 'Counsellor' }, { key: 'total', label: 'Calls' }, { key: 'outgoing', label: 'Outgoing' }, { key: 'incoming', label: 'Incoming' },
-          { key: 'connected', label: 'Connected' }, { key: 'missed', label: 'Missed' }, { key: 'talkSec', label: 'Talk time (seconds)' }, { key: 'avgSec', label: 'Average connected call (seconds)' },
+          { key: 'connected', label: 'Connected' }, { key: 'missed', label: 'Missed' }, { key: 'app', label: 'In-app voice calls' }, { key: 'talkSec', label: 'Talk time (seconds)' }, { key: 'avgSec', label: 'Average connected call (seconds)' },
         ],
-        rows: rows.map((x) => ({ name: x.name!, total: n(x.total), outgoing: n(x.outgoing), incoming: n(x.incoming), connected: n(x.connected), missed: n(x.missed), talkSec: secs(x.talk), avgSec: x.avg_secs === null ? null : secs(x.avg_secs) })),
+        rows: rows.map((x) => ({ name: x.name!, total: n(x.total), outgoing: n(x.outgoing), incoming: n(x.incoming), connected: n(x.connected), missed: n(x.missed), app: n(x.app), talkSec: secs(x.talk), avgSec: x.avg_secs === null ? null : secs(x.avg_secs) })),
       };
     });
   }

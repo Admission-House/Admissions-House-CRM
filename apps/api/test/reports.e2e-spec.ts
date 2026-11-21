@@ -215,3 +215,72 @@ describe('dates, files and permissions', () => {
     expect((await app.inject({ method: 'GET', url: '/api/v1/reports/calls' })).statusCode).toBe(401);
   });
 });
+
+describe('in-app voice calls with a lead', () => {
+  /** A voice (or video) call written straight into the database, as the CRM's Agora calls are stored. */
+  const session = async (who: string, leadId: string | null, o: { kind?: 'voice' | 'video'; startedAgo: string; guestJoinedAgo?: string; endedAgo?: string }) => {
+    const { rows } = await owner.query(
+      `INSERT INTO video_sessions (tenant_id, lead_id, created_by, expires_at, kind, status, outcome, created_at, started_at, ended_at)
+       VALUES ($1, $2, $3, now() + interval '1 day', $4, CASE WHEN $6::interval IS NULL THEN 'open' ELSE 'ended' END,
+               CASE WHEN $6::interval IS NULL THEN NULL WHEN $7::interval IS NULL THEN 'missed' ELSE 'completed' END,
+               now() - $5::interval, now() - $5::interval, now() - $6::interval)
+       RETURNING id`,
+      [fx.tenantId, leadId, fx.user(who).id, o.kind ?? 'voice', o.startedAgo, o.endedAgo ?? null, o.guestJoinedAgo ?? null],
+    );
+    await owner.query(
+      `INSERT INTO video_session_invites (tenant_id, session_id, kind, guest_name, state, agora_uid, expires_at, invited_by, first_joined_at)
+       VALUES ($1, $2, 'guest', 'Student', $3, $4, now() + interval '1 day', $5, now() - $6::interval)`,
+      [fx.tenantId, rows[0].id, o.guestJoinedAgo ? 'accepted' : 'invited', 5000 + ++counter, fx.user(who).id, o.guestJoinedAgo ?? null],
+    );
+    return rows[0].id as string;
+  };
+  type Counts = { total: number; connected: number; outgoing: number; talkSec: number; app: number };
+  const callsOf = async (who: string) => row(await api.call('GET', '/reports/calls', t.admin!), 'name', who) as Counts | undefined;
+
+  it('are counted with the phone calls: connected only when the student joined, talk time from then to the end', async () => {
+    const before = (await callsOf('lc2')) ?? { total: 0, connected: 0, outgoing: 0, talkSec: 0, app: 0 };
+    const dashBefore = (await api.call('GET', '/dashboard', t.lc2!)).json().today.calls;
+    const lead = await newLead(t.lc2!, 'Voice Lead');
+    expect((await owner.query(`SELECT first_called_at FROM leads WHERE id = $1`, [lead])).rows[0].first_called_at).toBeNull();
+
+    await session('lc2', lead, { startedAgo: '6 minutes', guestJoinedAgo: '5 minutes', endedAgo: '2 minutes' }); // talked 3 minutes
+    await session('lc2', lead, { startedAgo: '90 seconds', endedAgo: '1 minute' }); // the student did not join
+    await session('lc2', lead, { kind: 'video', startedAgo: '1 minute', guestJoinedAgo: '1 minute', endedAgo: '30 seconds' }); // video: not a phone-style call
+    await session('lc2', null, { startedAgo: '1 minute', guestJoinedAgo: '1 minute', endedAgo: '30 seconds' }); // no lead: a colleague, not a student
+
+    const after = (await callsOf('lc2'))!;
+    expect(after.total - before.total).toBe(2);
+    expect(after.outgoing - before.outgoing).toBe(2);
+    expect(after.connected - before.connected).toBe(1);
+    expect(after.app - before.app).toBe(2);
+    expect(after.talkSec - before.talkSec).toBe(180);
+
+    const dash = (await api.call('GET', '/dashboard', t.lc2!)).json().today.calls;
+    expect(dash.total - dashBefore.total).toBe(2);
+    expect(dash.connected - dashBefore.connected).toBe(1);
+    expect(dash.missed).toBe(dashBefore.missed); // an unanswered outgoing call is not a missed incoming one
+
+    // "First called" is the first of them, and a later call does not move it.
+    const first = (await owner.query(`SELECT first_called_at FROM leads WHERE id = $1`, [lead])).rows[0].first_called_at as Date;
+    const sixAgo = Date.now() - 6 * 60_000;
+    expect(Math.abs(first.getTime() - sixAgo)).toBeLessThan(30_000);
+  });
+
+  it('show a counsellor on a voice call as on a call', async () => {
+    const lead = await newLead(t.lc2!, 'Talking Lead');
+    const id = await session('lc2', lead, { startedAgo: '2 minutes', guestJoinedAgo: '1 minute' }); // still going
+    const byName = Object.fromEntries((await api.call('GET', '/reports/team-status', t.admin!)).json().rows.map((r: { name: string; status: string }) => [r.name, r.status]));
+    expect(byName.lc2).toBe('on_call');
+    await owner.query(`UPDATE video_sessions SET status = 'ended', outcome = 'completed', ended_at = now() WHERE id = $1`, [id]);
+  });
+
+  it('fill in "First called" for a phone call too', async () => {
+    const lead = await newLead(t.lc1!, 'Phone Lead');
+    await insertCall('lc1', lead, { startedAgo: '30 seconds', outcome: 'not_picked' });
+    expect((await owner.query(`SELECT first_called_at FROM leads WHERE id = $1`, [lead])).rows[0].first_called_at).not.toBeNull();
+    // An incoming call is not "called".
+    const other = await newLead(t.lc1!, 'Rang Us');
+    await insertCall('lc1', other, { direction: 'incoming', outcome: 'missed', startedAgo: '10 seconds' });
+    expect((await owner.query(`SELECT first_called_at FROM leads WHERE id = $1`, [other])).rows[0].first_called_at).toBeNull();
+  });
+});
