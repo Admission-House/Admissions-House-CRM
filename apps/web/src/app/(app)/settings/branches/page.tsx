@@ -16,6 +16,7 @@ interface Branch {
   latitude: number | null;
   longitude: number | null;
   radiusM: number;
+  officeCheck: 'address_and_location' | 'location_only';
   detectedAt: string | null;
   isActive: boolean;
   userCount: number;
@@ -184,6 +185,16 @@ export default function BranchesPage() {
   const [adding, setAdding] = useState<Branch | null>(null);
   const [notice, setNotice] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null);
 
+  async function setCheck(b: Branch, officeCheck: Branch['officeCheck']) {
+    setNotice(null);
+    try {
+      await api(`/branches/${b.id}`, { method: 'PATCH', body: { officeCheck } });
+      branches.reload();
+    } catch (e) {
+      setNotice({ tone: 'bad', text: errorText(e) });
+    }
+  }
+
   async function removeNetwork(b: Branch, networkId: string) {
     setNotice(null);
     try {
@@ -219,6 +230,14 @@ export default function BranchesPage() {
                       <Button size="sm" variant="secondary" onClick={() => setForm(b)}>Edit</Button>
                     </div>
                   )}
+                </div>
+                <div className="rounded-lg border border-line p-3">
+                  <Field label="How office sign-in is checked" htmlFor={`oc-${b.id}`} hint={b.officeCheck === 'location_only' ? 'Anyone at the office (within the allowed distance) can sign in from any internet address. The network list below is not used. A phone or computer that fakes its location is refused where the device says so, but a determined person could still fake it.' : 'The computer must be on an office internet address (or be an approved office computer) and the person must be at the office.'}>
+                    <Select id={`oc-${b.id}`} value={b.officeCheck} disabled={!manage} onChange={(e) => void setCheck(b, e.target.value as Branch['officeCheck'])}>
+                      <option value="address_and_location">Internet address and location (stricter)</option>
+                      <option value="location_only">Location only (works with any internet address)</option>
+                    </Select>
+                  </Field>
                 </div>
                 <div className="rounded-lg border border-line">
                   <div className="flex items-center justify-between bg-head px-3 py-2"><p className="text-xs font-semibold uppercase tracking-wide text-muted">Allowed networks</p>{manage && <button onClick={() => setAdding(b)} className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:underline"><Plus className="h-3 w-3" aria-hidden /> Add</button>}</div>

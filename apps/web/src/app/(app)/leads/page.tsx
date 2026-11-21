@@ -27,7 +27,20 @@ const QUEUE_CHIPS = [
   { key: 'closed', label: 'Closed', dot: 'bg-subtle' },
 ] as const;
 
-const FILTER_KEYS = ['q', 'queue', 'statusId', 'sourceId', 'assignedTo', 'intent', 'studyMode', 'followup', 'createdFrom', 'createdTo', 'sort'] as const;
+const FILTER_KEYS = ['q', 'queue', 'statusId', 'sourceId', 'assignedTo', 'intent', 'studyMode', 'followup', 'createdFrom', 'createdTo', 'since', 'junk', 'sort'] as const;
+
+/** "Received in the last ...", for when a lead came in a few hours or days ago rather than on a calendar date. */
+const SINCE = [
+  { key: '', label: 'Any time', ms: 0 },
+  { key: '3h', label: 'Last 3 hours', ms: 3 * 3_600_000 },
+  { key: '24h', label: 'Last 24 hours', ms: 24 * 3_600_000 },
+  { key: '3d', label: 'Last 3 days', ms: 3 * 86_400_000 },
+  { key: '7d', label: 'Last 7 days', ms: 7 * 86_400_000 },
+  { key: '30d', label: 'Last 30 days', ms: 30 * 86_400_000 },
+] as const;
+
+/** The moment "the last 3 hours" (and so on) began, as a timestamp the server understands. */
+const sinceIso = (key: string): string => new Date(Date.now() - (SINCE.find((x) => x.key === key)?.ms ?? 0)).toISOString();
 type FilterKey = (typeof FILTER_KEYS)[number];
 const PAGE_SIZE = 25;
 
@@ -198,10 +211,10 @@ function Leads() {
   }, [typed, set]);
 
   // The Follow-up queue is a list of calls to make: the one due soonest comes first, unless the person chose another order.
-  const query = useMemo(
-    () => ({ ...Object.fromEntries(Object.entries(filters).filter(([, v]) => v)), ...(filters.queue === 'followup' && !filters.sort && { sort: 'followup' }), limit: PAGE_SIZE }),
-    [filters],
-  );
+  const query = useMemo(() => {
+    const { since, ...rest } = filters;
+    return { ...Object.fromEntries(Object.entries(rest).filter(([, v]) => v)), ...(since && { createdAfter: sinceIso(since) }), ...(filters.queue === 'followup' && !filters.sort && { sort: 'followup' }), limit: PAGE_SIZE };
+  }, [filters]);
   const queryKey = JSON.stringify(query);
   const first = useApi<Page<LeadListItem>>('/leads', query);
   const loading = first.loading && !first.data;
@@ -222,7 +235,7 @@ function Leads() {
     }
   }
 
-  const advanced = ['statusId', 'sourceId', 'assignedTo', 'intent', 'studyMode', 'followup', 'createdFrom', 'createdTo'] as const;
+  const advanced = ['statusId', 'sourceId', 'assignedTo', 'intent', 'studyMode', 'followup', 'createdFrom', 'createdTo', 'since', 'junk'] as const;
   const activeFilters = advanced.filter((k) => filters[k]).length;
   const count = (key: string) => (key === '' ? queues.data?.total : queues.data?.queues[key]);
   const allSelected = items.length > 0 && items.every((l) => selected.has(l.id));
@@ -231,8 +244,8 @@ function Leads() {
     setExporting(true);
     setNotice(null);
     try {
-      const { q, queue, statusId, sourceId, assignedTo, intent, studyMode, followup, createdFrom, createdTo } = filters;
-      await download('/leads/export', { q, queue, statusId, sourceId, assignedTo, intent, studyMode, followup, createdFrom, createdTo, format });
+      const { q, queue, statusId, sourceId, assignedTo, intent, studyMode, followup, createdFrom, createdTo, since, junk } = filters;
+      await download('/leads/export', { q, queue, statusId, sourceId, assignedTo, intent, studyMode, followup, createdFrom, createdTo, junk, ...(since && { createdAfter: sinceIso(since) }), format });
     } catch (e) {
       setNotice({ tone: 'bad', text: e instanceof ApiError ? e.message : 'The export failed. Try again.' });
     } finally {
@@ -312,6 +325,7 @@ function Leads() {
           </div>
           <Select aria-label="Sort" value={filters.sort} onChange={(e) => set({ sort: e.target.value })} className="w-44">
             <option value="">Newest first</option>
+            <option value="oldest">Oldest first</option>
             <option value="updated">Recently updated</option>
             <option value="followup">Next follow-up</option>
           </Select>
@@ -357,6 +371,14 @@ function Leads() {
             </Select>
             <label className="relative block"><span className="pointer-events-none absolute -top-2 left-2 bg-surface px-1 text-xs font-medium text-muted">Added from</span><Input type="date" value={filters.createdFrom} onChange={(e) => set({ createdFrom: e.target.value })} /></label>
             <label className="relative block"><span className="pointer-events-none absolute -top-2 left-2 bg-surface px-1 text-xs font-medium text-muted">Added to</span><Input type="date" value={filters.createdTo} onChange={(e) => set({ createdTo: e.target.value })} /></label>
+            <Select aria-label="Received" value={filters.since} onChange={(e) => set({ since: e.target.value })}>
+              {SINCE.map((x) => <option key={x.key} value={x.key}>{x.key ? `Received: ${x.label.toLowerCase()}` : 'Received: any time'}</option>)}
+            </Select>
+            <Select aria-label="Junk leads" value={filters.junk} onChange={(e) => set({ junk: e.target.value })}>
+              <option value="">Junk: show all</option>
+              <option value="hide">Hide junk leads</option>
+              <option value="only">Only junk leads</option>
+            </Select>
           </div>
         )}
       </Card>

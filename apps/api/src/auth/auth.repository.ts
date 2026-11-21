@@ -216,7 +216,7 @@ export class AuthRepository {
     ip: string,
     wifiId: string | undefined,
   ): Promise<{
-    branch: { latitude: string | null; longitude: string | null; radius_m: number; is_active: boolean } | undefined;
+    branch: { latitude: string | null; longitude: string | null; radius_m: number; is_active: boolean; office_check: string } | undefined;
     hasNetworks: boolean;
     networkMatches: boolean;
     /** Dynamic DNS names of the office: the request is allowed if it comes from the address one of them points to now. */
@@ -224,7 +224,7 @@ export class AuthRepository {
   }> {
     const branch = await trx
       .selectFrom('branches')
-      .select(['latitude', 'longitude', 'radius_m', 'is_active'])
+      .select(['latitude', 'longitude', 'radius_m', 'is_active', 'office_check'])
       .where('id', '=', branchId)
       .executeTakeFirst();
     const networks = await trx

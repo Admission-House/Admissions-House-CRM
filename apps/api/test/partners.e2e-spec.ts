@@ -229,3 +229,33 @@ describe('erasing a student', () => {
     expect((await owner.query(`SELECT count(*)::int n FROM lead_partner_submissions WHERE lead_id = $1`, [l.id])).rows[0].n).toBe(0);
   });
 });
+
+describe('DNP with a college', () => {
+  it('marks a sent lead as DNP, shows it next to the college, and moves it back', async () => {
+    const l = await lead();
+    const sent = await sendTo(t.lc1!, l.id);
+    const id = sent.json().submissionId as string;
+    expect((await api.call('GET', `/leads/${l.id}/partner-submissions`, t.lc1!)).json()[0].dnp).toBeNull();
+
+    const short = await api.call('POST', `/leads/${l.id}/partner-submissions/${id}/dnp`, t.lc1!, { reason: 'x' });
+    expect(short.statusCode).toBe(400); // a reason of at least 3 letters
+    const marked = await api.call('POST', `/leads/${l.id}/partner-submissions/${id}/dnp`, t.lc1!, { reason: 'Did not pick up three times' });
+    expect(marked.statusCode, marked.body).toBe(200);
+    const after = (await api.call('GET', `/leads/${l.id}/partner-submissions`, t.lc1!)).json()[0];
+    expect(after.dnp).toMatchObject({ reason: 'Did not pick up three times' });
+    expect((await api.call('POST', `/leads/${l.id}/partner-submissions/${id}/dnp`, t.lc1!, { reason: 'again again' })).statusCode).toBe(404); // already DNP
+
+    expect((await api.call('DELETE', `/leads/${l.id}/partner-submissions/${id}/dnp`, t.lc1!)).statusCode).toBe(200);
+    expect((await api.call('GET', `/leads/${l.id}/partner-submissions`, t.lc1!)).json()[0].dnp).toBeNull();
+  });
+
+  it('only for a lead that was sent, and only by someone who may see the lead', async () => {
+    const l = await lead();
+    answer = { status: 200, body: '{"status":false,"message":"Duplicate lead"}', delayMs: 0 };
+    const failed = (await sendTo(t.lc1!, l.id)).json().submissionId as string;
+    expect((await api.call('POST', `/leads/${l.id}/partner-submissions/${failed}/dnp`, t.lc1!, { reason: 'not sent really' })).statusCode).toBe(404);
+    answer = { status: 200, body: '{"status":true}', delayMs: 0 };
+    const ok = (await sendTo(t.lc1!, l.id, { ...choice, resend: true })).json().submissionId as string;
+    expect((await api.call('POST', `/leads/${l.id}/partner-submissions/${ok}/dnp`, t.lc2!, { reason: 'someone else' })).statusCode).toBe(404);
+  });
+});

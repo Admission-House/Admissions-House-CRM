@@ -116,9 +116,10 @@ export function RecommendedTab({ lead, onChanged }: { lead: LeadDetail; onChange
   const [place, setPlace] = useState<Place[]>([]);
   const [mode, setMode] = useState('');
   const [courseId, setCourseId] = useState('');
+  const [pick, setPick] = useState('');
   const recommended = useApi<Recommendation[]>(`/leads/${lead.id}/recommendations`);
   const courses = useApi<Page<{ id: string; name: string; level: string }>>('/courses', { limit: 100 });
-  const colleges = useApi<Page<CollegeItem>>('/colleges', { leadId: lead.id, q: q.trim() || undefined, locationId: place[0]?.id, courseId: courseId || undefined, mode: mode || undefined, limit: 24 });
+  const colleges = useApi<Page<CollegeItem>>('/colleges', { leadId: lead.id, q: q.trim() || undefined, locationId: place[0]?.id, courseId: courseId || undefined, mode: mode || undefined, limit: 100 });
   const [shortlisting, setShortlisting] = useState<{ id: string; name: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -169,14 +170,36 @@ export function RecommendedTab({ lead, onChanged }: { lead: LeadDetail; onChange
           {canAdd && <Button variant="secondary" onClick={() => { setNotice(null); setAdding(true); }}><Plus className="h-4 w-4" aria-hidden />Add an institute</Button>}
         </div>
         <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-4">
-          <Field label="Name"><Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search a college" /></Field>
-          <Field label="City or state"><LocationPicker value={place} onChange={setPlace} /></Field>
-          <Field label="Course">
-            <Select value={courseId} onChange={(e) => setCourseId(e.target.value)}><option value="">Any course</option>{courses.data?.items.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.level})</option>)}</Select>
+          <Field label="1. Study mode" htmlFor="fm" hint={lead.studyMode ? `This student prefers ${lead.studyMode}` : undefined}>
+            <Select id="fm" value={mode} onChange={(e) => { setMode(e.target.value); setPick(''); }}><option value="">{lead.studyMode ? 'Student preference' : 'Online or regular'}</option><option value="online">Online</option><option value="regular">Regular</option></Select>
           </Field>
-          <Field label="Study mode" hint={lead.studyMode ? `This student prefers ${lead.studyMode}` : undefined}>
-            <Select value={mode} onChange={(e) => setMode(e.target.value)}><option value="">{lead.studyMode ? 'Student preference' : 'Online or regular'}</option><option value="online">Online</option><option value="regular">Regular</option><option value="any">Any</option></Select>
+          <Field label="2. Course" htmlFor="fc">
+            <Select id="fc" value={courseId} onChange={(e) => { setCourseId(e.target.value); setPick(''); }}><option value="">Any course</option>{courses.data?.items.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.level})</option>)}</Select>
           </Field>
+          <Field label="3. City or state"><LocationPicker value={place} onChange={(v) => { setPlace(v); setPick(''); }} /></Field>
+          <Field label="4. College" htmlFor="fcol">
+            <Select id="fcol" value={pick} onChange={(e) => setPick(e.target.value)} disabled={(colleges.data?.items.length ?? 0) === 0}>
+              <option value="">{colleges.loading && !colleges.data ? 'Loading…' : (colleges.data?.items.length ?? 0) === 0 ? 'No college matches' : `Choose a college (${colleges.data!.items.length})`}</option>
+              {colleges.data?.items.map((c) => <option key={c.id} value={c.id}>{c.name}{c.location ? `, ${c.location.name}` : ''}</option>)}
+            </Select>
+          </Field>
+        </div>
+        {pick && manage && (() => {
+          const chosen = colleges.data?.items.find((c) => c.id === pick);
+          if (!chosen) return null;
+          const isRec = recommendedIds.has(chosen.id);
+          return (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line bg-head/60 px-4 py-3">
+              <p className="text-sm font-semibold text-info">{chosen.name}</p>
+              <div className="flex gap-2">
+                <Button size="sm" variant="secondary" disabled={isRec} onClick={() => void recommend(chosen.id)}>{isRec ? <><Check className="h-3.5 w-3.5" aria-hidden /> Recommended</> : 'Recommend'}</Button>
+                <Button size="sm" onClick={() => setShortlisting({ id: chosen.id, name: chosen.name })}>Shortlist</Button>
+              </div>
+            </div>
+          );
+        })()}
+        <div className="border-t border-line px-4 py-3">
+          <Field label="Or search by name" htmlFor="fq"><Input id="fq" value={q} onChange={(e) => { setQ(e.target.value); setPick(''); }} placeholder="Type a college name" /></Field>
         </div>
         {colleges.loading && !colleges.data ? <Spinner /> : (colleges.data?.items.length ?? 0) === 0 ? <Empty title="No colleges match">{canAdd ? 'Change a filter, or add the institute yourself.' : 'Change a filter, or ask an admin to add the college.'}</Empty> : (
           <ul className="divide-y divide-line border-t border-line">
@@ -285,7 +308,7 @@ function PaymentBox({ lead, s, manage, onChanged }: { lead: LeadDetail; s: Short
 function ShortlistCard({ lead, s, manage, onChanged }: { lead: LeadDetail; s: Shortlist; manage: boolean; onChanged: () => void }) {
   const [editing, setEditing] = useState(false);
   const [marking, setMarking] = useState(false);
-  const [kind, setKind] = useState<'ni' | 'dnp'>('ni');
+  const kind = 'dnp' as const; // only DNP is offered now
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -342,7 +365,7 @@ function ShortlistCard({ lead, s, manage, onChanged }: { lead: LeadDetail; s: Sh
         </div>
         {manage && (
           <div className="flex gap-2">
-            {s.niDnp ? <Button size="sm" variant="secondary" onClick={() => void undo()}><Undo2 className="h-3.5 w-3.5" aria-hidden /> Move back</Button> : <Button size="sm" variant="secondary" onClick={() => setMarking(true)}>Mark NI / DNP</Button>}
+            {s.niDnp ? <Button size="sm" variant="secondary" onClick={() => void undo()}><Undo2 className="h-3.5 w-3.5" aria-hidden /> Move back</Button> : <Button size="sm" variant="secondary" onClick={() => setMarking(true)}>Mark DNP</Button>}
             <Button size="sm" variant="danger" onClick={() => void remove()}>Remove</Button>
           </div>
         )}
@@ -381,11 +404,8 @@ function ShortlistCard({ lead, s, manage, onChanged }: { lead: LeadDetail; s: Sh
 
       {editing && <ShortlistModal lead={lead} college={s.college} existing={s} onClose={() => setEditing(false)} onDone={() => { setEditing(false); onChanged(); }} />}
       {marking && (
-        <Modal title="Mark as not interested or did not pick" onClose={() => setMarking(false)}>
+        <Modal title="Mark as did not pick (DNP)" onClose={() => setMarking(false)}>
           <div className="space-y-4">
-            <Field label="What happened">
-              <Select value={kind} onChange={(e) => setKind(e.target.value as 'ni' | 'dnp')}><option value="ni">Not interested (NI)</option><option value="dnp">Did not pick (DNP)</option></Select>
-            </Field>
             <Field label="Reason" hint="So the next person knows why. At least 3 characters."><Textarea value={reason} onChange={(e) => setReason(e.target.value)} maxLength={300} /></Field>
             <div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => setMarking(false)}>Cancel</Button><Button loading={busy} disabled={reason.trim().length < 3} onClick={() => void mark()}>Save</Button></div>
           </div>

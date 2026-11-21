@@ -9,6 +9,7 @@ import { CallsTab } from '@/components/leads/calls-tab';
 import { CustomFieldsPanel } from '@/components/leads/custom-fields-panel';
 import { DocumentsTab } from '@/components/leads/documents-tab';
 import { AssignPanel, FollowUpsPanel, StatusPanel, Timeline, type LeadDetail } from '@/components/leads/lead-panels';
+import { CopyButton } from '@/components/ui/copy-button';
 import { PartnerPanel } from '@/components/leads/partner-panel';
 import { ProfileTab } from '@/components/leads/profile-tab';
 import { VideoModal } from '@/components/leads/video-modal';
@@ -27,7 +28,7 @@ const TABS = [
   { key: 'profile', label: 'Profile' },
   { key: 'recommended', label: 'Recommended' },
   { key: 'shortlisted', label: 'Shortlisted' },
-  { key: 'nidnp', label: 'NI / DNP' },
+  { key: 'nidnp', label: 'DNP' },
   { key: 'documents', label: 'Documents' },
   { key: 'reconciled', label: 'Reconciled colleges' },
   { key: 'calls', label: 'Calls' },
@@ -104,10 +105,11 @@ function Workspace() {
                 <Badge tone={l.status.queue === 'missed' ? 'bad' : l.status.isOpen ? 'brand' : 'neutral'}>{l.status.name}{l.substatus ? ` · ${l.substatus.name}` : ''}</Badge>
                 {l.intent && <Badge tone={INTENT_TONE[l.intent]}>{l.intent}</Badge>}
               </div>
-              <p className="mt-0.5 flex flex-wrap items-center gap-x-3 text-xs text-muted">
-                <span>LEAD ID: <span className="tabular font-medium text-ink">{l.leadNo}</span></span>
-                <span className="tabular font-medium text-ink">{fmtPhone(l.phone)}</span>
-                {l.email && <a href={`mailto:${l.email}`} className="inline-flex items-center gap-1 hover:text-brand"><Mail className="h-3 w-3" aria-hidden />{l.email}</a>}
+              <p className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
+                <span>LEAD ID: <span className="tabular font-semibold text-ink">{l.leadNo}</span></span>
+                {/* Plain text, so it can be selected with a double click and copied; the Email button below opens the mail program. */}
+                <span className="inline-flex items-center gap-0.5"><span className="tabular select-all text-base font-semibold text-ink">{fmtPhone(l.phone)}</span><CopyButton value={l.phone.length === 12 && l.phone.startsWith('91') ? l.phone.slice(2) : l.phone} label="phone number" /></span>
+                {l.email && <span className="inline-flex items-center gap-0.5"><span className="select-all break-all text-base font-medium text-ink">{l.email}</span><CopyButton value={l.email} label="email address" /></span>}
               </p>
             </div>
           </div>
@@ -154,7 +156,7 @@ function Workspace() {
       {tab === 'profile' && <ProfileTab lead={l} />}
       {tab === 'recommended' && <RecommendedTab key={version} lead={l} onChanged={changed} />}
       {tab === 'shortlisted' && <ShortlistTab key={`a${version}`} lead={l} view="active" onChanged={changed} empty="No college shortlisted yet" />}
-      {tab === 'nidnp' && <ShortlistTab key={`n${version}`} lead={l} view="ni_dnp" onChanged={changed} empty="No college found" />}
+      {tab === 'nidnp' && <ShortlistTab key={`n${version}`} lead={l} view="ni_dnp" onChanged={changed} empty="No college marked DNP" />}
       {tab === 'documents' && <DocumentsTab key={`d${version}`} lead={l} />}
       {tab === 'reconciled' && <ShortlistTab key={`r${version}`} lead={l} view="reconciled" onChanged={changed} empty="No reconciled colleges yet" />}
       {tab === 'calls' && <CallsTab key={`c${version}`} lead={l} onChanged={changed} />}

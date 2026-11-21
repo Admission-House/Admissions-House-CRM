@@ -7,6 +7,7 @@ import { AuthRepository } from './auth.repository.js';
 import { AuthService } from './auth.service.js';
 import { MfaController } from './mfa.controller.js';
 import { MfaService } from './mfa.service.js';
+import { OfficeComputersService } from './office-computers.service.js';
 import { PasswordResetService } from './password-reset.service.js';
 import { PasswordService } from './password.service.js';
 import { TokenService } from './token.service.js';
@@ -17,6 +18,7 @@ import { TokenService } from './token.service.js';
   providers: [
     AuthService,
     MfaService,
+    OfficeComputersService,
     AuthRepository,
     PasswordService,
     PasswordResetService,
@@ -24,6 +26,6 @@ import { TokenService } from './token.service.js';
     // Closed by default: every route needs a sign-in unless it is marked @Public().
     { provide: APP_GUARD, useClass: AuthGuard },
   ],
-  exports: [AuthService, AuthRepository, PasswordService],
+  exports: [AuthService, AuthRepository, PasswordService, OfficeComputersService],
 })
 export class AuthModule {}

@@ -228,7 +228,8 @@ describe('managing institutes', () => {
   it('can change what an institute offers: add, re-price, switch off and remove', async () => {
     const made = (await api.call('POST', '/colleges', t.sa!, { name: 'Epsilon Tech', locationId: ids.cityA })).json();
     expect(made.courses).toEqual([]);
-    expect(await collegeNames(t.lc1!, 'mode=online&q=epsilon')).toEqual([]); // offers nothing yet
+    expect(await collegeNames(t.lc1!, 'mode=online&q=epsilon')).toEqual(['Epsilon Tech']); // no course listed yet: nothing is known, so a mode does not rule it out
+    expect(await collegeNames(t.lc1!, `courseId=${ids.btech}&mode=online&q=epsilon`)).toEqual([]); // but it does not offer a course that was asked for
 
     const added = await api.call('PUT', `/colleges/${made.id}/courses/${ids.btech}`, t.sa!, { deliveryMode: 'online', cafFee: 500, annualFee: 80000, durationYears: 4 });
     expect(added.json().courses).toHaveLength(1);
@@ -239,7 +240,7 @@ describe('managing institutes', () => {
     expect(await collegeNames(t.lc1!, 'mode=online&q=epsilon')).toEqual([]);
 
     await api.call('PUT', `/colleges/${made.id}/courses/${ids.btech}`, t.sa!, { deliveryMode: 'regular', isActive: false });
-    expect(await collegeNames(t.lc1!, 'mode=regular&q=epsilon')).toEqual([]);
+    expect(await collegeNames(t.lc1!, `courseId=${ids.btech}&mode=regular&q=epsilon`)).toEqual([]); // its only course is switched off
 
     expect((await api.call('DELETE', `/colleges/${made.id}/courses/${ids.btech}`, t.sa!)).json().courses).toEqual([]);
     expect((await api.call('DELETE', `/colleges/${made.id}/courses/${ids.btech}`, t.sa!)).statusCode).toBe(404);
@@ -303,5 +304,18 @@ describe('an institute a counsellor adds by hand', () => {
     const viewer = await api.signIn('viewer');
     expect((await api.call('POST', '/colleges', viewer, { name: 'Viewer College' })).statusCode).toBe(403);
     expect((await api.call('GET', '/colleges', viewer)).statusCode).toBe(200);
+  });
+});
+
+describe('a college with no courses listed yet', () => {
+  it('is kept when a study mode is applied (nothing is known about it), but not when a course is asked for', async () => {
+    const bare = await api.call('POST', '/colleges', t.sa!, { name: 'Zeta Bare College', courses: [] });
+    expect(bare.statusCode, bare.body).toBe(201);
+    expect(await collegeNames(t.lc1!, 'mode=online')).toContain('Zeta Bare College');
+    expect(await collegeNames(t.lc1!, 'mode=regular')).toContain('Zeta Bare College');
+    // A mode still leaves out a college that has courses, none of them in that mode.
+    expect(await collegeNames(t.lc1!, 'mode=online')).not.toContain('Gamma College');
+    // Asking for a particular course is exact: a college with no courses does not offer it.
+    expect(await collegeNames(t.lc1!, `courseId=${ids.btech}&mode=online`)).not.toContain('Zeta Bare College');
   });
 });

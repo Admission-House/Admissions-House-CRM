@@ -162,6 +162,7 @@ export class LeadsService {
       // Each ordering names the column the cursor remembers, so the next page starts just after it.
       const order = {
         newest: { key: sql`l.created_at`, dir: sql`DESC`, op: sql`<`, tie: sql`DESC` },
+        oldest: { key: sql`l.created_at`, dir: sql`ASC`, op: sql`>`, tie: sql`ASC` },
         updated: { key: sql`l.updated_at`, dir: sql`DESC`, op: sql`<`, tie: sql`DESC` },
         followup: {
           key: sql`COALESCE(l.next_followup_at, 'infinity'::timestamptz)`,
@@ -828,6 +829,9 @@ export class LeadsService {
       c.push(
         sql<SqlBool>`l.created_at < ((${q.createdTo}::date + 1)::timestamp AT TIME ZONE t.timezone)`,
       );
+    if (q.createdAfter) c.push(sql<SqlBool>`l.created_at >= ${q.createdAfter}::timestamptz`);
+    if (q.junk === 'only') c.push(sql<SqlBool>`s.is_junk`);
+    if (q.junk === 'hide') c.push(sql<SqlBool>`NOT s.is_junk`);
     if (q.followup === 'overdue') c.push(sql<SqlBool>`s.is_open AND l.next_followup_at < now()`);
     if (q.followup === 'today')
       c.push(

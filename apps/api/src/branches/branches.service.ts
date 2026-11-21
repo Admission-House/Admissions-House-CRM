@@ -20,6 +20,7 @@ export interface BranchView {
   latitude: number | null;
   longitude: number | null;
   radiusM: number;
+  officeCheck: 'address_and_location' | 'location_only';
   detectedAt: Date | null;
   isActive: boolean;
   userCount: number;
@@ -78,6 +79,7 @@ export class BranchesService {
           ...(dto.name !== undefined && { name: dto.name }),
           ...(dto.address !== undefined && { address: dto.address }),
           ...(dto.radiusM !== undefined && { radius_m: dto.radiusM }),
+          ...(dto.officeCheck !== undefined && { office_check: dto.officeCheck }),
           ...(dto.isActive !== undefined && { is_active: dto.isActive }),
         })
         .where('id', '=', id)
@@ -200,6 +202,7 @@ export class BranchesService {
       latitude: branch.latitude === null ? null : Number(branch.latitude),
       longitude: branch.longitude === null ? null : Number(branch.longitude),
       radiusM: branch.radius_m,
+      officeCheck: branch.office_check as 'address_and_location' | 'location_only',
       detectedAt: branch.detected_at,
       isActive: branch.is_active,
       userCount: Number(users.n),
@@ -237,5 +240,5 @@ export class BranchesService {
 }
 
 function summary(b: BranchView) {
-  return { name: b.name, address: b.address, latitude: b.latitude, longitude: b.longitude, radiusM: b.radiusM, isActive: b.isActive };
+  return { name: b.name, address: b.address, latitude: b.latitude, longitude: b.longitude, radiusM: b.radiusM, officeCheck: b.officeCheck, isActive: b.isActive };
 }

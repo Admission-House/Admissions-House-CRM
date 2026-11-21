@@ -77,7 +77,7 @@ const ALL: NavItem[] = [
       { label: 'Call recording', href: '/settings/recording', icon: Settings, any: ['recording.manage'] },
       { label: 'Sign-ins', href: '/settings/sessions', icon: Settings, any: ['user.manage'] },
       { label: 'Audit log', href: '/settings/audit', icon: Settings, any: ['audit.read'] },
-      { label: 'Mobile devices', href: '/settings/devices', icon: Settings, any: ['device.approve'] },
+      { label: 'Devices', href: '/settings/devices', icon: Settings, any: ['device.approve'] },
     ],
   },
 ];

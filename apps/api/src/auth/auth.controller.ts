@@ -1,3 +1,4 @@
+import { COMPUTER_TOKEN, newComputerToken } from './office-computers.service.js';
 import {
   Body,
   Controller,
@@ -24,6 +25,9 @@ import { ChangePasswordDto, ForgotPasswordDto, LoginDto, RefreshDto, ResetPasswo
 import { PasswordResetService } from './password-reset.service.js';
 
 const REFRESH_COOKIE = 'ah_rt';
+/** The protected cookie that holds a browser's own random token, so the CRM can tell it is the same computer next time. */
+const COMPUTER_COOKIE = 'ah_oc';
+const COMPUTER_COOKIE_DAYS = 180;
 const COOKIE_PATH = '/api/v1/auth';
 
 @ApiTags('auth')
@@ -43,7 +47,9 @@ export class AuthController {
     @Req() req: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
   ) {
-    const result = await this.auth.login(body, this.meta(req));
+    const meta = this.meta(req);
+    if (body.clientType === 'web') meta.computerToken = this.computerToken(req, reply);
+    const result = await this.auth.login(body, meta);
     const { refreshToken, ...rest } = result;
     this.noStore(reply);
     return { ...rest, ...this.deliverRefreshToken(reply, result.clientType, refreshToken) };
@@ -132,6 +138,25 @@ export class AuthController {
   async revokeSession(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string): Promise<void> {
     if (id === auth.sessionId) throw AppError.badRequest('USE_LOGOUT', 'Use sign out to end this session');
     await this.auth.revokeSession(auth, id);
+  }
+
+  /**
+   * This browser's token for its own computer: the one it already holds, or a new random one given now (also when the sign-in
+   * is refused, so a request for approval made by this browser is recognised when it tries again). It is only a name for the
+   * browser; it grants nothing until a person or an office address has vouched for it on the server.
+   */
+  private computerToken(req: FastifyRequest, reply: FastifyReply): string {
+    const held = req.cookies?.[COMPUTER_COOKIE];
+    if (held && COMPUTER_TOKEN.test(held)) return held;
+    const token = newComputerToken();
+    void reply.setCookie(COMPUTER_COOKIE, token, {
+      httpOnly: true,
+      secure: this.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      path: COOKIE_PATH,
+      maxAge: COMPUTER_COOKIE_DAYS * 86400,
+    });
+    return token;
   }
 
   private meta(req: FastifyRequest): RequestMeta {

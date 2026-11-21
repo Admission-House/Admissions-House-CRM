@@ -24,6 +24,8 @@ export interface BranchPosition {
 export type OfficeFailure =
   | 'not_configured'
   | 'network'
+  /** At the office, but on a computer that is not registered yet: its request has gone to the people who approve computers. */
+  | 'computer'
   | 'gps_missing'
   | 'gps_mocked'
   | 'gps_inaccurate'

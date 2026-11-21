@@ -47,12 +47,18 @@ describe('counsellors and admins signing in from the office', () => {
     }
   });
 
-  it('refuses an address outside the block, and says it is the network', async () => {
+  it('refuses an address outside the block: at the office it asks for the computer to be approved, anywhere else it says it is the network', async () => {
     for (const ip of ['103.77.2.10', '103.77.0.255', '117.99.227.76']) {
-      const res = await signIn('counsellor', ip, here);
-      expect(res.statusCode, ip).toBe(403);
-      expect(res.json().error.code).toBe('OUTSIDE_OFFICE');
-      expect(res.json().error.details?.reason).toBe('network');
+      const atOffice = await signIn('counsellor', ip, here);
+      expect(atOffice.statusCode, ip).toBe(403);
+      expect(atOffice.json().error.code).toBe('OUTSIDE_OFFICE');
+      expect(atOffice.json().error.details?.reason).toBe('computer');
+      // Not at the office (no position, or a position far away): the same refusal as always.
+      const nowhere = await signIn('counsellor', ip);
+      expect(nowhere.statusCode, ip).toBe(403);
+      expect(nowhere.json().error.details?.reason).toBe('network');
+      const far = await signIn('counsellor', ip, { lat: 28.62, lng: 77.45, accuracy: 20 });
+      expect(far.json().error.details?.reason).toBe('network');
     }
   });
 
@@ -96,7 +102,8 @@ describe('an office named by a dynamic DNS hostname', () => {
     expect(ok.statusCode, ok.body).toBe(200);
     const other = await signIn('counsellor', '117.99.227.76', here);
     expect(other.statusCode).toBe(403);
-    expect(other.json().error.details?.reason).toBe('network');
+    expect(other.json().error.details?.reason).toBe('computer'); // at the office, but not on the name's address: the computer must be approved
+    expect((await signIn('counsellor', '117.99.227.76')).json().error.details?.reason).toBe('network');
     expect((await signIn('counsellor', '127.0.0.1', { lat: 28.62, lng: 77.45, accuracy: 20 })).json().error.details?.reason).toBe('gps_far');
   });
 });

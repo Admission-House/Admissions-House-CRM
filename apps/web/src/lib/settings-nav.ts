@@ -30,7 +30,7 @@ export const SETTINGS: SettingsGroup[] = [
       { label: 'Call recording', href: '/settings/recording', icon: Mic, description: 'Whether calls and meetings are recorded, the notice people see, and how long recordings are kept', any: ['recording.manage'] },
       { label: 'Sign-ins', href: '/settings/sessions', icon: Laptop, description: 'Where people are signed in, and sign them out', any: ['user.manage'] },
       { label: 'Audit log', href: '/settings/audit', icon: ScrollText, description: 'Who changed what, and when', any: ['audit.read'] },
-      { label: 'Mobile devices', href: '/settings/devices', icon: Smartphone, description: 'Approve or remove phones that can sign in', any: ['device.approve'] },
+      { label: 'Devices', href: '/settings/devices', icon: Smartphone, description: 'Approve the office computers and phones people sign in from', any: ['device.approve'] },
     ],
   },
 ];

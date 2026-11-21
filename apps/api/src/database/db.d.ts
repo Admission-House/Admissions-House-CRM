@@ -129,6 +129,7 @@ export interface Branches {
   latitude: Numeric | null;
   longitude: Numeric | null;
   name: string;
+  office_check: Generated<string>;
   radius_m: Generated<number>;
   tenant_id: string;
   updated_at: Generated<Timestamp>;
@@ -421,6 +422,9 @@ export interface LeadImportBatches {
 
 export interface LeadPartnerSubmissions {
   created_at: Generated<Timestamp>;
+  dnp_at: Timestamp | null;
+  dnp_by: string | null;
+  dnp_reason: string | null;
   http_status: number | null;
   id: Generated<string>;
   lead_id: string;
@@ -545,6 +549,7 @@ export interface LeadStatuses {
   created_at: Generated<Timestamp>;
   id: Generated<string>;
   is_active: Generated<boolean>;
+  is_junk: Generated<boolean>;
   is_open: Generated<boolean>;
   name: string;
   queue: string;
@@ -632,6 +637,23 @@ export interface Notifications {
   read_at: Timestamp | null;
   tenant_id: string;
   type: string;
+  user_id: string;
+}
+
+export interface OfficeComputers {
+  created_at: Generated<Timestamp>;
+  decided_at: Timestamp | null;
+  decided_by: string | null;
+  first_ip: string | null;
+  id: Generated<string>;
+  label: string | null;
+  last_ip: string | null;
+  last_used_at: Timestamp | null;
+  registered_by: string | null;
+  state: string;
+  tenant_id: string;
+  token_hash: string;
+  updated_at: Generated<Timestamp>;
   user_id: string;
 }
 
@@ -1107,6 +1129,7 @@ export interface DB {
   locations: Locations;
   login_attempts: LoginAttempts;
   notifications: Notifications;
+  office_computers: OfficeComputers;
   password_reset_tokens: PasswordResetTokens;
   payroll_policies: PayrollPolicies;
   payroll_runs: PayrollRuns;

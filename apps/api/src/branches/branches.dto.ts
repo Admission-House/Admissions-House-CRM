@@ -21,6 +21,8 @@ export const updateBranchSchema = z
     name: z.string().trim().min(2).max(80),
     address: z.string().trim().max(300).nullable(),
     radiusM: radius,
+    /** How the office sign-in is checked: by address and position, or by position alone. */
+    officeCheck: z.enum(['address_and_location', 'location_only']),
     isActive: z.boolean(),
   })
   .partial()

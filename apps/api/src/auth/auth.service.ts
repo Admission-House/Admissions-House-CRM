@@ -1,5 +1,5 @@
 import { ddnsMatches } from './ddns.js';
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { sql } from 'kysely';
 import { AttendanceRepository } from '../attendance/attendance.repository.js';
 import { AuditService } from '../audit/audit.service.js';
@@ -16,6 +16,7 @@ import type { LoginInput } from './dto/auth.dto.js';
 import { MfaService } from './mfa.service.js';
 import { parseTwoStepPolicy, twoStepRequired } from './two-step-policy.js';
 import { evaluateOffice, normalizeIp, OfficeFailure } from './office-rules.js';
+import { computerLabel, hashComputerToken, OfficeComputersService } from './office-computers.service.js';
 import { passwordProblem, PasswordService } from './password.service.js';
 import { hashToken, safeEqualHex, TokenService } from './token.service.js';
 
@@ -23,6 +24,8 @@ export interface RequestMeta {
   ip: string;
   userAgent: string | null;
   requestId: string;
+  /** The token the browser holds for its computer (a protected cookie), if the caller is a web browser. */
+  computerToken?: string;
 }
 
 export interface SignedIn {
@@ -56,6 +59,7 @@ const INVALID_CREDENTIALS = () =>
 
 const OFFICE_MESSAGES: Record<OfficeFailure, string> = {
   network: 'You can sign in only from the office.',
+  computer: 'This computer is not registered for the office yet. We have asked your Super Admin to approve it. Please try again once it is approved.',
   gps_far: 'You can sign in only from the office.',
   gps_missing: 'Turn on location and try again.',
   gps_inaccurate: 'Your location is not accurate enough. Move closer to a window and try again.',
@@ -71,6 +75,7 @@ interface TenantRow {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
   private readonly addressLimiter: SlidingWindowLimiter;
 
   constructor(
@@ -83,6 +88,7 @@ export class AuthService {
     private readonly attendance: AttendanceRepository,
     private readonly notifications: NotificationsService,
     private readonly mfa: MfaService,
+    private readonly computers: OfficeComputersService,
   ) {
     // A cheap first gate in front of password hashing. It counts every request, so it is far looser than the limit on
     // failed attempts, which is the real protection (together with the lock on each account).
@@ -171,13 +177,16 @@ export class AuthService {
 
     let deviceId: string | null = null;
     if (user.requires_office) {
-      const office = await this.checkOffice(trx, user, input, ip);
+      const office = await this.checkOffice(trx, tenant.id, user, input, ip, meta);
       if (!office.ok) {
         await attempt(user.id, 'outside_office');
-        // The Super Admin hears about it (once in ten minutes for the same person).
+        // The Super Admin hears about it (once in ten minutes for the same person). A computer waiting for approval is its own kind of news.
+        const reason = office.error.details?.reason ?? 'outside_office';
         await this.notifications.notifyOversight(trx, {
           tenantId: tenant.id, quietMinutes: 10,
-          payload: { event: 'login_refused', userId: user.id, userName: user.name, reason: office.error.details?.reason ?? 'outside_office', ip },
+          payload: reason === 'computer'
+            ? { event: 'computer_request', userId: user.id, userName: user.name, ip, label: computerLabel(meta.userAgent) }
+            : { event: 'login_refused', userId: user.id, userName: user.name, reason, ip },
         });
         return fail(office.error);
       }
@@ -247,21 +256,62 @@ export class AuthService {
     });
   }
 
-  private async checkOffice(trx: Trx, user: LoginUser, input: LoginInput, ip: string): Promise<Outcome<true>> {
+  /**
+   * Being at the office is proved by the person's position (always) and by the computer: either it signs in from an address on the
+   * office list, or it is a registered office computer. The first time a computer is on an address that is not on the list, but the
+   * position is right, a request goes to the people who approve computers instead of the person being turned away for good.
+   */
+  private async checkOffice(trx: Trx, tenantId: string, user: LoginUser, input: LoginInput, ip: string, meta: RequestMeta): Promise<Outcome<true>> {
     const refuse = (reason: OfficeFailure) => fail(new AppError('OUTSIDE_OFFICE', OFFICE_MESSAGES[reason], 403, undefined, undefined, { reason }));
     if (!user.branch_id) return refuse('not_configured');
 
     const facts = await this.repo.officeFacts(trx, user.branch_id, ip, input.wifiId);
     if (!facts.branch || !facts.branch.is_active) return refuse('not_configured');
 
-    const result = evaluateOffice({
-      branch: facts.branch,
-      hasNetworks: facts.hasNetworks,
-      networkMatches: facts.networkMatches || (facts.ddnsHosts.length > 0 && (await ddnsMatches(facts.ddnsHosts, ip))),
-      location: input.location,
-      maxAccuracyM: this.env.GPS_MAX_ACCURACY_M,
-    });
-    return result.ok ? ok(true) : refuse(result.reason);
+    // An office that has chosen to go by position alone does not look at the internet address at all.
+    const locationOnly = facts.branch.office_check === 'location_only';
+    const onOfficeNetwork = locationOnly || facts.networkMatches || (facts.ddnsHosts.length > 0 && (await ddnsMatches(facts.ddnsHosts, ip)));
+    const web = input.clientType === 'web' && !!meta.computerToken;
+    const tokenHash = web ? hashComputerToken(meta.computerToken!) : null;
+    const known = tokenHash ? await this.softly(trx, () => this.computers.find(trx, user.id, tokenHash), undefined) : undefined;
+    // A computer that has not been used for months must be vouched for again (a laptop that was given away, an old browser).
+    const registered = known?.state === 'approved' && known.fresh;
+
+    const base = { branch: facts.branch, hasNetworks: facts.hasNetworks || locationOnly, location: input.location, maxAccuracyM: this.env.GPS_MAX_ACCURACY_M };
+    const result = evaluateOffice({ ...base, networkMatches: onOfficeNetwork || registered });
+    if (result.ok) {
+      if (tokenHash && registered) await this.softly(trx, () => this.computers.touch(trx, known!.id, ip), undefined);
+      else if (tokenHash && onOfficeNetwork && !locationOnly) {
+        await this.softly(trx, () => this.computers.registerFromOfficeNetwork(trx, { tenantId, userId: user.id, tokenHash, label: computerLabel(meta.userAgent), ip }), undefined);
+      }
+      return ok(true);
+    }
+
+    // Not on an office address and not a registered computer. If the position is right, this may simply be an office computer on the
+    // address the provider gave today: ask for approval. If the position is wrong too, say nothing new: it is not the office.
+    if (result.reason === 'network' && tokenHash && evaluateOffice({ ...base, networkMatches: true }).ok) {
+      const asked = await this.softly(trx, () => this.computers.requestApproval(trx, { tenantId, userId: user.id, tokenHash, label: computerLabel(meta.userAgent), ip }), 'rejected' as const);
+      if (asked !== 'rejected') return refuse('computer');
+    }
+    return refuse(result.reason);
+  }
+
+  /**
+   * Registered computers are an addition to the office check, never a way for it to break. If anything about them goes wrong (the
+   * database refuses a statement, say), that step is undone on its own, the sign-in carries on with the office address and position
+   * rules exactly as before, and the person is not locked out by it.
+   */
+  private async softly<T>(trx: Trx, work: () => Promise<T>, fallback: T): Promise<T> {
+    await sql`SAVEPOINT office_computer`.execute(trx);
+    try {
+      const value = await work();
+      await sql`RELEASE SAVEPOINT office_computer`.execute(trx);
+      return value;
+    } catch (err) {
+      await sql`ROLLBACK TO SAVEPOINT office_computer`.execute(trx);
+      this.logger.warn(`office computer step skipped: ${err instanceof Error ? err.message : String(err)}`);
+      return fallback;
+    }
   }
 
   private async checkDevice(

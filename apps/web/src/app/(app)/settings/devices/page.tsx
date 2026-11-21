@@ -1,6 +1,7 @@
 'use client';
 
 import { Smartphone } from 'lucide-react';
+import { OfficeComputers } from '@/components/team/office-computers';
 import { useMemo, useState } from 'react';
 import { Badge, Button, Empty, Notice, Panel, Select, Spinner } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
@@ -38,6 +39,8 @@ export default function DevicesPage() {
   }
 
   return (
+    <div className="space-y-4">
+    <OfficeComputers />
     <Panel title="Mobile devices" flush actions={<Select aria-label="Show" value={status} onChange={(e) => setStatus(e.target.value as typeof status)} className="w-60"><option value="pending">Waiting for approval</option><option value="approved">Approved</option><option value="all">All</option></Select>}>
       <p className="border-b border-line px-4 py-3 text-xs text-muted">Each person signs in on the mobile app only from a phone you have approved.</p>
       {error && <div className="p-3 pb-0"><Notice tone="bad">{error}</Notice></div>}
@@ -58,5 +61,6 @@ export default function DevicesPage() {
         </ul>
       )}
     </Panel>
+    </div>
   );
 }

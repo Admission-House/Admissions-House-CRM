@@ -136,7 +136,9 @@ export class MastersService {
       if (q.q) c.push(sql<SqlBool>`c.name ILIKE ${likePattern(q.q)}`);
       if (q.locationId) c.push(sql<SqlBool>`(loc.id = ${q.locationId}::uuid OR loc.parent_id = ${q.locationId}::uuid)`);
       if (q.courseId) c.push(sql<SqlBool>`EXISTS (SELECT 1 FROM college_courses cc WHERE cc.college_id = c.id AND cc.is_active AND cc.course_id = ${q.courseId}::uuid AND ${delivered})`);
-      else if (mode !== 'any') c.push(sql<SqlBool>`EXISTS (SELECT 1 FROM college_courses cc WHERE cc.college_id = c.id AND cc.is_active AND ${delivered})`);
+      // A study mode leaves out a college that offers courses, none of them in that mode. A college with no courses listed yet is kept:
+      // nothing is known about it, so it cannot be ruled out (and the list would otherwise be empty until every course is entered).
+      else if (mode !== 'any') c.push(sql<SqlBool>`(EXISTS (SELECT 1 FROM college_courses cc WHERE cc.college_id = c.id AND cc.is_active AND ${delivered}) OR NOT EXISTS (SELECT 1 FROM college_courses cc WHERE cc.college_id = c.id AND cc.is_active))`);
       if (after) c.push(sql<SqlBool>`(lower(c.name), c.id) > (${after.n}, ${after.i}::uuid)`);
 
       const { rows } = await sql<{

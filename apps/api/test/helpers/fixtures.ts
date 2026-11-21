@@ -233,7 +233,7 @@ export async function createFixture(owner: pg.Client, specs: UserSpec[] = DEFAUL
         'lead_sources', 'college_courses', 'colleges', 'courses', 'streams', 'tenant_counters',
         'break_logs', 'attendance_exceptions', 'attendance_records',
         'leave_requests', 'holidays', 'leave_balances', 'leave_types',
-        'user_sessions', 'user_devices', 'leave_balances', 'user_profiles', 'role_permissions', 'users',
+        'office_computers', 'user_sessions', 'user_devices', 'leave_balances', 'user_profiles', 'role_permissions', 'users',
         'branch_networks', 'branches', 'attendance_settings', 'break_types', 'roles',
       ];
       // An approved run locks its payslips (the database refuses to change them), so a test company is reopened before it is removed.

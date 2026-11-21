@@ -21,6 +21,8 @@ export const sendSchema = z.object({
 });
 export type SendInput = z.infer<typeof sendSchema>;
 
+export const dnpSchema = z.object({ reason: z.string().trim().min(3).max(300) });
+
 export interface PartnerView {
   key: string;
   name: string;
@@ -40,6 +42,8 @@ export interface SubmissionView {
   message: string | null;
   submittedBy: string | null;
   createdAt: Date;
+  /** The student did not pick up the college's call. Shown next to the college on the lead. */
+  dnp: { at: Date; reason: string | null; by: string | null } | null;
 }
 
 export interface SendResult {
@@ -78,9 +82,10 @@ export class PartnersService {
       await this.access.get(trx, auth, leadId);
       const { rows } = await sql<{
         id: string; partner: string; state: SubmissionView['state']; request: Record<string, string>; response: string | null; by: string | null; created_at: Date;
+        dnp_at: Date | null; dnp_reason: string | null; dnp_by_name: string | null;
       }>`
-        SELECT s.id, s.partner, s.state, s.request, s.response, u.name AS by, s.created_at
-        FROM lead_partner_submissions s LEFT JOIN users u ON u.id = s.submitted_by
+        SELECT s.id, s.partner, s.state, s.request, s.response, u.name AS by, s.created_at, s.dnp_at, s.dnp_reason, d.name AS dnp_by_name
+        FROM lead_partner_submissions s LEFT JOIN users u ON u.id = s.submitted_by LEFT JOIN users d ON d.id = s.dnp_by
         WHERE s.lead_id = ${leadId} ORDER BY s.created_at DESC LIMIT 50`.execute(trx);
       return rows.map((r) => ({
         id: r.id,
@@ -92,7 +97,36 @@ export class PartnersService {
         message: r.response,
         submittedBy: r.by,
         createdAt: r.created_at,
+        dnp: r.dnp_at ? { at: r.dnp_at, reason: r.dnp_reason, by: r.dnp_by_name } : null,
       }));
+    });
+  }
+
+  /** The student did not pick up the college's call. Only for one that was sent. */
+  markDnp(auth: AuthContext, leadId: string, submissionId: string, reason: string): Promise<{ ok: true }> {
+    return this.db.withTenant(auth.tenantId, async (trx) => {
+      await this.access.get(trx, auth, leadId, true);
+      const { rows } = await sql<{ partner: string }>`
+        UPDATE lead_partner_submissions SET dnp_at = now(), dnp_reason = ${reason}, dnp_by = ${auth.userId}
+        WHERE id = ${submissionId} AND lead_id = ${leadId} AND state = 'sent' AND dnp_at IS NULL RETURNING partner`.execute(trx);
+      if (!rows[0]) throw AppError.notFound('Sent record');
+      const name = partnerByKey(rows[0].partner)?.name ?? rows[0].partner;
+      await this.writer.activity(trx, { tenantId: auth.tenantId, leadId, userId: auth.userId, type: 'partner', field: rows[0].partner, newValue: 'DNP', remark: `Marked DNP with ${name}: ${reason}` });
+      await this.audit.write(trx, { tenantId: auth.tenantId, actorId: auth.userId, action: 'lead.partner_dnp', entity: 'lead', entityId: leadId, after: { partner: rows[0].partner }, ip: auth.ip, requestId: auth.requestId });
+      return { ok: true as const };
+    });
+  }
+
+  /** Back to shortlisted. */
+  undoDnp(auth: AuthContext, leadId: string, submissionId: string): Promise<{ ok: true }> {
+    return this.db.withTenant(auth.tenantId, async (trx) => {
+      await this.access.get(trx, auth, leadId, true);
+      const { rows } = await sql<{ partner: string }>`
+        UPDATE lead_partner_submissions SET dnp_at = NULL, dnp_reason = NULL, dnp_by = NULL
+        WHERE id = ${submissionId} AND lead_id = ${leadId} AND dnp_at IS NOT NULL RETURNING partner`.execute(trx);
+      if (!rows[0]) throw AppError.notFound('Sent record');
+      await this.writer.activity(trx, { tenantId: auth.tenantId, leadId, userId: auth.userId, type: 'partner', field: rows[0].partner, newValue: 'shortlisted', remark: `Moved back to shortlisted with ${partnerByKey(rows[0].partner)?.name ?? rows[0].partner}` });
+      return { ok: true as const };
     });
   }
 

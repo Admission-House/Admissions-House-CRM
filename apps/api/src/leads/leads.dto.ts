@@ -31,8 +31,12 @@ export const listLeadsSchema = pageQuerySchema.extend({
   studyMode: z.enum(['online', 'regular']).optional(),
   createdFrom: calendarDate.optional(),
   createdTo: calendarDate.optional(),
+  /** Received at or after this moment: for "the last 3 hours" and the like, which a calendar date cannot say. */
+  createdAfter: z.iso.datetime({ offset: true }).optional(),
+  /** Leads whose status is marked as junk: only those, or all the others. */
+  junk: z.enum(['only', 'hide']).optional(),
   followup: z.enum(['today', 'overdue', 'upcoming']).optional(),
-  sort: z.enum(['newest', 'updated', 'followup']).default('newest'),
+  sort: z.enum(['newest', 'oldest', 'updated', 'followup']).default('newest'),
 });
 export class ListLeadsDto extends createZodDto(listLeadsSchema) {}
 
@@ -139,6 +143,8 @@ export const createStatusSchema = z.object({
   requiresSubstatus: z.boolean().optional(),
   /** Offered in "Dispose lead". Off for a status the system uses or an older one, which stays on the leads that hold it. */
   selectable: z.boolean().optional(),
+  /** A lead with this status is a junk lead (fake, wrong or unreachable). */
+  isJunk: z.boolean().optional(),
   sortOrder: z.number().int().min(0).max(10_000).optional(),
 });
 export class CreateStatusDto extends createZodDto(createStatusSchema) {}

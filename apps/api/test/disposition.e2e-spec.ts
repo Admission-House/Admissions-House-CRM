@@ -155,3 +155,40 @@ describe('the list a person can choose from', () => {
     expect(away.statusCode, away.body).toBe(200);
   });
 });
+
+describe('finding leads by when they came in, and junk leads', () => {
+  const list = async (query: string) => (await api.call('GET', `/leads?${query}`, t.sa!)).json() as { items: { id: string; createdAt: string; status: { id: string } }[] };
+
+  it('lists the oldest first when asked, and the newest first otherwise', async () => {
+    const first = await newLead();
+    await new Promise((r) => setTimeout(r, 30));
+    const second = await newLead();
+    const asc = (await list('sort=oldest&limit=100')).items.map((l) => l.id);
+    expect(asc.indexOf(first)).toBeLessThan(asc.indexOf(second));
+    const desc = (await list('limit=100')).items.map((l) => l.id);
+    expect(desc.indexOf(second)).toBeLessThan(desc.indexOf(first));
+    const page1 = await list('sort=oldest&limit=1');
+    expect(page1.items).toHaveLength(1);
+  });
+
+  it('shows only the leads received after a moment, for "the last few hours or days"', async () => {
+    await newLead();
+    const hourAgo = new Date(Date.now() - 3_600_000).toISOString();
+    expect((await list(`createdAfter=${encodeURIComponent(hourAgo)}&limit=100`)).items.length).toBeGreaterThan(0);
+    const later = new Date(Date.now() + 3_600_000).toISOString();
+    expect((await list(`createdAfter=${encodeURIComponent(later)}&limit=100`)).items).toHaveLength(0);
+    expect((await api.call('GET', '/leads?createdAfter=yesterday', t.sa!)).statusCode).toBe(400);
+  });
+
+  it('shows or hides the leads whose status is marked as junk', async () => {
+    const junkStatus = (await api.call('POST', '/lead-statuses', t.sa!, { name: 'Junk Probe', queue: 'closed', isOpen: false, requiresFollowup: false, isJunk: true })).json().id as string;
+    const junkLead = await newLead();
+    await owner.query(`UPDATE leads SET status_id = $1 WHERE id = $2`, [junkStatus, junkLead]);
+    const only = (await list('junk=only&limit=100')).items.map((l) => l.id);
+    expect(only).toContain(junkLead);
+    expect((await list('junk=hide&limit=100')).items.map((l) => l.id)).not.toContain(junkLead);
+    expect((await list('limit=100')).items.map((l) => l.id)).toContain(junkLead);
+    const flag = ((await api.call('GET', '/lead-statuses', t.sa!)).json() as { id: string; isJunk: boolean }[]).find((s) => s.id === junkStatus);
+    expect(flag?.isJunk).toBe(true);
+  });
+});
