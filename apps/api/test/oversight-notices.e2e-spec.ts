@@ -50,6 +50,16 @@ describe('who hears about a counsellor signing in and taking a long break', () =
     expect(await eventsFor('admin2', 'login_refused', 'att2')).toHaveLength(0);
   });
 
+  it('says nothing when the location is only being asked for, so the real reason that follows is the one told', async () => {
+    const asked = await api.login(api.credentials('att3'), OFFICE_IP);
+    expect(asked.statusCode).toBe(403);
+    expect(asked.json().error.details.reason).toBe('gps_missing');
+    expect(await eventsFor('super', 'login_refused', 'att3')).toHaveLength(0);
+    const far = await api.login({ ...api.credentials('att3'), location: { lat: 1, lng: 1, accuracy: 10 } }, OFFICE_IP);
+    expect(far.statusCode).toBe(403);
+    expect((await eventsFor('super', 'login_refused', 'att3')).map((r) => r.payload.reason)).toEqual(['gps_far']);
+  });
+
   it('says nothing about a break that stays inside its allowance', async () => {
     const lunch = (await owner.query(`SELECT id FROM break_types WHERE tenant_id = $1 AND name = 'Lunch'`, [fx.tenantId])).rows[0].id as string;
     const started = await api.call('POST', '/attendance/breaks/start', t.att1!, { breakTypeId: lunch }, OFFICE_IP);

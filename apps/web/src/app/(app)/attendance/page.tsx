@@ -7,7 +7,7 @@ import { Modal } from '@/components/ui/modal';
 import type { Report } from '@/components/reports/report-view';
 import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { fmtDateTime } from '@/lib/format';
+import { fmtDateTime, fmtMinutes } from '@/lib/format';
 import type { Page } from '@/lib/types';
 import { useApi } from '@/lib/use-api';
 
@@ -47,7 +47,7 @@ function RecordsTable({ rows, showPerson }: { rows: Record_[]; showPerson?: bool
               {showPerson && <td className="px-3 py-3">{r.user.name}</td>}
               <td className="tabular px-3 py-3">{clock(r.checkInAt)}</td>
               <td className="tabular px-3 py-3">{r.checkOutAt ? clock(r.checkOutAt) : <span className="text-muted">Still in</span>}{r.checkOutReason && <span className="block text-xs text-muted">{OUT_REASON[r.checkOutReason] ?? r.checkOutReason}</span>}</td>
-              <td className="px-3 py-3">{r.lateMinutes > 0 ? <Badge tone="warn">{r.lateMinutes} min late</Badge> : <span className="text-muted">On time</span>}</td>
+              <td className="px-3 py-3">{r.lateMinutes > 0 ? <Badge tone="warn">{fmtMinutes(r.lateMinutes)} late</Badge> : <span className="text-muted">On time</span>}</td>
               <td className="tabular px-3 py-3">{r.breakMinutes} min</td>
               <td className="tabular px-3 py-3">{hm(r.workedMinutes)}</td>
               <td className="px-3 py-3">{r.method === 'exception' ? <Badge tone="info">Marked by an admin</Badge> : <Badge tone="ok">Office sign-in</Badge>}</td>

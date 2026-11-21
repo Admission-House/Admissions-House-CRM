@@ -182,7 +182,9 @@ export class AuthService {
         await attempt(user.id, 'outside_office');
         // The Super Admin hears about it (once in ten minutes for the same person). A computer waiting for approval is its own kind of news.
         const reason = office.error.details?.reason ?? 'outside_office';
-        await this.notifications.notifyOversight(trx, {
+        // "No location" is how the web asks for the position: it signs in without one, and only office staff are then asked for it.
+        // It is recorded above but is no news, and an alert for it would also hush (quietMinutes) the real reason a moment later.
+        if (reason !== 'gps_missing') await this.notifications.notifyOversight(trx, {
           tenantId: tenant.id, quietMinutes: 10,
           payload: reason === 'computer'
             ? { event: 'computer_request', userId: user.id, userName: user.name, ip, label: computerLabel(meta.userAgent) }

@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Button, cx } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { fmtDateTime } from '@/lib/format';
+import { fmtDateTime, fmtMinutes } from '@/lib/format';
 import { useApi } from '@/lib/use-api';
 
 interface Today {
@@ -109,7 +109,7 @@ export function WorkStatus() {
           {t.record && (
             <dl className="mt-2 space-y-1.5 text-sm">
               <div className="flex justify-between"><dt className="text-muted">Signed in</dt><dd className="font-medium">{fmtDateTime(t.record.checkInAt)}</dd></div>
-              {t.record.lateMinutes > 0 && <div className="flex justify-between"><dt className="text-muted">Late by</dt><dd className="font-medium text-warn">{t.record.lateMinutes} min</dd></div>}
+              {t.record.lateMinutes > 0 && <div className="flex justify-between"><dt className="text-muted">Late by</dt><dd className="font-medium text-warn">{fmtMinutes(t.record.lateMinutes)}</dd></div>}
               <div className="flex justify-between"><dt className="text-muted">Breaks so far</dt><dd className="font-medium">{t.breakMinutesToday ?? 0} min</dd></div>
               {t.shift && <div className="flex justify-between"><dt className="text-muted">Shift</dt><dd className="font-medium">{t.shift.start} to {t.shift.end}</dd></div>}
             </dl>

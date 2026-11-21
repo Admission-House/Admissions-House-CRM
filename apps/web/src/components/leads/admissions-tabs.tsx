@@ -83,7 +83,7 @@ function ShortlistModal({ lead, college, existing, onClose, onDone }: { lead: Le
   return (
     <Modal title={existing ? `Courses at ${college.name}` : `Shortlist ${college.name}`} onClose={onClose} width="max-w-2xl">
       {error && <div className="mb-3"><Notice tone="bad">{error}</Notice></div>}
-      {detail.loading && !detail.data ? <Spinner /> : courses.length === 0 ? <Empty title="This college has no courses listed yet" /> : (
+      {detail.loading && !detail.data ? <Spinner /> : courses.length === 0 ? <Empty title="No courses are listed for this college yet">You can still shortlist the college now and choose the courses later.</Empty> : (
         <div className="overflow-hidden rounded-md border border-line">
           <table className="w-full text-left text-sm">
             <thead className="bg-head text-xs uppercase tracking-wide text-muted"><tr><th className="w-9 px-3 py-2" /><th className="px-3 py-2">Course</th><th className="px-3 py-2">Mode</th><th className="px-3 py-2 text-right">CAF</th><th className="px-3 py-2 text-right">Fee (annual)</th><th className="px-3 py-2 text-right">Duration</th></tr></thead>

@@ -107,6 +107,12 @@ function ImportLeads({ onImported }: { onImported: () => void }) {
 
   async function choose(f: File) {
     setBig(null);
+    // The hosting refuses a request over about 4.5 MB before it reaches the server. A CSV is split below; an Excel file cannot be.
+    if (!/\.csv$/i.test(f.name) && f.size > MAX_UPLOAD_BYTES) {
+      setPreview(null);
+      setError(`This Excel file is ${(f.size / 1_048_576).toFixed(1)} MB, and the limit is 4 MB. In Excel use File > Save As > CSV and import the CSV: a big CSV is split and imported in parts by itself.`);
+      return;
+    }
     if (/\.csv$/i.test(f.name) && f.size > 1_000_000) {
       const cut = splitCsv(await f.text());
       if (cut.parts.length > 1) {
@@ -407,6 +413,9 @@ function ImportMasters() {
 }
 
 // ------------------------------------------------------------------------ page
+
+/** Largest file sent in one request (the hosting limit is 4.5 MB, minus room for the form around it). */
+const MAX_UPLOAD_BYTES = 4_000_000;
 
 export default function ImportsPage() {
   const { can } = useAuth();

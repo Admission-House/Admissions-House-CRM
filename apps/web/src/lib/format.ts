@@ -27,3 +27,12 @@ export function fmtPhone(phone: string): string {
 }
 
 export const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]!.toUpperCase()).join('');
+
+/** Minutes as a person reads them: "45 min", "1 h", "11 h 59 min". */
+export function fmtMinutes(total: number): string {
+  const m = Math.max(0, Math.round(total));
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60);
+  const rest = m % 60;
+  return rest ? `${h} h ${rest} min` : `${h} h`;
+}

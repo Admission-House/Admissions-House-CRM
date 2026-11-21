@@ -47,7 +47,13 @@ async function parseError(res: Response): Promise<ApiError> {
     }
     return new ApiError(res.status, e?.code ?? 'ERROR', e?.message ?? 'Something went wrong', e?.fieldErrors, e?.details, e?.requestId);
   } catch {
-    return new ApiError(res.status, 'ERROR', 'Something went wrong. Please try again.');
+    // Not our own JSON answer: the hosting in front of the API answered (too big, too slow, not reachable).
+    const message =
+      res.status === 413 ? 'This file is too large to upload. The limit is 4 MB.'
+      : res.status === 504 || res.status === 408 ? 'The server took too long to answer. Please try again in a moment.'
+      : res.status === 502 || res.status === 503 ? 'The server is not reachable right now. Please try again in a moment.'
+      : 'Something went wrong. Please try again.';
+    return new ApiError(res.status, res.status === 413 ? 'TOO_LARGE' : 'ERROR', message);
   }
 }
 
