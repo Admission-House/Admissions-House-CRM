@@ -36,6 +36,8 @@ export function describeNotification(n: Notification): { title: string; detail?:
     case 'repeat_enquiry': return { title: `${name} enquired again`, href: lead };
     case 'followup_due': return { title: `Follow-up due: ${name}`, detail: typeof p.note === 'string' ? p.note : undefined, href: lead };
     case 'missed_call': return { title: `Missed call from ${name}`, href: lead };
+    // Sent to the whole team: it opens nothing, because most of them cannot open someone else's lead.
+    case 'lead_won': return { title: `${String(p.winnerName ?? 'A counsellor')} won an admission`, detail: `Lead ${String(p.leadNo ?? '')} moved to ${String(p.status ?? 'won')}. Well done!` };
     case 'import_finished': return { title: `Import finished: ${String(p.fileName ?? '')}`, detail: `${String(p.created ?? 0)} new, ${String(p.attached ?? 0)} repeats, ${String(p.failed ?? 0)} failed` };
     case 'leads_imported': return { title: `${String(p.count ?? 0)} leads were added for you`, detail: typeof p.fileName === 'string' ? p.fileName : undefined, href: '/leads' };
     case 'leads_assigned': return { title: `${String(p.count ?? 0)} leads were given to you`, detail: typeof p.by === 'string' ? `By ${p.by}` : undefined, href: '/leads' };

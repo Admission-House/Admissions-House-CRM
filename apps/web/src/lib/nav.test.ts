@@ -34,6 +34,7 @@ describe('permissionsForPath', () => {
     expect(permissionsForPath('/settings/users/abc-123')).toEqual(['user.read', 'user.manage']);
     expect(permissionsForPath('/leads/abc-123')).toEqual(['lead.read']);
     expect(permissionsForPath('/imports')).toEqual(['lead.import', 'lead.export', 'master.manage']);
+    expect(permissionsForPath('/colleges')).toEqual(['master.read']);
     expect(permissionsForPath('/settings')).toContain('settings.manage');
   });
 

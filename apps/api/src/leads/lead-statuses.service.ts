@@ -17,6 +17,8 @@ export interface StatusView {
   /** Offered when disposing a lead. */
   selectable: boolean;
   isJunk: boolean;
+  /** Reaching it means the student took admission: the whole team is told who won the lead. */
+  isWon: boolean;
   sortOrder: number;
   isActive: boolean;
   substatuses: { id: string; name: string; sortOrder: number; requiresComment: boolean }[];
@@ -37,10 +39,11 @@ export class LeadStatusesService {
   create(auth: AuthContext, dto: CreateStatusDto): Promise<StatusView> {
     return this.db.withTenant(auth.tenantId, async (trx) => {
       await this.assertNameFree(trx, dto.name);
+      assertWonOrJunk(dto.isWon ?? false, dto.isJunk ?? false);
       const next = dto.sortOrder ?? (await trx.selectFrom('lead_statuses').select(sql<number>`COALESCE(max(sort_order), -1) + 1`.as('n')).executeTakeFirstOrThrow()).n;
       const row = await trx
         .insertInto('lead_statuses')
-        .values({ tenant_id: auth.tenantId, name: dto.name, queue: dto.queue, is_open: dto.isOpen, requires_followup: dto.requiresFollowup, requires_substatus: dto.requiresSubstatus ?? false, selectable: dto.selectable ?? true, is_junk: dto.isJunk ?? false, sort_order: next })
+        .values({ tenant_id: auth.tenantId, name: dto.name, queue: dto.queue, is_open: dto.isOpen, requires_followup: dto.requiresFollowup, requires_substatus: dto.requiresSubstatus ?? false, selectable: dto.selectable ?? true, is_junk: dto.isJunk ?? false, is_won: dto.isWon ?? false, sort_order: next })
         .returning('id')
         .executeTakeFirstOrThrow();
       await this.record(trx, auth, 'lead_status.create', row.id, undefined, dto);
@@ -52,6 +55,7 @@ export class LeadStatusesService {
     return this.db.withTenant(auth.tenantId, async (trx) => {
       const before = await this.one(trx, id);
       if (dto.name && dto.name.toLowerCase() !== before.name.toLowerCase()) await this.assertNameFree(trx, dto.name);
+      assertWonOrJunk(dto.isWon ?? before.isWon, dto.isJunk ?? before.isJunk);
 
       // New leads need a place to start. The last active "fresh" status cannot be switched off or moved elsewhere.
       const leavesFresh = before.queue === 'fresh' && before.isActive && (dto.isActive === false || (dto.queue !== undefined && dto.queue !== 'fresh'));
@@ -67,6 +71,7 @@ export class LeadStatusesService {
         ...(dto.requiresSubstatus !== undefined && { requires_substatus: dto.requiresSubstatus }),
         ...(dto.selectable !== undefined && { selectable: dto.selectable }),
         ...(dto.isJunk !== undefined && { is_junk: dto.isJunk }),
+        ...(dto.isWon !== undefined && { is_won: dto.isWon }),
         ...(dto.sortOrder !== undefined && { sort_order: dto.sortOrder }),
         ...(dto.isActive !== undefined && { is_active: dto.isActive }),
       };
@@ -122,17 +127,17 @@ export class LeadStatusesService {
 
   private async load(trx: Trx, includeInactive: boolean, onlyId?: string): Promise<StatusView[]> {
     const { rows } = await sql<{
-      id: string; name: string; queue: string; is_open: boolean; requires_followup: boolean; requires_substatus: boolean; selectable: boolean; is_junk: boolean; sort_order: number; is_active: boolean;
+      id: string; name: string; queue: string; is_open: boolean; requires_followup: boolean; requires_substatus: boolean; selectable: boolean; is_junk: boolean; is_won: boolean; sort_order: number; is_active: boolean;
       subs: { id: string; name: string; sortOrder: number; requiresComment: boolean }[];
     }>`
-      SELECT s.id, s.name, s.queue, s.is_open, s.requires_followup, s.requires_substatus, s.selectable, s.is_junk, s.sort_order, s.is_active,
+      SELECT s.id, s.name, s.queue, s.is_open, s.requires_followup, s.requires_substatus, s.selectable, s.is_junk, s.is_won, s.sort_order, s.is_active,
              COALESCE(jsonb_agg(jsonb_build_object('id', ss.id, 'name', ss.name, 'sortOrder', ss.sort_order, 'requiresComment', ss.requires_comment) ORDER BY ss.sort_order, ss.name)
                       FILTER (WHERE ss.id IS NOT NULL), '[]'::jsonb) AS subs
       FROM lead_statuses s LEFT JOIN lead_substatuses ss ON ss.status_id = s.id
       WHERE ${onlyId ? sql`s.id = ${onlyId}` : sql`true`} ${includeInactive ? sql`` : sql`AND s.is_active`}
       GROUP BY s.id ORDER BY s.sort_order, s.name`.execute(trx);
     return rows.map((r) => ({
-      id: r.id, name: r.name, queue: r.queue, isOpen: r.is_open, requiresFollowup: r.requires_followup, requiresSubstatus: r.requires_substatus, selectable: r.selectable, isJunk: r.is_junk,
+      id: r.id, name: r.name, queue: r.queue, isOpen: r.is_open, requiresFollowup: r.requires_followup, requiresSubstatus: r.requires_substatus, selectable: r.selectable, isJunk: r.is_junk, isWon: r.is_won,
       sortOrder: r.sort_order, isActive: r.is_active, substatuses: r.subs,
     }));
   }
@@ -161,4 +166,9 @@ export class LeadStatusesService {
 /** What is worth keeping in the audit log about a status: its own settings, without the sub-status list. */
 function strip(s: StatusView) {
   return { id: s.id, name: s.name, queue: s.queue, isOpen: s.isOpen, requiresFollowup: s.requiresFollowup, sortOrder: s.sortOrder, isActive: s.isActive };
+}
+
+/** A status means a junk lead or a won one, never both. */
+function assertWonOrJunk(won: boolean, junk: boolean) {
+  if (won && junk) throw AppError.badRequest('WON_AND_JUNK', 'A status cannot count as both won and junk', [{ field: 'isWon', message: 'A status cannot count as both won and junk' }]);
 }

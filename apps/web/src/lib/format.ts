@@ -36,3 +36,14 @@ export function fmtMinutes(total: number): string {
   const rest = m % 60;
   return rest ? `${h} h ${rest} min` : `${h} h`;
 }
+
+/** "Good morning" until noon (from 4 am), "Good afternoon" until 5 pm, "Good evening" after that, by the viewer's own clock. */
+export function greeting(at: Date = new Date()): string {
+  const h = at.getHours();
+  if (h >= 4 && h < 12) return 'Good morning';
+  if (h >= 12 && h < 17) return 'Good afternoon';
+  return 'Good evening';
+}
+
+/** The first word of a person's name, for a friendly greeting: "Riya Sharma" becomes "Riya". */
+export const firstName = (name: string) => name.trim().split(/\s+/)[0] ?? '';

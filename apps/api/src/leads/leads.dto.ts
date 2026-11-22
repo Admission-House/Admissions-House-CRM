@@ -145,6 +145,8 @@ export const createStatusSchema = z.object({
   selectable: z.boolean().optional(),
   /** A lead with this status is a junk lead (fake, wrong or unreachable). */
   isJunk: z.boolean().optional(),
+  /** Reaching this status means the lead was won (admission taken): the whole team is told. */
+  isWon: z.boolean().optional(),
   sortOrder: z.number().int().min(0).max(10_000).optional(),
 });
 export class CreateStatusDto extends createZodDto(createStatusSchema) {}

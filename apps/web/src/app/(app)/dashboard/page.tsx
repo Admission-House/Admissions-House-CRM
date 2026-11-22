@@ -2,10 +2,11 @@
 
 import { AlertTriangle, CalendarClock, CalendarDays, Inbox, PhoneCall, PhoneMissed, Users, type LucideIcon } from 'lucide-react';
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ChartCard, DonutChart, colorAt } from '@/components/charts';
 import { Button, Input, Notice, Panel, Select, Spinner, cx } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
+import { firstName, greeting } from '@/lib/format';
 import { useRealtime } from '@/lib/realtime';
 import { useApi } from '@/lib/use-api';
 
@@ -64,7 +65,13 @@ function Kpi({ icon: Icon, label, value, hint, href, tone = 'brand' }: { icon: L
 }
 
 export default function DashboardPage() {
-  const { can } = useAuth();
+  const { can, me } = useAuth();
+  // The greeting follows the clock: a dashboard left open over lunch says "Good afternoon" after noon.
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(id);
+  }, []);
   const [period, setPeriod] = useState<Period>('30');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
@@ -99,8 +106,10 @@ export default function DashboardPage() {
     <>
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight text-ink">Dashboard</h1>
-          <p className="mt-1 text-sm text-muted">Central overview of leads, calls and team performance</p>
+          <h1 className="text-xl font-semibold tracking-tight text-ink">{greeting(now)}{me ? `, ${firstName(me.user.name)}` : ''}</h1>
+          <p className="mt-1 text-sm text-muted">
+            {me?.user.role.dataScope === 'own' ? 'Here is your work for today.' : `Here is how ${me?.company.name ?? 'the team'} is doing today.`}
+          </p>
         </div>
         {reports && (
           <div className="flex flex-wrap items-center gap-2.5">

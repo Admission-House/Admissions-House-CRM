@@ -580,6 +580,7 @@ export class LeadsService {
           remark: dto.remark,
         });
         if (!status.is_open) await this.followUps.closeAll(trx, id);
+        await this.announceWins(trx, auth, [lead], status);
       } else if (dto.remark) {
         await this.writer.activity(trx, {
           tenantId: auth.tenantId,
@@ -651,6 +652,7 @@ export class LeadsService {
           });
           if (!status.is_open) await this.followUps.closeAll(trx, lead.id);
         }
+        await this.announceWins(trx, auth, changing, status);
       }
       return { requested: leads.length, changed: changing.length };
     });
@@ -1087,6 +1089,40 @@ export class LeadsService {
     }
   }
 
+  /**
+   * Leads that just moved into a "won" status, from one that was not: everyone in the company hears who won them, as a
+   * small celebration. The win belongs to the counsellor who holds the lead (or the person who set the status, if nobody
+   * does). Only the counsellor's name and the Lead ID are shared, not the student's details, since most people cannot open
+   * other people's leads. A lead that bounces out of "won" and back within a month is not announced twice.
+   */
+  private async announceWins(trx: Trx, auth: AuthContext, moved: Pick<LockedLead, 'id' | 'lead_no' | 'status_id' | 'assigned_to'>[], status: { name: string; is_won: boolean }) {
+    if (!status.is_won || moved.length === 0) return;
+    const wonBefore = new Set(
+      (await trx.selectFrom('lead_statuses').select('id').where('id', 'in', [...new Set(moved.map((l) => l.status_id))]).where('is_won', '=', true).execute()).map((r) => r.id),
+    );
+    const fresh = moved.filter((l) => !wonBefore.has(l.status_id));
+    if (fresh.length === 0) return;
+    const { rows: told } = await sql<{ lead_id: string }>`
+      SELECT DISTINCT payload->>'leadId' AS lead_id FROM notifications
+      WHERE type = 'system' AND payload->>'event' = 'lead_won' AND payload->>'leadId' = ANY(${fresh.map((l) => l.id)}::text[])
+        AND created_at > now() - interval '30 days'`.execute(trx);
+    const already = new Set(told.map((r) => r.lead_id));
+    const wins = fresh.filter((l) => !already.has(l.id));
+    if (wins.length === 0) return;
+    const winnerIds = [...new Set(wins.map((l) => l.assigned_to ?? auth.userId))];
+    const names = new Map((await trx.selectFrom('users').select(['id', 'name']).where('id', 'in', winnerIds).execute()).map((u) => [u.id, u.name]));
+    const everyone = (await trx.selectFrom('users').select('id').where('status', '=', 'active').execute()).map((u) => u.id);
+    for (const lead of wins) {
+      const winnerId = lead.assigned_to ?? auth.userId;
+      await this.notifications.notify(trx, {
+        tenantId: auth.tenantId,
+        userIds: everyone,
+        type: 'system',
+        payload: { event: 'lead_won', leadId: lead.id, leadNo: Number(lead.lead_no), winnerId, winnerName: names.get(winnerId) ?? 'A counsellor', status: status.name },
+      });
+    }
+  }
+
   private async requireStatus(trx: Trx, statusId: string, substatusId: string | null | undefined) {
     const { rows } = await sql<{
       id: string;
@@ -1097,8 +1133,9 @@ export class LeadsService {
       requires_substatus: boolean;
       selectable: boolean;
       substatus_requires_comment: boolean;
+      is_won: boolean;
     }>`
-      SELECT s.id, s.name, s.is_open, s.requires_followup, s.requires_substatus, s.selectable, ss.name AS substatus_name,
+      SELECT s.id, s.name, s.is_open, s.requires_followup, s.requires_substatus, s.selectable, s.is_won, ss.name AS substatus_name,
              COALESCE(ss.requires_comment, false) AS substatus_requires_comment
       FROM lead_statuses s
       LEFT JOIN lead_substatuses ss ON ss.id = ${substatusId ?? null}::uuid AND ss.status_id = s.id

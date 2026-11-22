@@ -7,14 +7,24 @@ import { createPortal } from 'react-dom';
 /** A dialog on a dimmed page. Closes with Escape or a click outside, keeps focus inside, and gives focus back. */
 export function Modal({ title, onClose, children, width = 'max-w-lg' }: { title: string; onClose: () => void; children: React.ReactNode; width?: string }) {
   const box = useRef<HTMLDivElement>(null);
+  // The latest onClose, so a parent that passes a new function on every render does not re-run the effect below
+  // (which would move the focus back to the first field while someone is typing).
+  const close = useRef(onClose);
+  useEffect(() => {
+    close.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     const before = document.activeElement as HTMLElement | null;
-    const first = box.current?.querySelector<HTMLElement>('input, select, textarea, button');
+    const self = box.current;
+    const first = self?.querySelector<HTMLElement>('input, select, textarea, button');
     first?.focus();
     const key = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-      if (e.key !== 'Tab' || !box.current) return;
+      // With a dialog opened from another dialog, only the one on top answers the keyboard.
+      const dialogs = document.querySelectorAll('[role="dialog"]');
+      if (!box.current || dialogs[dialogs.length - 1] !== box.current) return;
+      if (e.key === 'Escape') close.current();
+      if (e.key !== 'Tab') return;
       const f = [...box.current.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input, select, textarea')];
       if (f.length === 0) return;
       const a = f[0]!;
@@ -26,10 +36,12 @@ export function Modal({ title, onClose, children, width = 'max-w-lg' }: { title:
     document.body.style.overflow = 'hidden';
     return () => {
       document.removeEventListener('keydown', key);
-      document.body.style.overflow = '';
+      // Another dialog may still be open underneath: the page scrolls again only when the last one closes.
+      const others = [...document.querySelectorAll('[role="dialog"]')].filter((d) => d !== self);
+      if (others.length === 0) document.body.style.overflow = '';
       before?.focus();
     };
-  }, [onClose]);
+  }, []);
 
   if (typeof document === 'undefined') return null;
   // Drawn on the page itself, not inside whatever opened it. A panel with the frosted-glass look would otherwise hold the dialog

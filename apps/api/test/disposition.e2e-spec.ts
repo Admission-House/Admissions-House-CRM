@@ -192,3 +192,61 @@ describe('finding leads by when they came in, and junk leads', () => {
     expect(flag?.isJunk).toBe(true);
   });
 });
+
+describe('a won lead', () => {
+  const wonNotices = async (leadId: string) =>
+    (await owner.query(`SELECT user_id, payload FROM notifications WHERE type = 'system' AND payload->>'event' = 'lead_won' AND payload->>'leadId' = $1`, [leadId])).rows as { user_id: string; payload: Record<string, unknown> }[];
+  const activeUsers = async () => Number((await owner.query(`SELECT count(*) FROM users WHERE tenant_id = $1 AND status = 'active'`, [fx.tenantId])).rows[0].count);
+
+  beforeAll(async () => {
+    const won = await api.call('POST', '/lead-statuses', t.sa!, { name: 'Admission Probe', queue: 'closed', isOpen: false, requiresFollowup: false, isWon: true });
+    expect(won.statusCode, won.body).toBe(201);
+    ids.won = won.json().id;
+    ids.won2 = (await api.call('POST', '/lead-statuses', t.sa!, { name: 'Admitted Probe', queue: 'closed', isOpen: false, requiresFollowup: false, isWon: true })).json().id;
+  });
+
+  it('tells every active person in the company who won it, once, naming the counsellor who holds the lead', async () => {
+    const lead = await newLead();
+    const res = await api.call('POST', `/leads/${lead}/status`, t.lc1!, { statusId: ids.won }, OFFICE_IP);
+    expect(res.statusCode, res.body).toBe(200);
+    const notes = await wonNotices(lead);
+    expect(notes).toHaveLength(await activeUsers());
+    expect(notes.map((n) => n.user_id)).toEqual(expect.arrayContaining([fx.user('super').id, fx.user('lc2').id, fx.user('lc1').id]));
+    expect(notes[0]!.payload).toMatchObject({ event: 'lead_won', winnerId: fx.user('lc1').id, winnerName: 'lc1', status: 'Admission Probe' });
+    expect(typeof notes[0]!.payload.leadNo).toBe('number');
+    // The student's details stay out of it: most people cannot open someone else's lead.
+    expect(JSON.stringify(notes[0]!.payload)).not.toContain('Dispose Probe');
+  });
+
+  it('does not announce it again for a move between two "won" statuses, or for a quick move out and back', async () => {
+    const lead = await newLead();
+    await api.call('POST', `/leads/${lead}/status`, t.lc1!, { statusId: ids.won }, OFFICE_IP);
+    const first = (await wonNotices(lead)).length;
+    expect((await api.call('POST', `/leads/${lead}/status`, t.lc1!, { statusId: ids.won2 }, OFFICE_IP)).statusCode).toBe(200);
+    expect((await api.call('POST', `/leads/${lead}/status`, t.lc1!, { statusId: ids.plain }, OFFICE_IP)).statusCode).toBe(200);
+    expect((await api.call('POST', `/leads/${lead}/status`, t.lc1!, { statusId: ids.won }, OFFICE_IP)).statusCode).toBe(200);
+    expect(await wonNotices(lead)).toHaveLength(first);
+  });
+
+  it('announces each lead won through a bulk change, and nothing for a status that is not "won"', async () => {
+    const [a, b] = [await newLead(), await newLead()];
+    const plain = await newLead();
+    expect((await api.call('POST', '/leads/bulk/status', t.sa!, { leadIds: [plain], statusId: ids.plain })).statusCode).toBe(200);
+    expect(await wonNotices(plain)).toHaveLength(0);
+    const res = await api.call('POST', '/leads/bulk/status', t.sa!, { leadIds: [a, b], statusId: ids.won });
+    expect(res.statusCode, res.body).toBe(200);
+    expect((await wonNotices(a)).length).toBeGreaterThan(0);
+    expect((await wonNotices(b)).length).toBeGreaterThan(0);
+    // The win is the counsellor's who holds the lead, not the Super Admin's who changed the status.
+    expect((await wonNotices(a))[0]!.payload.winnerId).toBe(fx.user('lc1').id);
+  });
+
+  it('refuses a status that would be both "won" and junk, and shows the flag in the list', async () => {
+    const both = await api.call('POST', '/lead-statuses', t.sa!, { name: 'Both Probe', queue: 'closed', isOpen: false, requiresFollowup: false, isWon: true, isJunk: true });
+    expect(both.statusCode).toBe(400);
+    expect(errorCode(both)).toBe('WON_AND_JUNK');
+    expect((await api.call('PATCH', `/lead-statuses/${ids.won}`, t.sa!, { isJunk: true })).statusCode).toBe(400);
+    const flag = ((await api.call('GET', '/lead-statuses', t.sa!)).json() as { id: string; isWon: boolean }[]).find((s) => s.id === ids.won);
+    expect(flag?.isWon).toBe(true);
+  });
+});

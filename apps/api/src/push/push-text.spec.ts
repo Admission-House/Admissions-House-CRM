@@ -9,6 +9,12 @@ describe('pushText', () => {
     expect(pushText({ event: 'missed_call', name: 'Kabir', leadId: 'l3' })).toEqual({ title: 'Missed call from Kabir', data: { leadId: 'l3' } });
   });
 
+  it('tells the team who won an admission, without opening the lead (most of them cannot see it)', () => {
+    expect(pushText({ event: 'lead_won', leadId: 'l9', leadNo: 23, winnerName: 'Riya', status: 'Admission done' })).toEqual({
+      title: 'Riya won an admission', body: 'Lead 23 moved to Admission done. Well done!', data: {},
+    });
+  });
+
   it('has no body when there is nothing to add, rather than the word "undefined"', () => {
     const t = pushText({ event: 'followup_due', name: 'Riya', leadId: 'l1' })!;
     expect(t.body).toBeUndefined();

@@ -40,6 +40,9 @@ export function pushText(payload: Record<string, unknown>): PushText | null {
       return { title: `Follow-up due: ${name}`, body: str(payload.note), data: lead };
     case 'missed_call':
       return { title: `Missed call from ${name}`, data: lead };
+    case 'lead_won':
+      // Sent to the whole team, most of whom cannot open the lead: it opens nothing, and names only the counsellor.
+      return { title: `${text(payload.winnerName, 'A counsellor')} won an admission`, body: `Lead ${num(payload.leadNo)} moved to ${text(payload.status, 'won')}. Well done!`, data: {} };
     case 'leads_imported':
       return { title: `${num(payload.count)} leads were added for you`, body: str(payload.fileName), data: {} };
     case 'leads_assigned':

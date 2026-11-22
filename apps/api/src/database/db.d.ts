@@ -563,6 +563,7 @@ export interface LeadStatuses {
   id: Generated<string>;
   is_active: Generated<boolean>;
   is_junk: Generated<boolean>;
+  is_won: Generated<boolean>;
   is_open: Generated<boolean>;
   name: string;
   queue: string;

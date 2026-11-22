@@ -1,5 +1,5 @@
 import {
-  BarChart3, CalendarCheck, CalendarClock, CheckCircle2, Clock3, FileSpreadsheet, LayoutDashboard, PhoneCall, PhoneMissed, Settings, Sparkles, Users, Video, Wallet,
+  BarChart3, CalendarCheck, CalendarClock, CheckCircle2, Clock3, FileSpreadsheet, GraduationCap, LayoutDashboard, PhoneCall, PhoneMissed, Settings, Sparkles, Users, Video, Wallet,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -38,6 +38,7 @@ const ALL: NavItem[] = [
       { label: 'All leads', href: '/leads', icon: Users, any: ['lead.read'], count: 'total' },
     ],
   },
+  { label: 'Colleges', href: '/colleges', icon: GraduationCap, any: ['master.read'] },
   { label: 'Calls and meetings', href: '/communications', icon: Video, any: ['video.host'] },
   {
     label: 'Calling',
@@ -83,7 +84,7 @@ const ALL: NavItem[] = [
 ];
 
 /** Screens that exist so far (the part of the address before "?"). */
-const BUILT = new Set(['/dashboard', '/settings/security', '/imports', '/settings/integrations', '/settings/telephony', '/settings/recording', '/settings/sessions', '/settings/audit', '/settings/company', '/account', '/notifications', '/settings/devices', '/salary', '/leave', '/attendance', '/reports', '/calls', '/dialer', '/leads', '/communications', '/settings/users', '/settings/roles', '/settings/branches', '/settings/leads']);
+const BUILT = new Set(['/dashboard', '/colleges','/settings/security', '/imports', '/settings/integrations', '/settings/telephony', '/settings/recording', '/settings/sessions', '/settings/audit', '/settings/company', '/account', '/notifications', '/settings/devices', '/salary', '/leave', '/attendance', '/reports', '/calls', '/dialer', '/leads', '/communications', '/settings/users', '/settings/roles', '/settings/branches', '/settings/leads']);
 
 const built = (href?: string) => !!href && BUILT.has(href.split('?')[0]!);
 
