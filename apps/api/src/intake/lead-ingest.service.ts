@@ -114,7 +114,7 @@ export class LeadIngestService {
       payload: { event: 'resource_download', leadId, leadNo, name: p.lead.name, phone: p.lead.phone, resource: what, form: p.lead.formName, page: p.lead.pagePath },
     });
     const text = [`${p.lead.name} (${p.lead.phone}) asked to download: ${what}.`, p.lead.pagePath ? `Page: ${p.lead.pagePath}` : '', `Lead ID: ${leadNo}`].filter(Boolean).join('\n');
-    for (const a of admins) setImmediate(() => void this.mailer.send({ to: a.email, subject: `Download request: ${what}`, text }));
+    for (const a of admins) this.mailer.sendInBackground({ to: a.email, subject: `Download request: ${what}`, text });
   }
 
   // ----------------------------------------------------------------- create

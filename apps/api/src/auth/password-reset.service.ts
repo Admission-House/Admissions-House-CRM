@@ -66,7 +66,7 @@ export class PasswordResetService {
       };
     });
     // Sent after the answer is decided, so the reply does not take longer when an account exists.
-    if (mail) setImmediate(() => void this.mailer.send(mail));
+    if (mail) this.mailer.sendInBackground(mail);
   }
 
   async reset(input: { token: string; newPassword: string }, ip: string): Promise<void> {

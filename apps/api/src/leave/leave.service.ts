@@ -83,7 +83,7 @@ export class LeaveService {
 
   /** Sent after the change is saved, never before: a request that rolls back must not send mail. */
   private sendAll(mails: Mail[]): void {
-    for (const mail of mails) setImmediate(() => void this.mailer.send(mail));
+    for (const mail of mails) this.mailer.sendInBackground(mail);
   }
 
   private leaveLink(): string {

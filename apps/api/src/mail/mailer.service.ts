@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { waitUntil } from '@vercel/functions';
 import nodemailer, { Transporter } from 'nodemailer';
 import { ENV } from '../config/config.module.js';
 import type { Env } from '../config/env.js';
@@ -29,6 +30,16 @@ export class MailerService {
         connectionTimeout: 10_000, greetingTimeout: 10_000, socketTimeout: 20_000,
       });
     }
+  }
+
+  /**
+   * Sends without making the request wait. On Vercel the function is frozen as soon as the reply goes
+   * out, which killed fire-and-forget mail ("Connection timeout", 23 Nov 2026); waitUntil keeps the
+   * function alive until the send finishes. Outside Vercel waitUntil does nothing and the promise simply runs.
+   */
+  sendInBackground(mail: Mail): void {
+    const job = new Promise<void>((resolve) => setImmediate(resolve)).then(() => this.send(mail));
+    waitUntil(job);
   }
 
   /** Never throws: a mail failure must not break the request that caused it. Returns whether it was sent. */
