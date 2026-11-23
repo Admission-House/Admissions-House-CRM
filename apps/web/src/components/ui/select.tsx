@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, ChevronDown } from 'lucide-react';
+import { Check, ChevronDown, Search } from 'lucide-react';
 import { Children, Fragment, isValidElement, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { twMerge } from 'tailwind-merge';
@@ -36,6 +36,9 @@ function optionsOf(children: ReactNode): Opt[] {
 /** The sizing and placement classes of a given class list, so the wrapper sits in a row or grid the way the box was asked to. */
 const layoutOf = (cls?: string) => (cls ?? '').split(/\s+/).filter((c) => /^((sm|md|lg|xl):)?(w-|min-w-|max-w-|flex-|grow|shrink|basis-|col-span-|self-)/.test(c)).join(' ');
 
+/** From this many choices on, the open list has a box to type in, which narrows it. */
+const SEARCH_FROM = 8;
+
 /**
  * A drop-down in the product's own look: the closed box matches the text boxes, and the list that opens
  * is white with a teal tick on the chosen line. It takes the same props and <option> children as a
@@ -49,9 +52,18 @@ export function Select({ className, children, value, defaultValue, onChange, dis
 
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
+  // A long list can be narrowed by typing: the box at its top (or typing on the closed drop-down) filters it.
+  const searchable = options.length >= SEARCH_FROM;
+  const [query, setQuery] = useState('');
+  const shownOptions = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return q ? options.filter((o) => o.value !== '' && o.label.toLowerCase().includes(q)) : options;
+  }, [options, query]);
+  const search = useRef<HTMLInputElement>(null);
   const [box, setBox] = useState<{ left: number; width: number; top?: number; bottom?: number; maxHeight: number } | null>(null);
   const button = useRef<HTMLButtonElement>(null);
   const list = useRef<HTMLUListElement>(null);
+  const pop = useRef<HTMLDivElement>(null);
   const listId = useId();
 
   function place() {
@@ -63,10 +75,11 @@ export function Select({ className, children, value, defaultValue, onChange, dis
     setBox({ left: r.left, width: r.width, ...(up ? { bottom: window.innerHeight - r.top + 4 } : { top: r.bottom + 4 }), maxHeight: Math.min(288, up ? above : below) });
   }
 
-  function show() {
+  function show(typed = '') {
     if (disabled) return;
     place();
-    setActive(Math.max(0, options.findIndex((o) => o.value === shown?.value)));
+    setQuery(typed);
+    setActive(typed ? 0 : Math.max(0, options.findIndex((o) => o.value === shown?.value)));
     setOpen(true);
   }
 
@@ -83,9 +96,9 @@ export function Select({ className, children, value, defaultValue, onChange, dis
     if (!open) return;
     const away = (e: MouseEvent) => {
       const t = e.target as Node;
-      if (!button.current?.contains(t) && !list.current?.contains(t)) setOpen(false);
+      if (!button.current?.contains(t) && !pop.current?.contains(t)) setOpen(false);
     };
-    const close = (e: Event) => { if (!list.current?.contains(e.target as Node)) setOpen(false); };
+    const close = (e: Event) => { if (!pop.current?.contains(e.target as Node)) setOpen(false); };
     document.addEventListener('mousedown', away);
     window.addEventListener('resize', close);
     window.addEventListener('scroll', close, true);
@@ -100,25 +113,33 @@ export function Select({ className, children, value, defaultValue, onChange, dis
     if (open) list.current?.children[active]?.scrollIntoView({ block: 'nearest' });
   }, [open, active]);
 
-  function key(e: React.KeyboardEvent) {
+  // The search box takes the typing as soon as a long list opens.
+  useEffect(() => {
+    if (open && searchable) search.current?.focus();
+  }, [open, searchable]);
+
+  function key(e: React.KeyboardEvent, inSearch = false) {
     if (!open) {
       if (['ArrowDown', 'ArrowUp', 'Enter', ' '].includes(e.key)) { e.preventDefault(); show(); }
+      // Typing on a closed long list opens it already searching for that letter.
+      else if (searchable && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); show(e.key); }
       return;
     }
+    const items = shownOptions;
     const step = (from: number, dir: 1 | -1) => {
-      for (let i = from + dir; i >= 0 && i < options.length; i += dir) if (!options[i]!.disabled) return i;
+      for (let i = from + dir; i >= 0 && i < items.length; i += dir) if (!items[i]!.disabled) return i;
       return from;
     };
-    if (e.key === 'Escape') { e.preventDefault(); setOpen(false); }
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setOpen(false); button.current?.focus(); }
     else if (e.key === 'ArrowDown') { e.preventDefault(); setActive((a) => step(a, 1)); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((a) => step(a, -1)); }
-    else if (e.key === 'Home') { e.preventDefault(); setActive(step(-1, 1)); }
-    else if (e.key === 'End') { e.preventDefault(); setActive(step(options.length, -1)); }
-    else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); choose(options[active]); }
+    else if (e.key === 'Home' && !inSearch) { e.preventDefault(); setActive(step(-1, 1)); }
+    else if (e.key === 'End' && !inSearch) { e.preventDefault(); setActive(step(items.length, -1)); }
+    else if (e.key === 'Enter' || (e.key === ' ' && !inSearch)) { e.preventDefault(); choose(items[active]); }
     else if (e.key === 'Tab') setOpen(false);
-    else if (e.key.length === 1) {
-      const at = options.findIndex((o, i) => i > active && !o.disabled && o.label.toLowerCase().startsWith(e.key.toLowerCase()));
-      const from = at >= 0 ? at : options.findIndex((o) => !o.disabled && o.label.toLowerCase().startsWith(e.key.toLowerCase()));
+    else if (e.key.length === 1 && !inSearch) {
+      const at = items.findIndex((o, i) => i > active && !o.disabled && o.label.toLowerCase().startsWith(e.key.toLowerCase()));
+      const from = at >= 0 ? at : items.findIndex((o) => !o.disabled && o.label.toLowerCase().startsWith(e.key.toLowerCase()));
       if (from >= 0) setActive(from);
     }
   }
@@ -137,7 +158,7 @@ export function Select({ className, children, value, defaultValue, onChange, dis
         aria-invalid={ariaInvalid}
         disabled={disabled}
         onClick={() => (open ? setOpen(false) : show())}
-        onKeyDown={key}
+        onKeyDown={(e) => key(e)}
         className={join(
           'flex h-9 w-full items-center justify-between gap-2 rounded-md border border-line-strong bg-surface pl-2.5 pr-2 text-left text-sm text-ink transition-colors focus:border-teal-600 focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:bg-head disabled:text-muted aria-[invalid=true]:border-bad',
           open && 'border-teal-600',
@@ -151,15 +172,36 @@ export function Select({ className, children, value, defaultValue, onChange, dis
       {required && <input tabIndex={-1} aria-hidden required value={current} onChange={() => undefined} className="pointer-events-none absolute inset-x-0 bottom-0 h-px opacity-0" />}
 
       {open && box && createPortal(
+        <div
+          ref={pop}
+          style={{ left: box.left, minWidth: box.width, top: box.top, bottom: box.bottom, maxHeight: box.maxHeight }}
+          className="fixed z-[80] flex w-max max-w-[min(26rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-lg border border-line bg-surface shadow-[0_8px_24px_rgb(20_38_43/0.14)]"
+        >
+          {searchable && (
+            <div className="flex shrink-0 items-center gap-2 border-b border-line px-3 py-2">
+              <Search className="h-3.5 w-3.5 shrink-0 text-subtle" aria-hidden />
+              <input
+                ref={search}
+                value={query}
+                onChange={(e) => { setQuery(e.target.value); setActive(0); }}
+                onKeyDown={(e) => key(e, true)}
+                placeholder="Type to search"
+                aria-label={`Search ${ariaLabel ?? 'the list'}`}
+                aria-controls={listId}
+                autoComplete="off"
+                className="w-full min-w-40 bg-transparent text-sm text-ink outline-none placeholder:text-subtle"
+              />
+            </div>
+          )}
         <ul
           ref={list}
           id={listId}
           role="listbox"
           aria-label={ariaLabel}
-          style={{ left: box.left, minWidth: box.width, top: box.top, bottom: box.bottom, maxHeight: box.maxHeight }}
-          className="fixed z-[80] w-max max-w-[min(26rem,calc(100vw-1.5rem))] overflow-y-auto rounded-lg border border-line bg-surface py-1 shadow-[0_8px_24px_rgb(20_38_43/0.14)]"
+          className="min-h-0 flex-1 overflow-y-auto py-1"
         >
-          {options.map((o, i) => {
+          {shownOptions.length === 0 && <li className="px-3 py-2 text-sm text-subtle">Nothing matches</li>}
+          {shownOptions.map((o, i) => {
             const blank = o.value === ''; // the "Choose…" line is a prompt, not a choice
             const on = !blank && o.value === shown?.value;
             return (
@@ -184,7 +226,8 @@ export function Select({ className, children, value, defaultValue, onChange, dis
               </li>
             );
           })}
-        </ul>,
+        </ul>
+        </div>,
         document.body,
       )}
     </div>
