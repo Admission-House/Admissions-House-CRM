@@ -2,7 +2,7 @@
 
 import { LeadCallMenu, type CallMenuLead } from '@/components/communications/lead-call-menu';
 import { NewMeetingModal } from '@/components/communications/session-modals';
-import { Download, ExternalLink, Plus, Search, SlidersHorizontal, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, Download, ExternalLink, Plus, Search, SlidersHorizontal, X } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
@@ -27,7 +27,10 @@ const QUEUE_CHIPS = [
   { key: 'closed', label: 'Closed', dot: 'bg-subtle' },
 ] as const;
 
-const FILTER_KEYS = ['q', 'queue', 'statusId', 'sourceId', 'assignedTo', 'intent', 'studyMode', 'followup', 'createdFrom', 'createdTo', 'since', 'junk', 'sort'] as const;
+const FILTER_KEYS = ['q', 'queue', 'statusId', 'sourceId', 'assignedTo', 'intent', 'studyMode', 'followup', 'createdFrom', 'createdTo', 'since', 'junk', 'sort', 'orderBy', 'dir'] as const;
+
+/** What the server sorts by for each column heading (the arrows in it). */
+const ORDER_BY: Record<string, string> = { lead: 'name', email: 'email', course: 'course', region: 'region', status: 'status', source: 'source', assigned: 'assigned', received: 'received', followup: 'followup', updated: 'updated' };
 
 /** "Received in the last ...", for when a lead came in a few hours or days ago rather than on a calendar date. */
 const SINCE = [
@@ -323,7 +326,8 @@ function Leads() {
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-subtle" aria-hidden />
             <Input aria-label="Search leads" placeholder="Search name, phone, email or lead no." value={search} onChange={(e) => setTyped(e.target.value)} className="pl-8" />
           </div>
-          <Select aria-label="Sort" value={filters.sort} onChange={(e) => set({ sort: e.target.value })} className="w-44">
+          <Select aria-label="Sort" value={filters.orderBy ? 'column' : filters.sort} onChange={(e) => set({ sort: e.target.value === 'column' ? filters.sort : e.target.value, orderBy: '', dir: '' })} className="w-44">
+            {filters.orderBy && <option value="column">Sorted by a column</option>}
             <option value="">Newest first</option>
             <option value="oldest">Oldest first</option>
             <option value="updated">Recently updated</option>
@@ -414,7 +418,27 @@ function Leads() {
                   <th className="w-10 px-4 py-2.5">
                     <input type="checkbox" aria-label="Select all leads on this page" checked={allSelected} onChange={(e) => setSelected(e.target.checked ? new Set(items.map((l) => l.id)) : new Set())} className="h-3.5 w-3.5 accent-[#0f625e]" />
                   </th>
-                  {columns.order.map((id) => <MovableTh key={id} id={id} columns={columns} className="px-3 py-3 text-left font-medium">{COLUMNS[id as ColId].label}</MovableTh>)}
+                  {columns.order.map((id) => {
+                    const by = ORDER_BY[id];
+                    const on = !!by && filters.orderBy === by;
+                    const down = on && filters.dir === 'desc';
+                    const label = COLUMNS[id as ColId].label;
+                    return (
+                      <MovableTh key={id} id={id} columns={columns} label={label} ariaSort={on ? (down ? 'descending' : 'ascending') : 'none'} className="px-3 py-3 text-left font-medium">
+                        {by ? (
+                          <button
+                            type="button"
+                            onClick={() => set({ orderBy: by, dir: on && !down ? 'desc' : 'asc' })}
+                            title={on ? (down ? 'Sorted Z to A, newest or latest first. Click for A to Z.' : 'Sorted A to Z, oldest or earliest first. Click for Z to A.') : `Sort by ${label}`}
+                            className={`group inline-flex items-center gap-1 rounded hover:text-ink ${on ? 'text-ink' : ''}`}
+                          >
+                            {label}
+                            {on ? (down ? <ArrowDown className="h-3.5 w-3.5 text-brand-600" aria-hidden /> : <ArrowUp className="h-3.5 w-3.5 text-brand-600" aria-hidden />) : <ArrowUpDown className="h-3.5 w-3.5 opacity-40 group-hover:opacity-100" aria-hidden />}
+                          </button>
+                        ) : label}
+                      </MovableTh>
+                    );
+                  })}
                   <th className="sticky right-0 z-10 bg-head px-3 py-2.5 text-right font-semibold shadow-[-8px_0_8px_-8px_rgba(15,23,42,0.12)]"><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
@@ -432,7 +456,7 @@ function Leads() {
                             <LeadCallMenu lead={{ id: l.id, name: l.name }} phone={can('call.place') && phoneReady ? { enabled: true, onCall: () => void callLead(l.id) } : undefined}
                               internet={can('video.host') && comm.data?.enabled === true} onMeeting={setMeetingFor} onError={(text) => setNotice({ tone: 'bad', text })} />
                           )}
-                          <Link href={`/leads/${l.id}`} aria-label={`Open ${l.name}`} title="Open" className="grid h-8 w-8 place-items-center rounded-md text-muted hover:bg-head hover:text-ink"><ExternalLink className="h-[17px] w-[17px]" /></Link>
+                          <Link href={`/leads/${l.id}`} target="_blank" rel="noopener noreferrer" aria-label={`Open ${l.name} in a new tab`} title="Open in a new tab" className="grid h-8 w-8 place-items-center rounded-md text-muted hover:bg-head hover:text-ink"><ExternalLink className="h-[17px] w-[17px]" /></Link>
                         </div>
                       </td>
                     </tr>

@@ -3,6 +3,7 @@
 import { Check, MapPin, Plus, Trash2, Undo2 } from 'lucide-react';
 import { useState } from 'react';
 import { Badge, Button, Card, Empty, Field, Input, Notice, Select, Spinner, Textarea, cx } from '@/components/ui';
+import { CoursePicker } from '@/components/ui/course-picker';
 import { LocationPicker, type Place } from '@/components/ui/location-picker';
 import { Modal } from '@/components/ui/modal';
 import { api, ApiError } from '@/lib/api';
@@ -118,8 +119,7 @@ export function RecommendedTab({ lead, onChanged }: { lead: LeadDetail; onChange
   const [courseId, setCourseId] = useState('');
   const [pick, setPick] = useState('');
   const recommended = useApi<Recommendation[]>(`/leads/${lead.id}/recommendations`);
-  const courses = useApi<Page<{ id: string; name: string; level: string }>>('/courses', { limit: 100 });
-  const colleges = useApi<Page<CollegeItem>>('/colleges', { leadId: lead.id, q: q.trim() || undefined, locationId: place[0]?.id, courseId: courseId || undefined, mode: mode || undefined, limit: 100 });
+  const colleges = useApi<Page<CollegeItem>>('/colleges', { leadId: lead.id, q: q.trim() || undefined, locationId: place[0]?.id, courseId: courseId || undefined, includeUnlisted: courseId ? 'true' : undefined, mode: mode || undefined, limit: 100 });
   const [shortlisting, setShortlisting] = useState<{ id: string; name: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -174,7 +174,7 @@ export function RecommendedTab({ lead, onChanged }: { lead: LeadDetail; onChange
             <Select id="fm" value={mode} onChange={(e) => { setMode(e.target.value); setPick(''); }}><option value="">{lead.studyMode ? 'Student preference' : 'Online or regular'}</option><option value="online">Online</option><option value="regular">Regular</option></Select>
           </Field>
           <Field label="2. Course" htmlFor="fc">
-            <Select id="fc" value={courseId} onChange={(e) => { setCourseId(e.target.value); setPick(''); }}><option value="">Any course</option>{courses.data?.items.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.level})</option>)}</Select>
+            <CoursePicker id="fc" value={courseId} onChange={(id) => { setCourseId(id); setPick(''); }} placeholder="Any course" />
           </Field>
           <Field label="3. City or state"><LocationPicker value={place} onChange={(v) => { setPlace(v); setPick(''); }} /></Field>
           <Field label="4. College" htmlFor="fcol">

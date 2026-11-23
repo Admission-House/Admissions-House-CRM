@@ -42,6 +42,13 @@ export class MastersController {
     return this.masters.courses(auth, query);
   }
 
+  /** One course, for showing the name of a course already chosen. */
+  @RequirePermissions('master.read')
+  @Get('courses/:id')
+  courseById(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string) {
+    return this.masters.courseById(auth, id);
+  }
+
   @RequirePermissions('master.manage')
   @Post('courses')
   createCourse(@CurrentAuth() auth: AuthContext, @Body() body: CreateCourseDto) {

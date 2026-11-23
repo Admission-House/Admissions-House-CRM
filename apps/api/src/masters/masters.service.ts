@@ -23,6 +23,8 @@ export interface CollegeListItem {
   courseCount: number;
   offersOnline: boolean;
   offersRegular: boolean;
+  /** The study modes set on the university itself; null when its course list decides. */
+  studyModes: string | null;
 }
 
 export interface OfferedCourse {
@@ -73,6 +75,15 @@ export class MastersService {
       const row = await trx.insertInto('streams').values({ tenant_id: auth.tenantId, name: dto.name }).returning(['id', 'name']).executeTakeFirstOrThrow();
       await this.record(trx, auth, 'stream.create', 'stream', row.id, undefined, dto);
       return row;
+    });
+  }
+
+  courseById(auth: AuthContext, id: string): Promise<CourseView> {
+    return this.db.withTenant(auth.tenantId, async (trx) => {
+      const course = await this.course(trx, id);
+      // A switched-off course is shown only to those who manage the lists, as in the list itself.
+      if (!course.isActive && !auth.permissions.has('master.manage')) throw AppError.notFound('Course');
+      return course;
     });
   }
 
@@ -135,21 +146,30 @@ export class MastersService {
       }
       if (q.q) c.push(sql<SqlBool>`c.name ILIKE ${likePattern(q.q)}`);
       if (q.locationId) c.push(sql<SqlBool>`(loc.id = ${q.locationId}::uuid OR loc.parent_id = ${q.locationId}::uuid)`);
-      if (q.courseId) c.push(sql<SqlBool>`EXISTS (SELECT 1 FROM college_courses cc WHERE cc.college_id = c.id AND cc.is_active AND cc.course_id = ${q.courseId}::uuid AND ${delivered})`);
-      // A study mode leaves out a college that offers courses, none of them in that mode. A college with no courses listed yet is kept:
-      // nothing is known about it, so it cannot be ruled out (and the list would otherwise be empty until every course is entered).
-      else if (mode !== 'any') c.push(sql<SqlBool>`(EXISTS (SELECT 1 FROM college_courses cc WHERE cc.college_id = c.id AND cc.is_active AND ${delivered}) OR NOT EXISTS (SELECT 1 FROM college_courses cc WHERE cc.college_id = c.id AND cc.is_active))`);
+      const noCourses = sql<SqlBool>`NOT EXISTS (SELECT 1 FROM college_courses cc WHERE cc.college_id = c.id AND cc.is_active)`;
+      // A university that says which study modes it is offered for is judged by that; one that does not, by its courses.
+      if (mode !== 'any') c.push(sql<SqlBool>`(c.study_modes IS NULL OR c.study_modes IN (${mode}, 'both'))`);
+      // Asking for a course is exact: a college that does not list it does not offer it. Only when asked (`includeUnlisted`,
+      // the forms that pick a university for a student) is a college with no courses listed yet kept, as nothing is known about
+      // it; otherwise that list would stay empty until every college's courses are entered.
+      if (q.courseId) {
+        const offers = sql<SqlBool>`EXISTS (SELECT 1 FROM college_courses cc WHERE cc.college_id = c.id AND cc.is_active AND cc.course_id = ${q.courseId}::uuid AND ${delivered})`;
+        c.push(q.includeUnlisted ? sql<SqlBool>`(${offers} OR ${noCourses})` : offers);
+      }
+      // A study mode leaves out a college that offers courses, none of them in that mode. A college with no courses listed yet is
+      // kept: nothing is known about it, so it cannot be ruled out.
+      else if (mode !== 'any') c.push(sql<SqlBool>`(c.study_modes IS NOT NULL OR EXISTS (SELECT 1 FROM college_courses cc WHERE cc.college_id = c.id AND cc.is_active AND ${delivered}) OR ${noCourses})`);
       if (after) c.push(sql<SqlBool>`(lower(c.name), c.id) > (${after.n}, ${after.i}::uuid)`);
 
       const { rows } = await sql<{
         id: string; name: string; is_active: boolean; pending: boolean; loc_id: string | null; loc_name: string | null; loc_type: string | null;
-        state: string | null; course_count: string; online: boolean; regular: boolean; sort_name: string;
+        state: string | null; course_count: string; online: boolean; regular: boolean; sort_name: string; study_modes: string | null;
       }>`
-        SELECT c.id, c.name, c.is_active, (c.is_manual AND c.reviewed_at IS NULL) AS pending, loc.id AS loc_id, loc.name AS loc_name,
+        SELECT c.id, c.name, c.is_active, (c.is_manual AND c.reviewed_at IS NULL) AS pending, loc.id AS loc_id, loc.name AS loc_name, c.study_modes,
                loc.type AS loc_type, st.name AS state, lower(c.name) AS sort_name,
                (SELECT count(*) FROM college_courses cc WHERE cc.college_id = c.id AND cc.is_active AND ${delivered}) AS course_count,
-               EXISTS (SELECT 1 FROM college_courses cc WHERE cc.college_id = c.id AND cc.is_active AND cc.delivery_mode IN ('online', 'both')) AS online,
-               EXISTS (SELECT 1 FROM college_courses cc WHERE cc.college_id = c.id AND cc.is_active AND cc.delivery_mode IN ('regular', 'both')) AS regular
+               (c.study_modes IN ('online', 'both') OR EXISTS (SELECT 1 FROM college_courses cc WHERE cc.college_id = c.id AND cc.is_active AND cc.delivery_mode IN ('online', 'both'))) AS online,
+               (c.study_modes IN ('regular', 'both') OR EXISTS (SELECT 1 FROM college_courses cc WHERE cc.college_id = c.id AND cc.is_active AND cc.delivery_mode IN ('regular', 'both'))) AS regular
         FROM colleges c
         LEFT JOIN locations loc ON loc.id = c.location_id
         LEFT JOIN locations st ON st.id = loc.parent_id
@@ -160,7 +180,7 @@ export class MastersService {
         items: page.items.map((r) => ({
           id: r.id, name: r.name, isActive: r.is_active, pendingReview: r.pending,
           location: r.loc_id ? { id: r.loc_id, name: r.loc_name!, type: r.loc_type!, state: r.state } : null,
-          courseCount: Number(r.course_count), offersOnline: r.online, offersRegular: r.regular,
+          courseCount: Number(r.course_count), offersOnline: !!r.online, offersRegular: !!r.regular, studyModes: r.study_modes,
         })),
         nextCursor: page.nextCursor,
       };
@@ -173,8 +193,8 @@ export class MastersService {
 
   /** One institute with its courses, read in the caller's transaction so it can show what was just written. */
   private async collegeView(trx: Trx, auth: AuthContext, id: string, mode: 'online' | 'regular' | 'any' = 'any') {
-    const { rows } = await sql<{ id: string; name: string; is_active: boolean; pending: boolean; loc_id: string | null; loc_name: string | null; loc_type: string | null; state: string | null }>`
-      SELECT c.id, c.name, c.is_active, (c.is_manual AND c.reviewed_at IS NULL) AS pending,
+    const { rows } = await sql<{ id: string; name: string; is_active: boolean; pending: boolean; loc_id: string | null; loc_name: string | null; loc_type: string | null; state: string | null; study_modes: string | null }>`
+      SELECT c.id, c.name, c.is_active, (c.is_manual AND c.reviewed_at IS NULL) AS pending, c.study_modes,
              loc.id AS loc_id, loc.name AS loc_name, loc.type AS loc_type, st.name AS state
       FROM colleges c LEFT JOIN locations loc ON loc.id = c.location_id LEFT JOIN locations st ON st.id = loc.parent_id
       WHERE c.id = ${id}`.execute(trx);
@@ -183,7 +203,7 @@ export class MastersService {
     const seesInactive = auth.permissions.has('master.manage') || auth.permissions.has('master.review');
     if (!r || (!r.is_active && !seesInactive)) throw AppError.notFound('College');
     return {
-      id: r.id, name: r.name, isActive: r.is_active, pendingReview: r.pending,
+      id: r.id, name: r.name, isActive: r.is_active, pendingReview: r.pending, studyModes: r.study_modes,
       location: r.loc_id ? { id: r.loc_id, name: r.loc_name!, type: r.loc_type!, state: r.state } : null,
       courses: await this.offered(trx, id, mode, auth.permissions.has('master.manage')),
     };
@@ -206,6 +226,7 @@ export class MastersService {
         .insertInto('colleges')
         .values({
           tenant_id: auth.tenantId, name: dto.name, location_id: dto.locationId ?? null, is_manual: !manager, created_by: auth.userId,
+          ...(manager && dto.studyModes !== undefined && { study_modes: dto.studyModes }),
           ...(manager && { reviewed_by: auth.userId, reviewed_at: sql`now()` }),
         } as never)
         .returning('id')
@@ -221,7 +242,7 @@ export class MastersService {
 
   updateCollege(auth: AuthContext, id: string, dto: UpdateCollegeDto) {
     return this.db.withTenant(auth.tenantId, async (trx) => {
-      const before = await trx.selectFrom('colleges').select(['name', 'location_id', 'is_active']).where('id', '=', id).executeTakeFirst();
+      const before = await trx.selectFrom('colleges').select(['name', 'location_id', 'is_active', 'study_modes']).where('id', '=', id).executeTakeFirst();
       if (!before) throw AppError.notFound('College');
       if (dto.locationId) await this.assertLocation(trx, dto.locationId);
       const name = dto.name ?? before.name;
@@ -232,6 +253,7 @@ export class MastersService {
         ...(dto.name !== undefined && { name: dto.name }),
         ...(dto.locationId !== undefined && { location_id: dto.locationId }),
         ...(dto.isActive !== undefined && { is_active: dto.isActive }),
+        ...(dto.studyModes !== undefined && { study_modes: dto.studyModes }),
       };
       await trx.updateTable('colleges').set(changes).where('id', '=', id).execute();
       await this.record(trx, auth, 'college.update', 'college', id, before, changes);

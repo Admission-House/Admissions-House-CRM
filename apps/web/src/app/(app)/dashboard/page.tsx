@@ -97,6 +97,8 @@ export default function DashboardPage() {
   if (dash.loading && !dash.data) return <Spinner />;
   if (dash.error) return <Notice tone="bad">{dash.error.message}</Notice>;
   const d = dash.data;
+  // Today on this computer (the office works in one time zone), for the links to the call history.
+  const todayLocal = new Date().toLocaleDateString('en-CA');
   if (!d) return null;
 
   const team = d.team ? Object.entries(TEAM_LABEL).map(([key, v]) => ({ name: v.label, color: v.color, value: d.team!.filter((m) => m.status === key).length })) : null;
@@ -136,8 +138,8 @@ export default function DashboardPage() {
         <Kpi icon={Inbox} label="Fresh leads" value={d.queues.fresh ?? 0} hint={d.unassigned > 0 ? `${d.unassigned} not assigned` : undefined} href="/leads?queue=fresh" />
         <Kpi icon={CalendarClock} label="Follow-ups today" value={d.dueToday} tone="warn" href="/leads?followup=today" />
         <Kpi icon={AlertTriangle} label="Overdue" value={d.today.overdueFollowUps} tone={d.today.overdueFollowUps > 0 ? 'bad' : 'brand'} href="/leads?followup=overdue" />
-        <Kpi icon={PhoneCall} label="Calls today" value={d.today.calls.total} tone="info" hint={`${d.today.calls.connected} connected · ${talk(d.today.calls.talkSec)}`} />
-        <Kpi icon={PhoneMissed} label="Missed calls today" value={d.today.calls.missed} tone={d.today.calls.missed > 0 ? 'bad' : 'brand'} />
+        <Kpi icon={PhoneCall} label="Calls today" value={d.today.calls.total} tone="info" hint={`${d.today.calls.connected} connected · ${talk(d.today.calls.talkSec)}`} href={can('call.read') ? `/calls?from=${todayLocal}&to=${todayLocal}` : undefined} />
+        <Kpi icon={PhoneMissed} label="Missed calls today" value={d.today.calls.missed} tone={d.today.calls.missed > 0 ? 'bad' : 'brand'} href={can('call.read') ? `/calls?from=${todayLocal}&to=${todayLocal}&outcome=missed` : undefined} />
       </div>
 
       {reports && !dates && <div className="mt-4"><Notice tone="warn">Choose both dates to see the charts for your own period.</Notice></div>}

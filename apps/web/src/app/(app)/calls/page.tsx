@@ -2,7 +2,8 @@
 
 import { ArrowDownLeft, ArrowUpRight, ClipboardCheck } from 'lucide-react';
 import Link from 'next/link';
-import { useMemo, useState, type ReactNode } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { Suspense, useMemo, useState, type ReactNode } from 'react';
 import { Badge, Button, Card, Empty, Input, Notice, PageHeader, Select, Spinner } from '@/components/ui';
 import { MovableTh, useColumnOrder } from '@/components/ui/movable-columns';
 import { OUTCOME, Recording, WrapUp, length, type Call } from '@/components/leads/calls-tab';
@@ -22,7 +23,7 @@ const DEFAULT_COLUMNS: ColId[] = ['when', 'lead', 'call', 'by', 'outcome', 'leng
 const COLUMNS: Record<ColId, { label: string; td: string; title?: (c: CallRow) => string | undefined; cell: (c: CallRow) => ReactNode }> = {
   when: { label: 'When', td: 'whitespace-nowrap px-4 py-3 text-muted', cell: (c) => <>{fmtDateTime(c.startedAt)}</> },
   lead: { label: 'Lead', td: 'px-3 py-3', cell: (c) => <>{c.lead ? <Link href={`/leads/${c.lead.id}`} className="font-medium text-ink hover:text-brand-600">{c.lead.name}</Link> : <span className="text-subtle">Not a lead</span>}<p className="tabular text-xs text-muted">{fmtPhone(c.number)}</p></> },
-  call: { label: 'Call', td: 'px-3 py-3', cell: (c) => <><span className="inline-flex items-center gap-1.5">{c.direction === 'incoming' ? <ArrowDownLeft className="h-4 w-4 text-info" aria-hidden /> : <ArrowUpRight className="h-4 w-4 text-ok" aria-hidden />}{c.direction === 'incoming' ? 'Incoming' : 'Outgoing'}</span></> },
+  call: { label: 'Call', td: 'px-3 py-3', cell: (c) => <><span className="inline-flex items-center gap-1.5">{c.direction === 'incoming' ? <ArrowDownLeft className="h-4 w-4 text-info" aria-hidden /> : <ArrowUpRight className="h-4 w-4 text-ok" aria-hidden />}{c.direction === 'incoming' ? 'Incoming' : 'Outgoing'}</span>{c.via === 'app' && <p className="text-xs text-muted">In the CRM</p>}</> },
   by: { label: 'By', td: 'px-3 py-3', cell: (c) => <>{c.user?.name ?? <span className="text-subtle">Unknown</span>}</> },
   outcome: { label: 'Outcome', td: 'px-3 py-3', cell: (c) => <><Badge tone={(OUTCOME[c.outcome] ?? { label: c.outcome, tone: 'neutral' as const }).tone}>{(OUTCOME[c.outcome] ?? { label: c.outcome, tone: 'neutral' as const }).label}</Badge></> },
   length: { label: 'Length', td: 'tabular px-3 py-3', cell: (c) => <>{length(c.durationSec)}</> },
@@ -30,13 +31,25 @@ const COLUMNS: Record<ColId, { label: string; td: string; title?: (c: CallRow) =
 };
 
 export default function CallsPage() {
+  return (
+    <Suspense fallback={<Spinner />}>
+      <Calls />
+    </Suspense>
+  );
+}
+
+/** A link can open the page already filtered (the dashboard's "Calls today" and "Missed calls today"). */
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+function Calls() {
   const { can, me } = useAuth();
+  const params = useSearchParams();
   const columns = useColumnOrder(`calls:${me?.user.id ?? 'me'}`, DEFAULT_COLUMNS);
   const [userId, setUserId] = useState('');
   const [direction, setDirection] = useState('');
-  const [outcome, setOutcome] = useState('');
-  const [from, setFrom] = useState('');
-  const [to, setTo] = useState('');
+  const [outcome, setOutcome] = useState(() => { const o = params.get('outcome') ?? ''; return o in OUTCOME ? o : ''; });
+  const [from, setFrom] = useState(() => { const d = params.get('from') ?? ''; return DATE.test(d) ? d : ''; });
+  const [to, setTo] = useState(() => { const d = params.get('to') ?? ''; return DATE.test(d) ? d : ''; });
   const [unwrapped, setUnwrapped] = useState(false);
   const [wrapping, setWrapping] = useState<CallRow | null>(null);
 
@@ -79,7 +92,7 @@ export default function CallsPage() {
                         <div className="flex items-center justify-end gap-2">
                           {c.recording === 'stored' && can('call.listen') && <Recording callId={c.id} />}
                           {c.recording === 'pending' && <span className="text-xs text-subtle">Recording on its way</span>}
-                          {c.outcome === 'connected' && !c.wrappedUp && c.lead && can('lead.update') && <Button size="sm" onClick={() => setWrapping(c)}><ClipboardCheck className="h-3.5 w-3.5" aria-hidden /> After-call form</Button>}
+                          {c.outcome === 'connected' && c.via !== 'app' && !c.wrappedUp && c.lead && can('lead.update') && <Button size="sm" onClick={() => setWrapping(c)}><ClipboardCheck className="h-3.5 w-3.5" aria-hidden /> After-call form</Button>}
                         </div>
                       </td>
                     </tr>

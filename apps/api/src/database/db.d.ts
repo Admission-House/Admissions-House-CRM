@@ -235,6 +235,7 @@ export interface Colleges {
   name: string;
   reviewed_at: Timestamp | null;
   reviewed_by: string | null;
+  study_modes: string | null;
   tenant_id: string;
   updated_at: Generated<Timestamp>;
 }

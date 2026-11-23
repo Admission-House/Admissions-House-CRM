@@ -34,12 +34,15 @@ export interface CallView {
   wrappedUp: boolean;
   remark: string | null;
   recording: 'none' | 'pending' | 'stored' | 'failed';
+  /** phone: through the telephony provider. app: a voice call inside the CRM (no recording or after-call form). */
+  via: 'phone' | 'app';
 }
 
 interface Row {
   id: string; direction: 'incoming' | 'outgoing'; counterparty: string; started_at: Date; answered_at: Date | null; ended_at: Date | null;
   duration_sec: number | null; outcome: string; lead_id: string | null; lead_no: string | null; lead_name: string | null; user_id: string | null;
   user_name: string | null; wrapped_up_at: Date | null; remark: string | null; recording: string | null; started_text: string;
+  via?: string;
 }
 
 const cursorShape = z.object({ t: z.string(), i: z.string() });
@@ -52,6 +55,22 @@ const SELECT = sql`
   LEFT JOIN leads l ON l.id = c.lead_id
   LEFT JOIN users u ON u.id = c.user_id
   LEFT JOIN call_recordings r ON r.call_id = c.id AND r.call_started_at = c.started_at
+  CROSS JOIN tenants t`;
+
+/**
+ * The lists read every call with a student, by phone and inside the CRM (view call_log), so they show the same calls the
+ * dashboard counts. What only a phone call has (the number dialled, the answer time, the after-call form, the recording)
+ * comes from its own row; a call inside the CRM shows the student's number.
+ */
+const LIST_SELECT = sql`
+  SELECT c.id, c.direction, COALESCE(p.counterparty, l.primary_phone) AS counterparty, c.started_at, p.answered_at, c.ended_at,
+         c.duration_sec, c.outcome, c.lead_id, l.lead_no::text AS lead_no, l.name AS lead_name, c.user_id, u.name AS user_name,
+         p.wrapped_up_at, p.remark, r.status AS recording, c.started_at::text AS started_text, c.via
+  FROM call_log c
+  LEFT JOIN calls p ON c.via = 'phone' AND p.id = c.id AND p.started_at = c.started_at
+  LEFT JOIN leads l ON l.id = c.lead_id
+  LEFT JOIN users u ON u.id = c.user_id
+  LEFT JOIN call_recordings r ON r.call_id = p.id AND r.call_started_at = p.started_at
   CROSS JOIN tenants t`;
 
 @Injectable()
@@ -138,10 +157,11 @@ export class CallsService {
       if (query.outcome) c.push(sql<SqlBool>`c.outcome = ${query.outcome}`);
       if (query.from) c.push(sql<SqlBool>`c.started_at >= (${query.from}::date::timestamp AT TIME ZONE t.timezone)`);
       if (query.to) c.push(sql<SqlBool>`c.started_at < ((${query.to}::date + 1)::timestamp AT TIME ZONE t.timezone)`);
-      if (query.unwrapped !== undefined) c.push(query.unwrapped ? sql<SqlBool>`(c.wrapped_up_at IS NULL AND c.lead_id IS NOT NULL AND c.outcome = 'connected')` : sql<SqlBool>`c.wrapped_up_at IS NOT NULL`);
+      // Only a phone call has an after-call form.
+      if (query.unwrapped !== undefined) c.push(query.unwrapped ? sql<SqlBool>`(c.via = 'phone' AND p.wrapped_up_at IS NULL AND c.lead_id IS NOT NULL AND c.outcome = 'connected')` : sql<SqlBool>`p.wrapped_up_at IS NOT NULL`);
       if (after) c.push(sql<SqlBool>`(c.started_at, c.id) < (${after.t}::timestamptz, ${after.i}::uuid)`);
 
-      const { rows } = await sql<Row>`${SELECT} WHERE ${sql.join(c, sql` AND `)} ORDER BY c.started_at DESC, c.id DESC LIMIT ${query.limit + 1}`.execute(trx);
+      const { rows } = await sql<Row>`${LIST_SELECT} WHERE ${sql.join(c, sql` AND `)} ORDER BY c.started_at DESC, c.id DESC LIMIT ${query.limit + 1}`.execute(trx);
       const page = toPage(rows, query.limit, (last) => ({ t: last.started_text, i: last.id }));
       return { items: page.items.map(toView), nextCursor: page.nextCursor };
     });
@@ -153,7 +173,7 @@ export class CallsService {
       await this.access.get(trx, auth, leadId);
       const after = decodeCursor(query.cursor, cursorShape);
       const { rows } = await sql<Row>`
-        ${SELECT} WHERE c.lead_id = ${leadId}::uuid ${after ? sql`AND (c.started_at, c.id) < (${after.t}::timestamptz, ${after.i}::uuid)` : sql``}
+        ${LIST_SELECT} WHERE c.lead_id = ${leadId}::uuid ${after ? sql`AND (c.started_at, c.id) < (${after.t}::timestamptz, ${after.i}::uuid)` : sql``}
         ORDER BY c.started_at DESC, c.id DESC LIMIT ${query.limit + 1}`.execute(trx);
       const page = toPage(rows, query.limit, (last) => ({ t: last.started_text, i: last.id }));
       return { items: page.items.map(toView), nextCursor: page.nextCursor };
@@ -236,5 +256,6 @@ function toView(r: Row): CallView {
     lead: r.lead_id ? { id: r.lead_id, leadNo: r.lead_no ?? '', name: r.lead_name ?? '' } : null,
     user: r.user_id ? { id: r.user_id, name: r.user_name ?? '' } : null,
     wrappedUp: r.wrapped_up_at !== null, remark: r.remark, recording: (r.recording as CallView['recording'] | null) ?? 'none',
+    via: r.via === 'app' ? 'app' : 'phone',
   };
 }

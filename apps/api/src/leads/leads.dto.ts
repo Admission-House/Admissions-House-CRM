@@ -16,6 +16,10 @@ export const followUpInputSchema = z.object({
   remindBeforeMin: z.number().int().min(0).max(1440).optional(),
 });
 
+/** The columns of the leads table that can be sorted with the arrows in their heading. */
+export const LIST_ORDER_COLUMNS = ['name', 'email', 'course', 'region', 'status', 'source', 'assigned', 'received', 'followup', 'updated'] as const;
+export type ListOrderColumn = (typeof LIST_ORDER_COLUMNS)[number];
+
 export const QUEUES = ['fresh', 'missed', 'followup', 'counselled', 'fee_paid', 'closed'] as const;
 
 // ---------------------------------------------------------------------- list
@@ -37,6 +41,12 @@ export const listLeadsSchema = pageQuerySchema.extend({
   junk: z.enum(['only', 'hide']).optional(),
   followup: z.enum(['today', 'overdue', 'upcoming']).optional(),
   sort: z.enum(['newest', 'oldest', 'updated', 'followup']).default('newest'),
+  /**
+   * Sort by one column of the table, up or down (the arrows in its heading). When given it takes the place of `sort`.
+   * Empty values (no email, no follow-up...) always come last, in both directions.
+   */
+  orderBy: z.enum(LIST_ORDER_COLUMNS).optional(),
+  dir: z.enum(['asc', 'desc']).default('asc'),
 });
 export class ListLeadsDto extends createZodDto(listLeadsSchema) {}
 

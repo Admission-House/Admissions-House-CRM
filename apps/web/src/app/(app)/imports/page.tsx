@@ -1,6 +1,6 @@
 'use client';
 
-import { Download, FileUp } from 'lucide-react';
+import { Download, FileUp, Square } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PendingColleges } from '@/components/leads/pending-colleges';
 import { Badge, Button, Card, Empty, Field, Notice, PageHeader, Panel, Select, Spinner, Tabs } from '@/components/ui';
@@ -40,7 +40,7 @@ const FIELD_LABEL: Record<string, string> = {
   name: 'Name', phone: 'Phone', email: 'Email', level: 'Course level', mode: 'Study mode', stream: 'Stream', city: 'City', interest: 'Interest',
   utm_source: 'UTM source', utm_medium: 'UTM medium', utm_campaign: 'UTM campaign', utm_term: 'UTM term', utm_content: 'UTM content',
 };
-const STATUS_LABEL: Record<Batch['status'], { label: string; tone: 'warn' | 'info' | 'ok' | 'neutral' }> = { queued: { label: 'Waiting', tone: 'warn' }, processing: { label: 'Filing leads', tone: 'info' }, done: { label: 'Done', tone: 'ok' }, cancelled: { label: 'Cancelled', tone: 'neutral' } };
+const STATUS_LABEL: Record<Batch['status'], { label: string; tone: 'warn' | 'info' | 'ok' | 'neutral' }> = { queued: { label: 'Waiting', tone: 'warn' }, processing: { label: 'Filing leads', tone: 'info' }, done: { label: 'Done', tone: 'ok' }, cancelled: { label: 'Stopped', tone: 'neutral' } };
 const errorText = (e: unknown) => (e instanceof ApiError ? e.message : 'Cannot reach the server. Try again.');
 
 function Totals({ items }: { items: { label: string; value: number; tone?: string }[] }) {
@@ -53,10 +53,29 @@ function Totals({ items }: { items: { label: string; value: number; tone?: strin
 
 // ------------------------------------------------------------------ progress
 
-function BatchProgress({ id, onDone }: { id: string; onDone: () => void }) {
+/**
+ * One import, with its progress. While it runs it can be stopped: `stopIds` are all the imports to stop together
+ * (the parts of one big file); the leads already filed stay.
+ */
+function BatchProgress({ id, onDone, stopIds }: { id: string; onDone: () => void; stopIds?: readonly string[] }) {
   const batch = useApi<Batch>(`/leads/import/${id}`);
   const running = batch.data?.status === 'queued' || batch.data?.status === 'processing';
   const reload = batch.reload;
+  const [stopping, setStopping] = useState(false);
+  const [stopError, setStopError] = useState<string | null>(null);
+
+  async function stop() {
+    setStopping(true);
+    setStopError(null);
+    try {
+      for (const one of stopIds ?? [id]) await api(`/leads/import/${one}/cancel`, { method: 'POST' });
+      reload();
+    } catch (e) {
+      setStopError(errorText(e));
+    } finally {
+      setStopping(false);
+    }
+  }
 
   useEffect(() => {
     if (!running) return;
@@ -81,6 +100,13 @@ function BatchProgress({ id, onDone }: { id: string; onDone: () => void }) {
       <div className="flex items-center justify-between text-sm"><span className="font-medium">{b.fileName}</span><Badge tone={STATUS_LABEL[b.status].tone}>{STATUS_LABEL[b.status].label}</Badge></div>
       <div className="h-2.5 overflow-hidden rounded-full bg-head" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label="Import progress"><div className="h-full rounded-full bg-teal-600 transition-all" style={{ width: `${pct}%` }} /></div>
       <Totals items={[{ label: 'New leads', value: b.totals.created, tone: 'text-ok' }, { label: 'Added to existing', value: b.totals.attached }, { label: 'Refused as repeats', value: b.totals.rejected }, { label: 'Failed', value: b.totals.failed, tone: b.totals.failed ? 'text-bad' : undefined }, { label: 'Skipped rows', value: b.totals.invalid, tone: b.totals.invalid ? 'text-warn' : undefined }]} />
+      {b.status === 'cancelled' && <Notice>Stopped. The {b.totals.processed.toLocaleString('en-IN')} rows filed before the stop stay in the CRM; the rest were not imported.</Notice>}
+      {stopError && <Notice tone="bad">{stopError}</Notice>}
+      {running && (
+        <Button variant="danger" size="sm" loading={stopping} onClick={() => void stop()}>
+          <Square className="h-3.5 w-3.5" aria-hidden /> {stopIds && stopIds.length > 1 ? 'Stop the whole import' : 'Stop this import'}
+        </Button>
+      )}
       {b.totals.invalid > 0 && !running && <Button variant="secondary" size="sm" onClick={() => void download(`/leads/import/${b.id}/problems.csv`)}><Download className="h-3.5 w-3.5" aria-hidden /> Download the skipped rows</Button>}
     </div>
   );
@@ -100,6 +126,9 @@ function ImportLeads({ onImported }: { onImported: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [batchId, setBatchId] = useState<string | null>(null);
+  const [batchIds, setBatchIds] = useState<string[]>([]);
+  // Set by Stop while the parts of a big file are still being sent: no further part is sent.
+  const stopSending = useRef(false);
   // A big CSV is cut into parts and sent one after the other; `sent` counts the parts the server has taken.
   const [big, setBig] = useState<{ parts: string[]; rows: number } | null>(null);
   const [sent, setSent] = useState(0);
@@ -148,10 +177,13 @@ function ImportLeads({ onImported }: { onImported: () => void }) {
     setBusy(true);
     setError(null);
     setSent(0);
+    stopSending.current = false;
+    const ids: string[] = [];
     try {
       const pieces = big ? big.parts.map((text, i) => new File([text], `${file.name.replace(/\.csv$/i, '')} (part ${i + 1} of ${big.parts.length}).csv`, { type: 'text/csv' })) : [file];
       let first: string | null = null;
       for (const piece of pieces) {
+        if (stopSending.current) break;
         const form = new FormData();
         form.set('file', piece);
         form.set('sourceId', sourceId);
@@ -159,9 +191,14 @@ function ImportLeads({ onImported }: { onImported: () => void }) {
         if (assign === 'user') form.set('userId', userId);
         form.set('mapping', JSON.stringify(mapping));
         const res = await apiRaw('/leads/import', { method: 'POST', body: form });
-        first ??= ((await res.json()) as Batch).id;
+        const made = ((await res.json()) as Batch).id;
+        first ??= made;
+        ids.push(made);
         setSent((n) => n + 1);
       }
+      // Stopped while sending: the parts already sent are stopped too.
+      if (stopSending.current) for (const one of ids) await api(`/leads/import/${one}/cancel`, { method: 'POST' }).catch(() => undefined);
+      setBatchIds(ids);
       setBatchId(first);
     } catch (e) {
       setError(errorText(e));
@@ -171,7 +208,7 @@ function ImportLeads({ onImported }: { onImported: () => void }) {
   }
 
   function reset() {
-    setFile(null); setPreview(null); setMapping({}); setBatchId(null); setError(null); setBig(null); setSent(0);
+    setFile(null); setPreview(null); setMapping({}); setBatchId(null); setBatchIds([]); setError(null); setBig(null); setSent(0);
     if (input.current) input.current.value = '';
   }
 
@@ -179,7 +216,7 @@ function ImportLeads({ onImported }: { onImported: () => void }) {
     return (
       <Panel title="Importing">
         {big && <Notice>Your file was sent in {big.parts.length} parts of up to {PART_ROWS.toLocaleString('en-IN')} rows. They are filed one after the other in the background: open the History tab to follow each part. The first part is shown below.</Notice>}
-        <BatchProgress id={batchId} onDone={onImported} />
+        <BatchProgress id={batchId} onDone={onImported} stopIds={batchIds} />
         <div className="mt-4"><Button variant="secondary" onClick={reset}>Import another file</Button></div>
       </Panel>
     );
@@ -235,7 +272,12 @@ function ImportLeads({ onImported }: { onImported: () => void }) {
               <Field label="Give them to" htmlFor="ia"><Select id="ia" value={assign} onChange={(e) => setAssign(e.target.value as typeof assign)}><option value="auto">Counsellors automatically</option><option value="user">One person</option><option value="none">Nobody for now</option></Select></Field>
               {assign === 'user' && <Field label="Person" htmlFor="iu" required><Select id="iu" value={userId} onChange={(e) => setUserId(e.target.value)}><option value="">Choose a person</option>{people.data?.items.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.role.name})</option>)}</Select></Field>}
             </div>
-            {busy && big && <p className="mt-4 text-sm text-muted" role="status">Sending part {Math.min(sent + 1, big.parts.length)} of {big.parts.length}. Keep this page open until it finishes.</p>}
+            {busy && big && (
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <p className="text-sm text-muted" role="status">Sending part {Math.min(sent + 1, big.parts.length)} of {big.parts.length}. Keep this page open until it finishes.</p>
+                <Button variant="danger" size="sm" onClick={() => { stopSending.current = true; }}><Square className="h-3.5 w-3.5" aria-hidden /> Stop</Button>
+              </div>
+            )}
             <div className="mt-5 flex gap-2"><Button onClick={() => void start()} loading={busy} disabled={!canStart}>Import {preview.totals.valid.toLocaleString("en-IN")} {preview.totals.valid === 1 ? "lead" : "leads"}</Button><Button variant="secondary" onClick={reset}>Start over</Button></div>
           </Panel>
         </>

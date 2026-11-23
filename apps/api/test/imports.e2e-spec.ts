@@ -406,6 +406,52 @@ describe('importing leads', () => {
   });
 });
 
+// ================================================================== stopping
+
+describe('stopping an import', () => {
+  it('stops a running import: the leads filed so far stay, the rest are not filed', async () => {
+    const svc = app.get(ImportsService);
+    const rows = Array.from({ length: 80 }, (_v, i) => `Stopper ${i},${phone()}`);
+    // Keep the import from being filed while the request is answered, so it is still waiting.
+    const hold = vi.spyOn(svc, 'process').mockResolvedValueOnce(undefined);
+    const res = await start(t.admin!, file(csv('Name,Phone', ...rows)), { assign: 'none' });
+    hold.mockRestore();
+    expect(res.statusCode, res.body).toBe(202);
+    const id = res.json().id as string;
+    expect(res.json().status).toBe('queued');
+
+    // File one chunk (a tiny time budget stops after the first), then stop.
+    await svc.process(fx.tenantId, id, 1);
+    const stop = await api.call('POST', `/leads/import/${id}/cancel`, t.admin!);
+    expect(stop.statusCode, stop.body).toBe(200);
+    expect(stop.json().status).toBe('cancelled');
+    const filed = stop.json().totals.processed as number;
+    expect(filed).toBeGreaterThan(0);
+    expect(filed).toBeLessThan(80);
+
+    // Nothing more is filed afterwards, however often the worker comes by.
+    await svc.process(fx.tenantId, id);
+    await svc.sweepSafely();
+    const after = (await api.call('GET', `/leads/import/${id}`, t.admin!)).json();
+    expect(after.status).toBe('cancelled');
+    expect(after.totals.processed).toBe(filed);
+    const count = (await owner.query(`SELECT count(*) FROM leads WHERE tenant_id = $1 AND name LIKE 'Stopper %'`, [fx.tenantId])).rows[0].count;
+    expect(Number(count)).toBe(filed);
+    expect((await owner.query(`SELECT rows FROM lead_import_batches WHERE id = $1`, [id])).rows[0].rows).toEqual([]);
+    const audit = await owner.query(`SELECT action FROM audit_logs WHERE tenant_id = $1 AND entity_id = $2 AND action = 'lead_import.cancel'`, [fx.tenantId, id]);
+    expect(audit.rowCount).toBe(1);
+  });
+
+  it('leaves a finished import as it is, and only lets people who import stop one', async () => {
+    const done = await runImport(t.admin!, file(csv('Name,Phone', `Finished One,${phone()}`)), { assign: 'none' });
+    const again = await api.call('POST', `/leads/import/${done.id}/cancel`, t.admin!);
+    expect(again.statusCode, again.body).toBe(200);
+    expect(again.json().status).toBe('done');
+    expect((await api.call('POST', `/leads/import/${done.id}/cancel`, t.lc1!)).statusCode).toBe(403);
+    expect((await api.call('POST', '/leads/import/00000000-0000-7000-8000-000000000000/cancel', t.admin!)).statusCode).toBe(404);
+  });
+});
+
 // ================================================================== access
 
 describe('who may import', () => {

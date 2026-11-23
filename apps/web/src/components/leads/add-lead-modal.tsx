@@ -1,13 +1,13 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Button, Field, Input, Notice, Select, Textarea } from '@/components/ui';
 import { Modal } from '@/components/ui/modal';
 import { LocationPicker, type Place } from '@/components/ui/location-picker';
+import { SearchSelect, type SearchOption } from '@/components/ui/search-select';
 import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import type { Page, SourceOption, UserOption } from '@/lib/types';
-import { useApi } from '@/lib/use-api';
 
 interface CollegeItem {
   id: string;
@@ -29,21 +29,37 @@ const nowLocal = () => {
  */
 export function AddLeadModal({ sources, people, onClose, onCreated }: { sources: SourceOption[]; people: UserOption[]; onClose: () => void; onCreated: (id: string) => void }) {
   const { can } = useAuth();
-  const [form, setForm] = useState({ name: '', phone: '', email: '', sourceId: '', studyMode: '', intent: '', courseId: '', collegeId: '', expectedClosureOn: '', followUpAt: '', followUpNote: '', assignTo: '', note: '' });
+  const [form, setForm] = useState({ name: '', phone: '', email: '', sourceId: '', studyMode: '', intent: '', expectedClosureOn: '', followUpAt: '', followUpNote: '', assignTo: '', note: '' });
   const [place, setPlace] = useState<Place[]>([]);
+  const [course, setCourse] = useState<SearchOption | null>(null);
+  const [college, setCollege] = useState<SearchOption | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const on = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const existingId = (error?.details?.existing as { id?: string } | undefined)?.id;
   const fe = (n: string) => error?.fieldErrors.find((f) => f.field === n)?.message;
 
-  const courses = useApi<Page<{ id: string; name: string; level: string }>>(can('master.read') ? '/courses' : null, { limit: 100 });
-  // The universities that offer what the student asked for: online ones when the study mode is online.
-  const collegeQuery = useMemo(
-    () => ({ limit: 50, courseId: form.courseId || undefined, locationId: place[0]?.id, mode: form.studyMode || undefined }),
-    [form.courseId, form.studyMode, place],
+  const canRead = can('master.read');
+  // Both lists are searched on the server as the person types, so none is cut short however long it gets.
+  const loadCourses = useCallback(
+    async (q: string, signal: AbortSignal): Promise<SearchOption[]> => {
+      if (!canRead) return [];
+      const r = await api<Page<{ id: string; name: string; level: string }>>('/courses', { query: { limit: 100, ...(q && { q }) }, signal });
+      return r.items.map((c) => ({ id: c.id, label: c.name, note: c.level }));
+    },
+    [canRead],
   );
-  const colleges = useApi<Page<CollegeItem>>(can('master.read') ? '/colleges' : null, collegeQuery);
+  // The universities that offer what the student asked for: online ones when the study mode is online.
+  const courseId = course?.id;
+  const placeId = place[0]?.id;
+  const loadColleges = useCallback(
+    async (q: string, signal: AbortSignal): Promise<SearchOption[]> => {
+      if (!canRead) return [];
+      const r = await api<Page<CollegeItem>>('/colleges', { query: { limit: 100, ...(q && { q }), courseId, ...(courseId && { includeUnlisted: 'true' }), locationId: placeId, mode: form.studyMode || undefined }, signal });
+      return r.items.map((c) => ({ id: c.id, label: c.location ? `${c.name}, ${c.location.name}` : c.name }));
+    },
+    [canRead, courseId, placeId, form.studyMode],
+  );
 
   async function submit(e: React.FormEvent, anyway = false) {
     e.preventDefault();
@@ -54,7 +70,7 @@ export function AddLeadModal({ sources, people, onClose, onCreated }: { sources:
       if (form.email.trim()) body.email = form.email.trim();
       if (form.studyMode) body.studyMode = form.studyMode;
       if (form.intent) body.intent = form.intent;
-      if (form.courseId) body.interestedCourseId = form.courseId;
+      if (course) body.interestedCourseId = course.id;
       if (place[0]) body.interestedLocationId = place[0].id;
       if (form.expectedClosureOn) body.expectedClosureOn = form.expectedClosureOn;
       if (form.followUpAt) body.followUp = { dueAt: new Date(form.followUpAt).toISOString(), ...(form.followUpNote.trim() && { note: form.followUpNote.trim() }) };
@@ -63,7 +79,7 @@ export function AddLeadModal({ sources, people, onClose, onCreated }: { sources:
       if (anyway) body.allowUnavailable = true;
       const created = await api<{ id: string }>('/leads', { method: 'POST', body });
       // The university the student liked becomes the first recommendation. The lead is saved either way.
-      if (form.collegeId && can('shortlist.manage')) await api(`/leads/${created.id}/recommendations`, { method: 'POST', body: { collegeId: form.collegeId } }).catch(() => undefined);
+      if (college && can('shortlist.manage')) await api(`/leads/${created.id}/recommendations`, { method: 'POST', body: { collegeId: college.id } }).catch(() => undefined);
       onCreated(created.id);
     } catch (err) {
       setError(err instanceof ApiError ? err : new ApiError(0, 'NETWORK', 'Cannot reach the server.'));
@@ -98,22 +114,24 @@ export function AddLeadModal({ sources, people, onClose, onCreated }: { sources:
         <p className="border-t border-line pt-4 text-xs font-semibold uppercase tracking-wide text-muted">What the student is looking for</p>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Study mode" htmlFor="m" hint="Online shows only the universities that offer online courses">
-            <Select id="m" value={form.studyMode} onChange={(e) => setForm((f) => ({ ...f, studyMode: e.target.value, collegeId: '' }))}>
+            <Select id="m" value={form.studyMode} onChange={(e) => { setForm((f) => ({ ...f, studyMode: e.target.value })); setCollege(null); }}>
               <option value="">Not sure yet</option><option value="online">Online</option><option value="regular">Regular</option>
             </Select>
           </Field>
           <Field label="Course" htmlFor="c" error={fe('interestedCourseId')}>
-            <Select id="c" value={form.courseId} onChange={(e) => setForm((f) => ({ ...f, courseId: e.target.value, collegeId: '' }))}>
-              <option value="">Not chosen yet</option>
-              {courses.data?.items.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </Select>
+            <SearchSelect id="c" value={course} onChange={(c) => { setCourse(c); setCollege(null); }} load={loadCourses} placeholder="Type a course, e.g. MBA" emptyText="No course matches" />
           </Field>
-          <Field label="Location the student is searching in" htmlFor="l" error={fe('interestedLocationId')}><LocationPicker id="l" value={place} onChange={(p) => { setPlace(p); setForm((f) => ({ ...f, collegeId: '' })); }} /></Field>
-          <Field label="University" htmlFor="u" hint={colleges.data && colleges.data.items.length === 0 ? 'No university matches. You can add one later from the lead.' : 'Added to the lead as recommended'}>
-            <Select id="u" value={form.collegeId} onChange={on('collegeId')} disabled={!can('shortlist.manage')}>
-              <option value="">Not chosen yet</option>
-              {colleges.data?.items.map((c) => <option key={c.id} value={c.id}>{c.name}{c.location ? `, ${c.location.name}` : ''}</option>)}
-            </Select>
+          <Field label="Location the student is searching in" htmlFor="l" error={fe('interestedLocationId')}><LocationPicker id="l" value={place} onChange={(p) => { setPlace(p); setCollege(null); }} /></Field>
+          <Field label="University" htmlFor="u" hint="Added to the lead as recommended">
+            <SearchSelect
+              id="u"
+              value={college}
+              onChange={setCollege}
+              load={loadColleges}
+              disabled={!can('shortlist.manage')}
+              placeholder="Type a university name"
+              emptyText="No university matches. You can add one later from the lead."
+            />
           </Field>
         </div>
 

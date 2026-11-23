@@ -1,3 +1,4 @@
+import { AuditService } from '../audit/audit.service.js';
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { sql } from 'kysely';
 import { scopeCondition } from '../access/scope.js';
@@ -83,6 +84,7 @@ export class ImportsService implements OnModuleInit {
     @Inject(ENV) private readonly env: Env,
   
     private readonly jobs: JobRegistry,
+    private readonly audit: AuditService,
   ) {}
 
   onModuleInit(): void {
@@ -170,6 +172,27 @@ export class ImportsService implements OnModuleInit {
 
   get(auth: AuthContext, id: string): Promise<BatchView> {
     return this.db.withTenant(auth.tenantId, async (trx) => toView(await this.one(trx, auth, id)));
+  }
+
+  /**
+   * Stops an import that is waiting or running. The leads already filed stay (each chunk is filed whole, so none is
+   * half saved); the rows not reached yet are dropped. Stopping one that has finished changes nothing.
+   */
+  cancel(auth: AuthContext, id: string): Promise<BatchView> {
+    return this.db.withTenant(auth.tenantId, async (trx) => {
+      await this.one(trx, auth, id);
+      // Waits for a chunk that is being filed right now, so the counts saved with it are kept.
+      const { rows } = await sql<{ next_row: number }>`
+        UPDATE lead_import_batches SET status = 'cancelled', finished_at = now(), rows = '[]'::jsonb
+        WHERE id = ${id} AND status IN ('queued', 'processing') RETURNING next_row`.execute(trx);
+      if (rows[0]) {
+        await this.audit.write(trx, {
+          tenantId: auth.tenantId, actorId: auth.userId, action: 'lead_import.cancel', entity: 'lead_import', entityId: id,
+          after: { rowsFiled: rows[0].next_row }, ip: auth.ip, requestId: auth.requestId,
+        });
+      }
+      return toView(await this.one(trx, auth, id));
+    });
   }
 
   /** The rows that were left out, as a CSV that can be corrected and imported again. */

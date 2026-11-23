@@ -284,6 +284,64 @@ describe('the lead list', () => {
     expect(due).toEqual([...due].sort((x, y) => x - y));
   });
 
+  /** Every lead for a column sort, in small pages so the page marker is used many times. */
+  async function byColumn(token: string, column: string, dir: 'asc' | 'desc'): Promise<{ id: string; name: string; email: string | null; createdAt: string; nextFollowupAt: string | null }[]> {
+    const out: { id: string; name: string; email: string | null; createdAt: string; nextFollowupAt: string | null }[] = [];
+    let cursor: string | null = null;
+    let pages = 0;
+    do {
+      const res = await api.call('GET', `/leads?limit=3&orderBy=${column}&dir=${dir}${cursor ? `&cursor=${cursor}` : ''}`, token);
+      expect(res.statusCode, res.body).toBe(200);
+      out.push(...res.json().items);
+      cursor = res.json().nextCursor;
+      pages++;
+    } while (cursor && pages < 500);
+    return out;
+  }
+
+  it.each(['name', 'email', 'course', 'region', 'status', 'source', 'assigned', 'received', 'followup', 'updated'])(
+    'sorted by the %s column, up or down, pages through every lead exactly once',
+    async (column) => {
+      // Two leads with the same name and two without an email, so ties and empty values are crossed by the pages.
+      await lead(t.sa!, { name: 'Same Name Sorting', email: 'zz.sort@example.com' });
+      await lead(t.sa!, { name: 'Same Name Sorting' });
+      const total = Number((await owner.query(`SELECT count(*) FROM leads WHERE tenant_id = $1 AND deleted_at IS NULL`, [fx.tenantId])).rows[0].count);
+      for (const dir of ['asc', 'desc'] as const) {
+        const seen = await byColumn(t.sa!, column, dir);
+        expect(new Set(seen.map((l) => l.id)).size, `${column} ${dir}`).toBe(seen.length);
+        expect(seen.length, `${column} ${dir}`).toBe(total);
+      }
+    },
+  );
+
+  it('sorts by name and by time in the right order, and puts leads without the value last both ways', async () => {
+    const expected = async (dir: string) =>
+      (await owner.query(`SELECT id FROM leads WHERE tenant_id = $1 AND deleted_at IS NULL ORDER BY lower(name) ${dir}, id ${dir}`, [fx.tenantId])).rows.map((r) => r.id);
+    expect((await byColumn(t.sa!, 'name', 'asc')).map((l) => l.id)).toEqual(await expected('ASC'));
+    expect((await byColumn(t.sa!, 'name', 'desc')).map((l) => l.id)).toEqual(await expected('DESC'));
+
+    const received = (await byColumn(t.sa!, 'received', 'desc')).map((l) => Date.parse(l.createdAt));
+    expect(received).toEqual([...received].sort((x, y) => y - x));
+
+    for (const dir of ['asc', 'desc'] as const) {
+      const emails = (await byColumn(t.sa!, 'email', dir)).map((l) => l.email);
+      const firstEmpty = emails.findIndex((e) => !e);
+      expect(firstEmpty, 'some leads have no email').toBeGreaterThan(0);
+      expect(emails.slice(firstEmpty).every((e) => !e), `empty emails come last (${dir})`).toBe(true);
+      const due = (await byColumn(t.sa!, 'followup', dir)).map((l) => l.nextFollowupAt);
+      const firstNone = due.findIndex((d) => !d);
+      if (firstNone >= 0) expect(due.slice(firstNone).every((d) => !d), `leads without a follow-up come last (${dir})`).toBe(true);
+    }
+  });
+
+  it('keeps a person who may not see sources from sorting by source, and refuses an unknown column', async () => {
+    const res = await api.call('GET', '/leads?limit=5&orderBy=source&dir=asc', t.lc1!);
+    expect(res.statusCode, res.body).toBe(200);
+    expect(errorCode(await api.call('GET', '/leads?orderBy=phone', t.sa!))).toBe('VALIDATION_FAILED');
+    expect(errorCode(await api.call('GET', '/leads?orderBy=name&dir=sideways', t.sa!))).toBe('VALIDATION_FAILED');
+    expect(errorCode(await api.call('GET', '/leads?orderBy=name&cursor=forged', t.sa!))).toBe('INVALID_CURSOR');
+  });
+
   it('refuses a damaged page marker and an oversized page', async () => {
     expect(errorCode(await api.call('GET', '/leads?cursor=forged', t.sa!))).toBe('INVALID_CURSOR');
     expect(errorCode(await api.call('GET', '/leads?limit=500', t.sa!))).toBe('VALIDATION_FAILED');

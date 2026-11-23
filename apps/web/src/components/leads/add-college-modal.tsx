@@ -2,12 +2,11 @@
 
 import { useState } from 'react';
 import { Button, Field, Input, Notice, Select } from '@/components/ui';
+import { CoursePicker } from '@/components/ui/course-picker';
 import { LocationPicker, type Place } from '@/components/ui/location-picker';
 import { Modal } from '@/components/ui/modal';
 import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import type { Page } from '@/lib/types';
-import { useApi } from '@/lib/use-api';
 
 /**
  * Adds an institute that is not in the list, with one course. Someone who manages the lists adds it for
@@ -15,7 +14,6 @@ import { useApi } from '@/lib/use-api';
  */
 export function AddCollegeModal({ initialName = '', onClose, onDone }: { initialName?: string; onClose: () => void; onDone: (waitsForReview: boolean) => void }) {
   const { can } = useAuth();
-  const courses = useApi<Page<{ id: string; name: string; level: string }>>('/courses', { limit: 100 });
   const [name, setName] = useState(initialName);
   const [place, setPlace] = useState<Place[]>([]);
   const [courseId, setCourseId] = useState('');
@@ -54,10 +52,7 @@ export function AddCollegeModal({ initialName = '', onClose, onDone }: { initial
         <Field label="Name of the institute"><Input value={name} onChange={(e) => setName(e.target.value)} maxLength={150} /></Field>
         <Field label="City or state"><LocationPicker value={place} onChange={setPlace} /></Field>
         <Field label="Course it offers" hint="You can add more courses later.">
-          <Select value={courseId} onChange={(e) => setCourseId(e.target.value)}>
-            <option value="">No course yet</option>
-            {courses.data?.items.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.level})</option>)}
-          </Select>
+          <CoursePicker value={courseId} onChange={setCourseId} placeholder="No course yet. Type to choose one" />
         </Field>
         {courseId && (
           <div className="grid gap-4 sm:grid-cols-2">

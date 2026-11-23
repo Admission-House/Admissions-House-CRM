@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { sql, SqlBool } from 'kysely';
+import { sql, SqlBool, type RawBuilder } from 'kysely';
 import { z } from 'zod';
 import { leadVisibility } from '../access/lead-scope.js';
 import { scopeCondition } from '../access/scope.js';
@@ -35,6 +35,7 @@ import type {
   CreateLeadDto,
   ExportLeadsDto,
   ListLeadsDto,
+  ListOrderColumn,
   UpdateLeadDto,
 } from './leads.dto.js';
 
@@ -126,6 +127,28 @@ interface LockedLead {
 export const MAX_TRANSFER = 2000;
 
 const cursorShape = z.object({ t: z.string(), i: z.string() });
+/** The cursor of a column sort: the value (null when empty) and the id of the last lead shown. */
+const columnCursor = z.object({ v: z.string().nullable(), i: z.string() });
+
+/** What the Course and Region columns show: the chosen one, else what the import wrote in the note. */
+const COURSE_EXPR = sql`COALESCE((SELECT c.name FROM courses c WHERE c.id = l.interested_course_id),
+                        NULLIF(CASE WHEN split_part(l.interest_note, ' | ', 1) ~ '^(Stream|City): ' THEN '' ELSE split_part(l.interest_note, ' | ', 1) END, ''))`;
+const REGION_EXPR = sql`COALESCE((SELECT loc.name FROM locations loc WHERE loc.id = l.interested_location_id),
+                        substring(l.interest_note from 'City: ([^|]+)'))`;
+
+/** The value each sortable column is ordered by. Words are compared without regard to capitals. */
+const ORDER_KEYS: Record<ListOrderColumn, { key: RawBuilder<unknown>; type: 'text' | 'time' }> = {
+  name: { key: sql`lower(l.name)`, type: 'text' },
+  email: { key: sql`lower(NULLIF(l.email, ''))`, type: 'text' },
+  course: { key: sql`lower(${COURSE_EXPR})`, type: 'text' },
+  region: { key: sql`lower(NULLIF(btrim(${REGION_EXPR}), ''))`, type: 'text' },
+  status: { key: sql`lower(s.name)`, type: 'text' },
+  source: { key: sql`lower(src.name)`, type: 'text' },
+  assigned: { key: sql`lower(a.name)`, type: 'text' },
+  received: { key: sql`l.created_at`, type: 'time' },
+  followup: { key: sql`l.next_followup_at`, type: 'time' },
+  updated: { key: sql`l.updated_at`, type: 'time' },
+};
 const activityCursor = z.object({ t: z.string(), i: z.string() });
 
 @Injectable()
@@ -155,6 +178,8 @@ export class LeadsService {
   // ------------------------------------------------------------------- list
 
   list(auth: AuthContext, query: ListLeadsDto): Promise<Page<LeadListItem>> {
+    // Sorting by source would tell someone who may not see sources how leads are grouped by it.
+    if (query.orderBy && !(query.orderBy === 'source' && !canSeeSource(auth))) return this.listByColumn(auth, query, query.orderBy);
     return this.db.withTenant(auth.tenantId, async (trx) => {
       const after = decodeCursor(query.cursor, cursorShape);
       const conditions = this.filters(auth, query);
@@ -180,10 +205,8 @@ export class LeadsService {
         SELECT l.id, l.lead_no::text AS lead_no, l.name, l.primary_phone, l.email, l.intent, l.study_mode,
                l.next_followup_at, l.expected_closure_on::text AS expected_closure_on, l.interest_note,
                l.created_at, l.updated_at, l.assigned_to, a.name AS assignee_name,
-               COALESCE((SELECT c.name FROM courses c WHERE c.id = l.interested_course_id),
-                        NULLIF(CASE WHEN split_part(l.interest_note, ' | ', 1) ~ '^(Stream|City): ' THEN '' ELSE split_part(l.interest_note, ' | ', 1) END, '')) AS course,
-               COALESCE((SELECT loc.name FROM locations loc WHERE loc.id = l.interested_location_id),
-                        substring(l.interest_note from 'City: ([^|]+)')) AS region,
+               ${COURSE_EXPR} AS course,
+               ${REGION_EXPR} AS region,
                s.id AS status_id, s.name AS status_name, s.queue AS status_queue, s.is_open AS status_open,
                ${EFFECTIVE_QUEUE} AS queue, src.id AS source_id, src.name AS source_name,
                (${order.key})::text AS sort_key
@@ -193,6 +216,49 @@ export class LeadsService {
         LIMIT ${query.limit + 1}`.execute(trx);
 
       const page = toPage(rows, query.limit, (last) => ({ t: last.sort_key, i: last.id }));
+      const showSource = canSeeSource(auth);
+      return { items: page.items.map((r) => toListItem(r, showSource)), nextCursor: page.nextCursor };
+    });
+  }
+
+  /**
+   * The list sorted by one column, up or down. Leads without a value in that column come last either way, and the lead id
+   * breaks ties, so paging with the cursor never skips or repeats a lead.
+   */
+  private listByColumn(auth: AuthContext, query: ListLeadsDto, column: ListOrderColumn): Promise<Page<LeadListItem>> {
+    return this.db.withTenant(auth.tenantId, async (trx) => {
+      const after = decodeCursor(query.cursor, columnCursor);
+      const conditions = this.filters(auth, query);
+      const { key, type } = ORDER_KEYS[column];
+      const desc = query.dir === 'desc';
+      const op = desc ? sql`<` : sql`>`;
+      const dir = desc ? sql`DESC` : sql`ASC`;
+      if (after) {
+        if (after.v === null) {
+          conditions.push(sql<SqlBool>`(${key} IS NULL AND l.id ${op} ${after.i}::uuid)`);
+        } else {
+          const value = type === 'time' ? sql`${after.v}::timestamptz` : sql`${after.v}::text`;
+          conditions.push(sql<SqlBool>`(${key} IS NULL OR ${key} ${op} ${value} OR (${key} = ${value} AND l.id ${op} ${after.i}::uuid))`);
+        }
+      }
+      // A time goes into the cursor with its microseconds, so the next page starts exactly after it.
+      const orderValue = type === 'time' ? sql`to_char(${key} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')` : sql`(${key})::text`;
+
+      const { rows } = await sql<ListRow & { order_value: string | null }>`
+        SELECT l.id, l.lead_no::text AS lead_no, l.name, l.primary_phone, l.email, l.intent, l.study_mode,
+               l.next_followup_at, l.expected_closure_on::text AS expected_closure_on, l.interest_note,
+               l.created_at, l.updated_at, l.assigned_to, a.name AS assignee_name,
+               ${COURSE_EXPR} AS course,
+               ${REGION_EXPR} AS region,
+               s.id AS status_id, s.name AS status_name, s.queue AS status_queue, s.is_open AS status_open,
+               ${EFFECTIVE_QUEUE} AS queue, src.id AS source_id, src.name AS source_name,
+               '' AS sort_key, ${orderValue} AS order_value
+        ${FROM_LEADS}
+        WHERE ${sql.join(conditions, sql` AND `)}
+        ORDER BY (${key} IS NULL) ASC, ${key} ${dir}, l.id ${dir}
+        LIMIT ${query.limit + 1}`.execute(trx);
+
+      const page = toPage(rows, query.limit, (last) => ({ v: last.order_value, i: last.id }));
       const showSource = canSeeSource(auth);
       return { items: page.items.map((r) => toListItem(r, showSource)), nextCursor: page.nextCursor };
     });

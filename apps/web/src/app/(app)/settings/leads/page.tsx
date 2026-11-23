@@ -3,6 +3,7 @@
 import { Plus, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Badge, Button, Empty, Field, Input, Notice, Panel, Select, Spinner, Tabs, Textarea } from '@/components/ui';
+import { CoursePicker } from '@/components/ui/course-picker';
 import { Modal } from '@/components/ui/modal';
 import { LocationPicker, type Place } from '@/components/ui/location-picker';
 import { api, ApiError } from '@/lib/api';
@@ -176,7 +177,6 @@ function SourcesTab() {
 
 function RuleForm({ rule, onClose, onSaved }: { rule?: Rule; onClose: () => void; onSaved: () => void }) {
   const sources = useApi<Source[]>('/lead-sources');
-  const courses = useApi<Page<{ id: string; name: string }>>('/courses', { limit: 100 });
   const people = useApi<Page<{ id: string; name: string; role: { key: string | null; name: string } }>>('/users', { limit: 100, status: 'active' });
   const [name, setName] = useState(rule?.name ?? '');
   const [priority, setPriority] = useState(String(rule?.priority ?? 10));
@@ -200,7 +200,7 @@ function RuleForm({ rule, onClose, onSaved }: { rule?: Rule; onClose: () => void
         <p className="text-xs font-semibold uppercase tracking-wide text-muted">When a lead matches</p>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Source" htmlFor="rs"><Select id="rs" value={sourceId} onChange={(e) => setSourceId(e.target.value)}><option value="">Any source</option>{sources.data?.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</Select></Field>
-          <Field label="Course" htmlFor="rc"><Select id="rc" value={courseId} onChange={(e) => setCourseId(e.target.value)}><option value="">Any course</option>{courses.data?.items.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</Select></Field>
+          <Field label="Course" htmlFor="rc"><CoursePicker id="rc" value={courseId} onChange={setCourseId} placeholder="Any course" /></Field>
           <Field label="Study mode" htmlFor="rm"><Select id="rm" value={mode} onChange={(e) => setMode(e.target.value)}><option value="">Any</option><option value="regular">Regular</option><option value="online">Online</option></Select></Field>
           <Field label="Location" htmlFor="rl" hint={rule?.locationId && place.length === 0 ? 'A location is set. Search to change it.' : 'Leave empty for any'}><LocationPicker id="rl" value={place} onChange={setPlace} /></Field>
         </div>

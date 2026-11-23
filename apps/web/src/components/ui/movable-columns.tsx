@@ -65,10 +65,10 @@ export function useColumnOrder(table: string, defaults: readonly string[]): Colu
 }
 
 /** A column heading with a grip to drag it. Dropping it on another heading puts it in that place. */
-export function MovableTh({ id, columns, className, children }: { id: string; columns: ColumnOrder; className?: string; children: ReactNode }) {
+export function MovableTh({ id, columns, className, children, label: name, ariaSort }: { id: string; columns: ColumnOrder; className?: string; children: ReactNode; label?: string; ariaSort?: 'ascending' | 'descending' | 'none' }) {
   const [over, setOver] = useState(false);
   const type = 'application/x-ah-column';
-  const label = typeof children === 'string' ? children : id;
+  const label = name ?? (typeof children === 'string' ? children : id);
 
   function start(e: DragEvent) {
     e.dataTransfer.setData(type, JSON.stringify({ table: columns.table, id }));
@@ -93,6 +93,7 @@ export function MovableTh({ id, columns, className, children }: { id: string; co
 
   return (
     <th
+      aria-sort={ariaSort}
       className={cx(className, over && 'bg-mint-soft')}
       onDragOver={(e) => { if (e.dataTransfer.types.includes(type)) { e.preventDefault(); setOver(true); } }}
       onDragLeave={() => setOver(false)}

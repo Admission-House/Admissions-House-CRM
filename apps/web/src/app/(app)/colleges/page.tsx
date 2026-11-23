@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { AddCollegeModal } from '@/components/leads/add-college-modal';
 import { Badge, Button, Empty, Field, Input, Notice, PageHeader, Panel, Select, Spinner } from '@/components/ui';
+import { CoursePicker } from '@/components/ui/course-picker';
 import { LocationPicker, type Place } from '@/components/ui/location-picker';
 import { Modal } from '@/components/ui/modal';
 import { api, ApiError } from '@/lib/api';
@@ -21,6 +22,8 @@ interface CollegeRow {
   courseCount: number;
   offersOnline: boolean;
   offersRegular: boolean;
+  /** Set on the university itself; null when its course list decides. */
+  studyModes: 'online' | 'regular' | 'both' | null;
 }
 
 interface OfferedCourse {
@@ -37,11 +40,10 @@ interface CollegeDetail extends Omit<CollegeRow, 'courseCount' | 'offersOnline' 
   courses: OfferedCourse[];
 }
 
-interface CourseOption { id: string; name: string; level: string }
-
 const errorText = (e: unknown) => (e instanceof ApiError ? e.message : 'Cannot reach the server. Try again.');
 const rupees = (n: number | null) => (n === null ? '—' : `₹ ${n.toLocaleString('en-IN')}`);
 const MODE_LABEL = { online: 'Online', regular: 'Regular', both: 'Online and regular' } as const;
+const STUDY_MODES_LABEL = { online: 'Online only', regular: 'Regular only', both: 'Online and regular' } as const;
 const place = (l: CollegeRow['location']) => (l ? (l.state ? `${l.name}, ${l.state}` : l.name) : null);
 
 /** A rupee amount typed by hand: empty means "not known". */
@@ -56,10 +58,9 @@ function money(text: string): number | null | 'bad' {
 
 /** Adds a course to a college, or changes its mode, fees and duration. A course not in the list yet can be made here. */
 function CourseForm({ college, offered, onClose, onSaved }: { college: CollegeDetail; offered?: OfferedCourse; onClose: () => void; onSaved: (c: CollegeDetail) => void }) {
-  const courses = useApi<Page<CourseOption>>(offered ? null : '/courses', { limit: 100 });
-  const taken = new Set(college.courses.map((c) => c.course.id));
-  const choices = (courses.data?.items ?? []).filter((c) => !taken.has(c.id));
+  const taken = useMemo(() => new Set(college.courses.map((c) => c.course.id)), [college.courses]);
   const [courseId, setCourseId] = useState(offered?.course.id ?? '');
+  const [makingNew, setMakingNew] = useState(false);
   const [newName, setNewName] = useState('');
   const [newLevel, setNewLevel] = useState('UG');
   const [mode, setMode] = useState<string>(offered?.deliveryMode ?? 'regular');
@@ -68,7 +69,7 @@ function CourseForm({ college, offered, onClose, onSaved }: { college: CollegeDe
   const [years, setYears] = useState(offered?.durationYears?.toString() ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const making = !offered && courseId === 'new';
+  const making = !offered && makingNew;
 
   async function save() {
     setError(null);
@@ -77,7 +78,7 @@ function CourseForm({ college, offered, onClose, onSaved }: { college: CollegeDe
     if (cafFee === 'bad' || annualFee === 'bad') return setError('Fees must be numbers in rupees, or left empty.');
     const durationYears = years.trim() === '' ? null : Number(years);
     if (durationYears !== null && !(durationYears >= 0.5 && durationYears <= 10)) return setError('Duration must be between 0.5 and 10 years, or left empty.');
-    if (!courseId) return setError('Choose a course.');
+    if (!courseId && !making) return setError('Choose a course.');
     if (making && newName.trim().length < 2) return setError('Type the name of the new course.');
     setBusy(true);
     try {
@@ -97,12 +98,15 @@ function CourseForm({ college, offered, onClose, onSaved }: { college: CollegeDe
       <div className="space-y-4">
         {error && <Notice tone="bad">{error}</Notice>}
         {!offered && (
-          <Field label="Course" htmlFor="cf-course" required hint={choices.length === 0 && !courses.loading ? 'No courses in the list yet. Choose "A new course" to add one.' : undefined}>
-            <Select id="cf-course" value={courseId} onChange={(e) => setCourseId(e.target.value)}>
-              <option value="">Choose a course</option>
-              {choices.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.level})</option>)}
-              <option value="new">+ A new course, not in the list</option>
-            </Select>
+          <Field label="Course" htmlFor="cf-course" required>
+            {making ? (
+              <p className="text-sm text-muted">A new course, typed below. <button type="button" onClick={() => setMakingNew(false)} className="font-medium text-info hover:underline">Choose from the list instead</button></p>
+            ) : (
+              <>
+                <CoursePicker id="cf-course" value={courseId} onChange={setCourseId} exclude={taken} />
+                <button type="button" onClick={() => { setMakingNew(true); setCourseId(''); }} className="mt-1.5 text-xs font-medium text-info hover:underline">+ A new course, not in the list</button>
+              </>
+            )}
           </Field>
         )}
         {making && (
@@ -132,6 +136,7 @@ function CourseForm({ college, offered, onClose, onSaved }: { college: CollegeDe
 function EditCollege({ college, onClose, onSaved }: { college: CollegeDetail; onClose: () => void; onSaved: (c: CollegeDetail) => void }) {
   const [name, setName] = useState(college.name);
   const [where, setWhere] = useState<Place[]>(college.location ? [{ id: college.location.id, name: college.location.name, type: college.location.type as Place['type'], state: college.location.state }] : []);
+  const [modes, setModes] = useState<string>(college.studyModes ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -139,7 +144,7 @@ function EditCollege({ college, onClose, onSaved }: { college: CollegeDetail; on
     setBusy(true);
     setError(null);
     try {
-      onSaved(await api<CollegeDetail>(`/colleges/${college.id}`, { method: 'PATCH', body: { name: name.trim(), locationId: where[0]?.id ?? null } }));
+      onSaved(await api<CollegeDetail>(`/colleges/${college.id}`, { method: 'PATCH', body: { name: name.trim(), locationId: where[0]?.id ?? null, studyModes: modes || null } }));
     } catch (e) {
       setError(errorText(e));
       setBusy(false);
@@ -152,6 +157,14 @@ function EditCollege({ college, onClose, onSaved }: { college: CollegeDetail; on
         {error && <Notice tone="bad">{error}</Notice>}
         <Field label="Name of the college" htmlFor="ec-name" required><Input id="ec-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={150} /></Field>
         <Field label="City or state" htmlFor="ec-place" hint="Counsellors find the college by this place."><LocationPicker id="ec-place" value={where} onChange={setWhere} /></Field>
+        <Field label="Study modes" htmlFor="ec-modes" hint="Which study mode shows this university when a counsellor adds a lead. 'Not set' lets its course list decide.">
+          <Select id="ec-modes" value={modes} onChange={(e) => setModes(e.target.value)}>
+            <option value="">Not set</option>
+            <option value="online">Online only</option>
+            <option value="regular">Regular only</option>
+            <option value="both">Online and regular</option>
+          </Select>
+        </Field>
       </div>
       <div className="mt-5 flex justify-end gap-2">
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
@@ -214,10 +227,11 @@ function CollegeView({ id, onClose, onChanged }: { id: string; onClose: () => vo
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <span className="inline-flex items-center gap-1.5 text-muted"><MapPin className="h-3.5 w-3.5" aria-hidden />{place(c.location) ?? 'City not set'}</span>
             {manage && (c.isActive ? <Badge tone="ok">In use</Badge> : <Badge>Switched off</Badge>)}
+            {c.studyModes && <Badge tone="info">{STUDY_MODES_LABEL[c.studyModes]}</Badge>}
             {c.pendingReview && <Badge tone="warn">Added by a counsellor, waiting for review</Badge>}
             {manage && (
               <div className="ml-auto flex gap-2">
-                <Button size="sm" variant="secondary" onClick={() => setEditing(true)}><Pencil className="h-3.5 w-3.5" aria-hidden /> Edit name or city</Button>
+                <Button size="sm" variant="secondary" onClick={() => setEditing(true)}><Pencil className="h-3.5 w-3.5" aria-hidden /> Edit</Button>
                 <Button size="sm" variant={c.isActive ? 'danger' : 'secondary'} loading={busy === 'college'} onClick={() => void switchCollege(!c.isActive)}><Power className="h-3.5 w-3.5" aria-hidden /> {c.isActive ? 'Switch off' : 'Switch on'}</Button>
               </div>
             )}
@@ -327,7 +341,6 @@ export default function CollegesPage() {
 
   const query = useMemo(() => ({ limit: 100, q: debounced || undefined, locationId: where[0]?.id, courseId: courseId || undefined, mode: mode || 'any' }), [debounced, where, courseId, mode]);
   const first = useApi<Page<CollegeRow>>('/colleges', query);
-  const courses = useApi<Page<CourseOption>>('/courses', { limit: 100 });
 
   // "Show more" adds pages after the first; a change of filter starts again.
   const key = JSON.stringify(query);
@@ -379,10 +392,7 @@ export default function CollegesPage() {
             <Input aria-label="Search colleges" placeholder="Search by college name" value={q} onChange={(e) => setQ(e.target.value)} className="pl-8" />
           </div>
           <div className="w-full sm:w-56"><LocationPicker value={where} onChange={setWhere} placeholder="Any city or state" /></div>
-          <Select aria-label="Course" value={courseId} onChange={(e) => setCourseId(e.target.value)} className="w-full sm:w-48">
-            <option value="">Any course</option>
-            {courses.data?.items.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.level})</option>)}
-          </Select>
+          <div className="w-full sm:w-56"><CoursePicker value={courseId} onChange={setCourseId} placeholder="Any course" /></div>
           <Select aria-label="Mode" value={mode} onChange={(e) => setMode(e.target.value)} className="w-full sm:w-40">
             <option value="">Online or regular</option>
             <option value="online">Online</option>
@@ -440,7 +450,7 @@ export default function CollegesPage() {
         )}
       </Panel>
 
-      {open && <CollegeView id={open} onClose={() => setOpen(null)} onChanged={() => { first.reload(); courses.reload(); }} />}
+      {open && <CollegeView id={open} onClose={() => setOpen(null)} onChanged={() => first.reload()} />}
       {adding && <AddCollegeModal onClose={() => setAdding(false)} onDone={() => { setAdding(false); setNotice('The college was added. Open it to add its courses and fees.'); first.reload(); }} />}
     </div>
   );

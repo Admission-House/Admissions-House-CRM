@@ -139,8 +139,6 @@ function Workspace() {
             <Timeline key={`t${version}`} lead={l} />
           </div>
           <div className="space-y-4">
-            <StatusPanel key={`s${l.status.id}${version}`} lead={l} onChanged={changed} />
-            <AssignPanel lead={l} onChanged={changed} />
             <Panel title="Details">
               <dl className="-my-2 divide-y divide-line">
                 {l.source && <Row label="Source">{l.source.name}</Row>}
@@ -153,6 +151,8 @@ function Workspace() {
               </dl>
               {l.interestNote && <p className="mt-3 rounded-md bg-head px-3 py-2 text-xs text-muted">{l.interestNote}</p>}
             </Panel>
+            <StatusPanel key={`s${l.status.id}${version}`} lead={l} onChanged={changed} />
+            <AssignPanel lead={l} onChanged={changed} />
             <PartnerPanel lead={l} />
             <CustomFieldsPanel lead={l} />
           </div>

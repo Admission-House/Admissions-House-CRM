@@ -74,6 +74,14 @@ export class ImportsController {
     return this.imports.get(auth, id);
   }
 
+  /** Stops an import that is waiting or running. Leads already filed stay. */
+  @RequirePermissions('lead.import')
+  @Post(':id/cancel')
+  @HttpCode(200)
+  cancel(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string) {
+    return this.imports.cancel(auth, id);
+  }
+
   /** The rows that were skipped and why, as a CSV. */
   @RequirePermissions('lead.import')
   @Heavy()

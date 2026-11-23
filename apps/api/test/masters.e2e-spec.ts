@@ -317,5 +317,33 @@ describe('a college with no courses listed yet', () => {
     expect(await collegeNames(t.lc1!, 'mode=online')).not.toContain('Gamma College');
     // Asking for a particular course is exact: a college with no courses does not offer it.
     expect(await collegeNames(t.lc1!, `courseId=${ids.btech}&mode=online`)).not.toContain('Zeta Bare College');
+    // ...unless the form picking a university for a student asks to keep the ones not listed yet.
+    expect(await collegeNames(t.lc1!, `courseId=${ids.btech}&mode=online&includeUnlisted=true`)).toContain('Zeta Bare College');
+    // A college that lists courses but not this one is still left out.
+    expect(await collegeNames(t.lc1!, `courseId=${ids.btech}&mode=online&includeUnlisted=true`)).not.toContain('Gamma College');
+  });
+});
+
+describe('study modes set on the university itself', () => {
+  it('decide which mode shows it, over its course list, and can be changed by a list manager only', async () => {
+    const online = await api.call('POST', '/colleges', t.sa!, { name: 'Omega Online University', courses: [], studyModes: 'online' });
+    expect(online.statusCode, online.body).toBe(201);
+    expect(online.json().studyModes).toBe('online');
+    expect(await collegeNames(t.lc1!, 'mode=online')).toContain('Omega Online University');
+    expect(await collegeNames(t.lc1!, 'mode=regular')).not.toContain('Omega Online University');
+
+    const both = await api.call('PATCH', `/colleges/${online.json().id}`, t.sa!, { studyModes: 'both' });
+    expect(both.statusCode, both.body).toBe(200);
+    expect(await collegeNames(t.lc1!, 'mode=regular')).toContain('Omega Online University');
+
+    // Gamma College lists only regular courses; set to online it is shown for online even so.
+    const gamma = (await api.call('GET', '/colleges?q=Gamma', t.sa!)).json().items[0];
+    expect((await api.call('PATCH', `/colleges/${gamma.id}`, t.sa!, { studyModes: 'online' })).statusCode).toBe(200);
+    expect(await collegeNames(t.lc1!, 'mode=online')).toContain('Gamma College');
+    expect((await api.call('PATCH', `/colleges/${gamma.id}`, t.sa!, { studyModes: null })).statusCode).toBe(200);
+    expect(await collegeNames(t.lc1!, 'mode=online')).not.toContain('Gamma College');
+
+    // A counsellor cannot change it.
+    expect((await api.call('PATCH', `/colleges/${online.json().id}`, t.lc1!, { studyModes: 'regular' })).statusCode).toBe(403);
   });
 });

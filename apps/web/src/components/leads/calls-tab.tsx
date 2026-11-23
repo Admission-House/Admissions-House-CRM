@@ -22,6 +22,8 @@ export interface Call {
   wrappedUp: boolean;
   remark: string | null;
   recording: 'none' | 'pending' | 'stored' | 'failed';
+  /** phone: through the telephony provider. app: a voice call inside the CRM, which has no recording or after-call form. */
+  via?: 'phone' | 'app';
 }
 
 export const OUTCOME: Record<string, { label: string; tone: 'ok' | 'bad' | 'warn' | 'neutral' | 'info' }> = {
@@ -137,7 +139,7 @@ export function CallsTab({ lead, onChanged }: { lead: LeadDetail; onChanged: () 
                   <div className="flex items-center justify-end gap-2">
                     {c.recording === 'stored' && can('call.listen') && <Recording callId={c.id} />}
                     {c.recording === 'pending' && <span className="text-xs text-subtle">Recording on its way</span>}
-                    {c.outcome === 'connected' && !c.wrappedUp && can('lead.update') && <Button size="sm" onClick={() => setWrapping(c)}><ClipboardCheck className="h-3.5 w-3.5" aria-hidden /> After-call form</Button>}
+                    {c.outcome === 'connected' && c.via !== 'app' && !c.wrappedUp && can('lead.update') && <Button size="sm" onClick={() => setWrapping(c)}><ClipboardCheck className="h-3.5 w-3.5" aria-hidden /> After-call form</Button>}
                   </div>
                 </td>
               </tr>

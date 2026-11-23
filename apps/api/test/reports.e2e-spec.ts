@@ -237,6 +237,31 @@ describe('in-app voice calls with a lead', () => {
   type Counts = { total: number; connected: number; outgoing: number; talkSec: number; app: number };
   const callsOf = async (who: string) => row(await api.call('GET', '/reports/calls', t.admin!), 'name', who) as Counts | undefined;
 
+  it('are listed in the call history with the phone calls, so the list matches the dashboard count', async () => {
+    const lead = await newLead(t.lc1!, 'History Voice Lead');
+    const talked = await session('lc1', lead, { startedAgo: '4 minutes', guestJoinedAgo: '3 minutes', endedAgo: '1 minute' });
+    const unanswered = await session('lc1', lead, { startedAgo: '2 minutes', endedAgo: '1 minute' });
+    await session('lc1', lead, { kind: 'video', startedAgo: '1 minute', guestJoinedAgo: '1 minute', endedAgo: '30 seconds' }); // video: not listed
+
+    const forLead = (await api.call('GET', `/leads/${lead}/calls?limit=50`, t.lc1!)).json().items as { id: string; via: string; outcome: string; number: string; wrappedUp: boolean; recording: string }[];
+    expect(forLead.map((c) => c.id).sort()).toEqual([talked, unanswered].sort());
+    const one = forLead.find((c) => c.id === talked)!;
+    expect(one).toMatchObject({ via: 'app', outcome: 'connected', wrappedUp: false, recording: 'none' });
+    expect(one.number).toMatch(/^91\d{10}$/);
+    expect(forLead.find((c) => c.id === unanswered)!.outcome).toBe('not_picked');
+
+    // The call history shows them too; an in-app call has no after-call form, so it is not "waiting for the form".
+    const all = (await api.call('GET', `/calls?limit=100&userId=${fx.user('lc1').id}`, t.admin!)).json().items as { id: string }[];
+    expect(all.map((c) => c.id)).toEqual(expect.arrayContaining([talked, unanswered]));
+    const waiting = (await api.call('GET', '/calls?limit=100&unwrapped=true', t.admin!)).json().items as { id: string }[];
+    expect(waiting.map((c) => c.id)).not.toContain(talked);
+
+    // Today's list for one person has as many calls as their dashboard counts.
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    const listed = (await api.call('GET', `/calls?limit=100&from=${today}&to=${today}`, t.lc1!)).json().items.length;
+    expect(listed).toBe((await api.call('GET', '/dashboard', t.lc1!)).json().today.calls.total);
+  });
+
   it('are counted with the phone calls: connected only when the student joined, talk time from then to the end', async () => {
     const before = (await callsOf('lc2')) ?? { total: 0, connected: 0, outgoing: 0, talkSec: 0, app: 0 };
     const dashBefore = (await api.call('GET', '/dashboard', t.lc2!)).json().today.calls;
