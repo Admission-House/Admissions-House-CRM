@@ -6,6 +6,7 @@ import { AuthButton, AuthField, AuthHeading, AuthInput } from '@/components/auth
 import { Notice } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { useCompanySlug } from '@/lib/company-slug';
+import { loginPathFor } from '@/lib/login-path';
 
 function Form() {
   const company = useCompanySlug();
@@ -38,7 +39,7 @@ function Form() {
       {message ? (
         <div className="mt-8 space-y-5">
           <Notice tone="ok">{message}</Notice>
-          <Link href="/login" className="inline-block text-[15px] font-semibold text-brand-600 hover:underline">Back to sign in</Link>
+          <Link href={loginPathFor(company)} className="inline-block text-[15px] font-semibold text-brand-600 hover:underline">Back to sign in</Link>
         </div>
       ) : (
         <form onSubmit={submit} className="mt-8 space-y-6" noValidate>
@@ -47,7 +48,7 @@ function Form() {
             <AuthInput id="email" type="email" value={email} aria-invalid={!!emailError} onChange={(e) => { setEmail(e.target.value); setEmailError(undefined); }} placeholder="Enter email" autoFocus />
           </AuthField>
           <AuthButton type="submit" loading={busy}>Send reset link</AuthButton>
-          <p className="text-center text-[15px]"><Link href="/login" className="font-semibold text-brand-600 hover:underline">Back to sign in</Link></p>
+          <p className="text-center text-[15px]"><Link href={loginPathFor(company)} className="font-semibold text-brand-600 hover:underline">Back to sign in</Link></p>
         </form>
       )}
     </div>

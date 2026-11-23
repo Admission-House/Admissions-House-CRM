@@ -9,6 +9,7 @@ import { ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { BRAND } from '@/lib/brand-config';
 import { useCompanySlug } from '@/lib/company-slug';
+import { forgetCompany, rememberCompany } from '@/lib/login-path';
 import { homePath } from '@/lib/start-page';
 
 const EMAIL_KEY = 'ah.email';
@@ -51,6 +52,10 @@ function SignIn() {
   const { login, status, me } = useAuth();
   const router = useRouter();
   const company = useCompanySlug();
+  // Signed out on this page: from here the company link in the address bar decides.
+  useEffect(() => {
+    if (status === 'anonymous') forgetCompany();
+  }, [status]);
   const savedEmail = useSyncExternalStore(subscribe, readEmail, () => '');
   const [emailTyped, setEmail] = useState<string | null>(null);
   const [remember, setRemember] = useState(true);
@@ -88,6 +93,7 @@ function SignIn() {
     try {
       const res = await login({ tenant: company, email: email.trim(), password, ...(needsCode && mfaCode.trim() && { mfaCode: mfaCode.trim() }) });
       writeEmail(remember ? email.trim() : null);
+      rememberCompany(company);
       router.replace(res.mustChangePassword ? '/change-password' : res.home);
     } catch (err) {
       if (err instanceof ApiError && (err.code === 'MFA_REQUIRED' || err.code === 'MFA_CODE_WRONG')) {

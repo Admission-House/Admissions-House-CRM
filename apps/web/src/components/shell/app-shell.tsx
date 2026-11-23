@@ -6,6 +6,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Avatar, Spinner, cx } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
+import { loginPath } from '@/lib/login-path';
 import { IncomingCalls } from '@/components/communications/incoming-calls';
 import { RealtimeProvider } from '@/lib/realtime';
 import { NAV, permissionsForPath, type NavItem } from '@/lib/nav';
@@ -195,7 +196,7 @@ function UserMenu() {
           <button type="button" role="menuitem" onClick={() => router.push('/change-password')} className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm hover:bg-head">
             <KeyRound className="h-4 w-4 text-muted" aria-hidden /> Change password
           </button>
-          <button type="button" role="menuitem" onClick={() => void logout().then(() => router.replace('/login'))} className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-bad hover:bg-bad-50">
+          <button type="button" role="menuitem" onClick={() => { const to = loginPath(); void logout().then(() => router.replace(to)); }} className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-bad hover:bg-bad-50">
             <LogOut className="h-4 w-4" aria-hidden /> Sign out
           </button>
         </div>
@@ -215,7 +216,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const narrow = useSyncExternalStore(subscribeCollapsed, readCollapsed, () => false);
 
   useEffect(() => {
-    if (status === 'anonymous') router.replace('/login');
+    if (status === 'anonymous') router.replace(loginPath());
     else if (status === 'authenticated' && me?.user.mustChangePassword) router.replace('/change-password');
     else if (status === 'authenticated' && me?.user.mfaSetupRequired) router.replace('/two-step-setup');
   }, [status, me, router]);

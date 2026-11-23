@@ -6,6 +6,7 @@ import { AuthHeading } from '@/components/auth/auth-form';
 import { Setup } from '@/components/account/two-step';
 import { Spinner } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
+import { loginPath } from '@/lib/login-path';
 
 /** Shown to a person whose company requires two-step sign-in and who has not set it up yet. */
 export default function TwoStepSetupPage() {
@@ -13,7 +14,7 @@ export default function TwoStepSetupPage() {
   const router = useRouter();
 
   useEffect(() => {
-    if (status === 'anonymous') router.replace('/login');
+    if (status === 'anonymous') router.replace(loginPath());
     else if (status === 'authenticated' && me && !me.user.mfaSetupRequired) router.replace('/dashboard');
   }, [status, me, router]);
 
@@ -25,7 +26,7 @@ export default function TwoStepSetupPage() {
       <div className="mt-8">
         <Setup
           cancelLabel="Sign out"
-          onCancel={() => void logout().then(() => router.replace('/login'))}
+          onCancel={() => { const to = loginPath(); void logout().then(() => router.replace(to)); }}
           onFinished={() => void reload().then(() => router.replace('/dashboard'))}
         />
       </div>

@@ -6,6 +6,7 @@ import { AuthButton, AuthField, AuthHeading, AuthPassword } from '@/components/a
 import { Notice, Spinner } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import { loginPath } from '@/lib/login-path';
 
 /** Shown after a first sign-in with a one-time password, and reachable later from the account menu. */
 export default function ChangePasswordPage() {
@@ -18,7 +19,7 @@ export default function ChangePasswordPage() {
   const [error, setError] = useState<ApiError | null>(null);
 
   useEffect(() => {
-    if (status === 'anonymous') router.replace('/login');
+    if (status === 'anonymous') router.replace(loginPath());
   }, [status, router]);
 
   if (status !== 'authenticated') return <Spinner />;
