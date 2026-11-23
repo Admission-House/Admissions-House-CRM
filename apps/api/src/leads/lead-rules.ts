@@ -5,19 +5,26 @@ import { normalizePhone } from '../common/phone.js';
 
 export type SearchTerm =
   | { kind: 'lead_no'; value: string }
+  /** 4 to 7 bare digits: a Lead ID, or part of a phone number (the start or the end of it). */
+  | { kind: 'lead_no_or_phone'; value: string; digits: string }
   | { kind: 'phone'; value: string }
   | { kind: 'text'; value: string };
 
 /**
  * Works out what a person typed in the search box.
  *   "1042", "#1042", "LEAD-1042"  a Lead ID
- *   "98765", "+91 98765 43210"    part of a phone number (8 or more digits)
+ *   "98861", "4321"               4 to 7 digits: a Lead ID or part of a phone number, both are tried
+ *   "98765432", "+91 98765 43210" part of a phone number (8 or more digits)
  *   anything else                 a name or email
  * A short run of digits is a Lead ID, because no phone number is that short.
  */
 export function classifySearch(raw: string): SearchTerm | null {
   const term = raw.trim();
   if (!term) return null;
+
+  // Bare digits from 4 to 7 can be a Lead ID or a piece of a phone number ("98861", the last 5 digits): both are looked up.
+  const bare = /^\d{4,7}$/.exec(term);
+  if (bare) return { kind: 'lead_no_or_phone', value: String(Number(term)), digits: term };
 
   const leadNo = /^(?:#|lead[-\s]?)?(\d{1,7})$/i.exec(term);
   if (leadNo) return { kind: 'lead_no', value: String(Number(leadNo[1])) };

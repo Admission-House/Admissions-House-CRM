@@ -30,7 +30,8 @@ export function SidebarSearch({ narrow, onExpand, onNavigate }: { narrow: boolea
   const { canAny } = useAuth();
   const [text, setText] = useState('');
   const [open, setOpen] = useState(false);
-  const [leads, setLeads] = useState<LeadListItem[]>([]);
+  // The leads found, with the words they were found for, so an older search's results are never shown for newer words.
+  const [found, setFound] = useState<{ q: string; items: LeadListItem[] } | null>(null);
   const [active, setActive] = useState(0);
   const box = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
@@ -78,12 +79,14 @@ export function SidebarSearch({ narrow, onExpand, onNavigate }: { narrow: boolea
     return () => document.removeEventListener('mousedown', outside);
   }, [open]);
 
+  // The server searches names from 3 letters (numbers from 1 digit, for Lead IDs).
+  const searchable = (s: string) => s.length >= 3 || /^#?\d+$/.test(s);
   useEffect(() => {
     const q = text.trim();
-    if (!open || q.length < 2 || !canAny('lead.read')) return;
+    if (!open || !searchable(q) || !canAny('lead.read')) return;
     const ctl = new AbortController();
     const t = setTimeout(() => {
-      api<Page<LeadListItem>>('/leads', { query: { q, limit: 6 }, signal: ctl.signal }).then((p) => setLeads(p.items)).catch(() => undefined);
+      api<Page<LeadListItem>>('/leads', { query: { q, limit: 6 }, signal: ctl.signal }).then((p) => setFound({ q, items: p.items })).catch(() => undefined);
     }, 200);
     return () => {
       clearTimeout(t);
@@ -94,14 +97,14 @@ export function SidebarSearch({ narrow, onExpand, onNavigate }: { narrow: boolea
   const q = text.trim().toLowerCase();
   const results: Result[] = [
     ...pages.filter((p) => q && p.label.toLowerCase().includes(q)),
-    ...(q.length >= 2 ? leads.map((l) => ({ key: l.id, label: l.name, hint: `${fmtPhone(l.phone)} · #${l.leadNo} · ${l.status.name}`, href: `/leads/${l.id}`, kind: 'lead' as const, name: l.name })) : []),
+    ...(searchable(text.trim()) && found?.q === text.trim() ? found.items.map((l) => ({ key: l.id, label: l.name, hint: `${fmtPhone(l.phone)} · #${l.leadNo} · ${l.status.name}`, href: `/leads/${l.id}`, kind: 'lead' as const, name: l.name })) : []),
   ];
 
   function go(r: Result | undefined) {
     if (!r) return;
     setOpen(false);
     setText('');
-    setLeads([]);
+    setFound(null);
     input.current?.blur();
     onNavigate?.();
     router.push(r.href);
@@ -140,7 +143,7 @@ export function SidebarSearch({ narrow, onExpand, onNavigate }: { narrow: boolea
           className="min-w-0 flex-1 bg-transparent text-white outline-none placeholder:text-mint/70"
         />
         {text ? (
-          <button type="button" aria-label="Clear search" onClick={() => { setText(''); setLeads([]); input.current?.focus(); }} className="text-mint/70 hover:text-white"><X className="h-4 w-4" /></button>
+          <button type="button" aria-label="Clear search" onClick={() => { setText(''); setFound(null); input.current?.focus(); }} className="text-mint/70 hover:text-white"><X className="h-4 w-4" /></button>
         ) : (
           <kbd className="rounded border border-white/20 px-1.5 text-[10px] text-mint/70">Ctrl K</kbd>
         )}
@@ -148,7 +151,7 @@ export function SidebarSearch({ narrow, onExpand, onNavigate }: { narrow: boolea
 
       {open && q.length > 0 && (
         <div id="sidebar-search-results" role="listbox" className="absolute left-0 top-full z-50 mt-2 max-h-96 w-[min(26rem,calc(100vw-2rem))] overflow-y-auto rounded-xl border border-line bg-surface py-1.5 text-ink shadow-2xl">
-          {results.length === 0 && <p className="px-4 py-6 text-center text-sm text-muted">{q.length < 2 ? 'Keep typing…' : 'Nothing found'}</p>}
+          {results.length === 0 && <p className="px-4 py-6 text-center text-sm text-muted">{!searchable(text.trim()) ? 'Type at least 3 letters, or a number' : found?.q !== text.trim() ? 'Searching…' : 'Nothing found'}</p>}
           {results.map((r, i) => (
             <button
               key={`${r.kind}${r.key}`}

@@ -44,6 +44,19 @@ export class FollowUpWriter {
     return Number(result.numAffectedRows ?? 0);
   }
 
+  /**
+   * Finishes the follow-ups a disposition answers: every open one that has come due, and with `all` (a new date was
+   * set) the later ones too. Returns how many were finished.
+   */
+  async closeAnswered(trx: Trx, leadId: string, all: boolean): Promise<number> {
+    const result = await sql`
+      UPDATE followups SET done_at = now()
+      WHERE lead_id = ${leadId} AND done_at IS NULL AND (${all} OR due_at <= now())`.execute(trx);
+    const n = Number(result.numAffectedRows ?? 0);
+    if (n > 0) await this.refreshNext(trx, leadId);
+    return n;
+  }
+
   /** Whether the lead has an open follow-up that has not yet come due. */
   async hasUpcoming(trx: Trx, leadId: string): Promise<boolean> {
     const { rows } = await sql<{ n: string }>`

@@ -13,12 +13,20 @@ const codeOf = (fn: () => unknown): string | undefined => {
 };
 
 describe('classifySearch', () => {
+  it('tries both a Lead ID and part of a phone number for 4 to 7 bare digits', () => {
+    expect(classifySearch('98861')).toEqual({ kind: 'lead_no_or_phone', value: '98861', digits: '98861' });
+    expect(classifySearch('0007')).toEqual({ kind: 'lead_no_or_phone', value: '7', digits: '0007' });
+    expect(classifySearch('9886117')).toEqual({ kind: 'lead_no_or_phone', value: '9886117', digits: '9886117' });
+  });
+
   it.each([
-    ['1042', { kind: 'lead_no', value: '1042' }],
+    ['#1042', { kind: 'lead_no', value: '1042' }],
+    ['LEAD 1042', { kind: 'lead_no', value: '1042' }],
     ['#1042', { kind: 'lead_no', value: '1042' }],
     ['LEAD-1042', { kind: 'lead_no', value: '1042' }],
     ['lead 7', { kind: 'lead_no', value: '7' }],
-    ['0007', { kind: 'lead_no', value: '7' }],
+    ['#0007', { kind: 'lead_no', value: '7' }],
+    ['42', { kind: 'lead_no', value: '42' }],
   ])('%s is a Lead ID', (input, expected) => {
     expect(classifySearch(input)).toEqual(expected);
   });

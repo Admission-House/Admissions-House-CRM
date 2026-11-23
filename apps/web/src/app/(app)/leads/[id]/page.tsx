@@ -8,7 +8,7 @@ import { RecommendedTab, ShortlistTab } from '@/components/leads/admissions-tabs
 import { CallsTab } from '@/components/leads/calls-tab';
 import { CustomFieldsPanel } from '@/components/leads/custom-fields-panel';
 import { DocumentsTab } from '@/components/leads/documents-tab';
-import { AssignPanel, FollowUpsPanel, StatusPanel, Timeline, type LeadDetail } from '@/components/leads/lead-panels';
+import { AssignPanel, StatusPanel, Timeline, type LeadDetail } from '@/components/leads/lead-panels';
 import { CopyButton } from '@/components/ui/copy-button';
 import { PartnerPanel } from '@/components/leads/partner-panel';
 import { ProfileTab } from '@/components/leads/profile-tab';
@@ -135,7 +135,8 @@ function Workspace() {
       {tab === 'activity' && (
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_21rem]">
           <div className="space-y-4">
-            <FollowUpsPanel key={`f${version}`} lead={l} onChanged={changed} />
+            {/* Disposing is the main work on a lead, so it comes first; follow-up dates are set there. */}
+            <StatusPanel key={`s${l.status.id}${version}`} lead={l} onChanged={changed} />
             <Timeline key={`t${version}`} lead={l} />
           </div>
           <div className="space-y-4">
@@ -151,7 +152,6 @@ function Workspace() {
               </dl>
               {l.interestNote && <p className="mt-3 rounded-md bg-head px-3 py-2 text-xs text-muted">{l.interestNote}</p>}
             </Panel>
-            <StatusPanel key={`s${l.status.id}${version}`} lead={l} onChanged={changed} />
             <AssignPanel lead={l} onChanged={changed} />
             <PartnerPanel lead={l} />
             <CustomFieldsPanel lead={l} />

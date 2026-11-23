@@ -344,6 +344,7 @@ function describe(a: Activity): string {
     case 'status_change':
       return `Status changed${a.oldValue ? ` from ${a.oldValue}` : ''}${a.newValue ? ` to ${a.newValue}` : ''}`;
     case 'followup':
+      if (a.field === 'done') return a.remark ?? 'Follow-up marked done';
       return a.newValue ? `Follow-up set for ${fmtDateTime(a.newValue)}` : 'Follow-up updated';
     case 'field_change': {
       const label = (a.field && FIELD_LABEL[a.field]) ?? a.field ?? 'A detail';

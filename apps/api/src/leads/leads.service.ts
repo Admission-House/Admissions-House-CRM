@@ -657,6 +657,24 @@ export class LeadsService {
         });
       }
 
+      // Disposing the lead answers its follow-ups: the ones already due are finished, and when a new date is set every
+      // earlier one is too, so nothing is left open by mistake and the overdue counts stay true. A later follow-up stays
+      // when no new date is given, because a status that needs a follow-up may rely on it. (A closed status finished them
+      // all above.)
+      if (status.is_open && (!sameStatus || dto.remark || dto.followUp)) {
+        const finished = await this.followUps.closeAnswered(trx, id, !!dto.followUp);
+        if (finished > 0) {
+          await this.writer.activity(trx, {
+            tenantId: auth.tenantId,
+            leadId: id,
+            userId: auth.userId,
+            type: 'followup',
+            field: 'done',
+            remark: finished === 1 ? 'Earlier follow-up marked done' : `${finished} earlier follow-ups marked done`,
+          });
+        }
+      }
+
       if (dto.followUp && status.is_open) {
         await this.followUps.create(trx, {
           tenantId: auth.tenantId,
@@ -866,6 +884,9 @@ export class LeadsService {
 
     const term = q.q ? classifySearch(q.q) : null;
     if (term?.kind === 'lead_no') c.push(sql<SqlBool>`l.lead_no = ${term.value}::bigint`);
+    else if (term?.kind === 'lead_no_or_phone') {
+      c.push(sql<SqlBool>`(l.lead_no = ${term.value}::bigint OR l.id = ANY (ARRAY(SELECT lead_ids_matching_phone(${likePattern(term.digits)}))))`);
+    }
     // Name, email and phone searches go through two database functions (migration 025). Under
     // row-level security PostgreSQL cannot use a trigram index for LIKE directly, so a plain
     // "name ILIKE ..." read every lead of the company (170 to 300 ms at 300,000 leads). The functions

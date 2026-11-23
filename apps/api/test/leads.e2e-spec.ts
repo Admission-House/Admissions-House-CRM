@@ -484,6 +484,45 @@ describe('changing the status', () => {
     expect(errorCode(await api.call('POST', `/leads/${l.id}/status`, t.lc1!, { statusId: '00000000-0000-4000-8000-000000000000' }))).toBe('STATUS_INVALID');
   });
 
+  describe('answers the follow-ups it was made for', () => {
+    const open = async (id: string) => (await owner.query(`SELECT due_at > now() AS future FROM followups WHERE lead_id = $1 AND done_at IS NULL ORDER BY due_at`, [id])).rows as { future: boolean }[];
+    /** A lead with one follow-up that is already due and one later one. */
+    async function withTwo() {
+      const l = await lead(t.lc1!, { followUp: { dueAt: inAnHour() } });
+      await owner.query(`INSERT INTO followups (tenant_id, lead_id, user_id, due_at) VALUES ($1, $2, $3, now() - interval '2 hours')`, [fx.tenantId, l.id, idOf('lc1')]);
+      await owner.query(`UPDATE leads SET next_followup_at = now() - interval '2 hours' WHERE id = $1`, [l.id]);
+      expect(await open(l.id)).toHaveLength(2);
+      return l;
+    }
+
+    it('finishes the ones already due, keeps a later one when no new date is given', async () => {
+      const l = await withTwo();
+      const res = await api.call('POST', `/leads/${l.id}/status`, t.lc1!, { statusId: await statusId('Contacted'), remark: 'Called, will think' });
+      expect(res.statusCode, res.body).toBe(200);
+      expect(await open(l.id)).toEqual([{ future: true }]);
+      expect(Date.parse(res.json().nextFollowupAt)).toBeGreaterThan(Date.now());
+      const entry = (await activities(t.lc1!, l.id)).find((a) => a.type === 'followup' && a.field === 'done');
+      expect(entry?.remark).toBe('Earlier follow-up marked done');
+    });
+
+    it('finishes every earlier one when a new date is set, leaving only the new one', async () => {
+      const l = await withTwo();
+      const next = new Date(Date.now() + 2 * 86_400_000).toISOString();
+      const res = await api.call('POST', `/leads/${l.id}/status`, t.lc1!, { statusId: await statusId('Follow-up'), followUp: { dueAt: next } });
+      expect(res.statusCode, res.body).toBe(200);
+      expect(res.json().openFollowUps).toBe(1);
+      expect(Date.parse(res.json().nextFollowupAt)).toBe(Date.parse(next));
+      const entry = (await activities(t.lc1!, l.id)).find((a) => a.type === 'followup' && a.field === 'done');
+      expect(entry?.remark).toBe('2 earlier follow-ups marked done');
+    });
+
+    it('also counts a remark on the same status as answering the due one', async () => {
+      const l = await withTwo();
+      await api.call('POST', `/leads/${l.id}/status`, t.lc1!, { statusId: await statusId('New'), remark: 'Ringing, no answer' });
+      expect(await open(l.id)).toEqual([{ future: true }]);
+    });
+  });
+
   it('records a remark as a note when the status stays the same', async () => {
     const l = await lead(t.lc1!);
     await api.call('POST', `/leads/${l.id}/status`, t.lc1!, { statusId: await statusId('New'), remark: 'Still thinking' });
