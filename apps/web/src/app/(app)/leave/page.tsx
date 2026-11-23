@@ -1,6 +1,6 @@
 'use client';
 
-import { Plus, Trash2 } from 'lucide-react';
+import { Download, FileUp, ListPlus, Plus, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Badge, Button, Card, Empty, Field, Input, Notice, PageHeader, Panel, Select, Spinner, Tabs, Textarea } from '@/components/ui';
 import { Modal } from '@/components/ui/modal';
@@ -8,6 +8,7 @@ import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import type { Page } from '@/lib/types';
 import { useApi } from '@/lib/use-api';
+import { readHolidaySheet, type HolidayLine } from '@/lib/holiday-sheet';
 
 type Status = 'pending' | 'approved' | 'rejected' | 'cancelled';
 interface LeaveType { id: string; name: string; isPaid: boolean; yearlyQuota: number; isActive: boolean }
@@ -252,10 +253,13 @@ function Holidays() {
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [many, setMany] = useState(false);
+  const [done, setDone] = useState<string | null>(null);
   async function add(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
+    setDone(null);
     try {
       await api('/holidays', { method: 'POST', body: { date, name: name.trim() } });
       setDate('');
@@ -277,8 +281,11 @@ function Holidays() {
         <Input type="date" aria-label="Holiday date" value={date} min={`${year}-01-01`} max={`${year}-12-31`} onChange={(e) => setDate(e.target.value)} required className="w-44" />
         <Input aria-label="Holiday name" placeholder="Name, for example Diwali" value={name} onChange={(e) => setName(e.target.value)} required minLength={2} className="w-64" />
         <Button type="submit" loading={busy}><Plus className="h-3.5 w-3.5" aria-hidden /> Add holiday</Button>
+        <Button type="button" variant="secondary" onClick={() => { setMany(true); setDone(null); }}><ListPlus className="h-3.5 w-3.5" aria-hidden /> Add many at once</Button>
       </form>
       {error && <div className="p-3 pb-0"><Notice tone="bad">{error}</Notice></div>}
+      {done && <div className="p-3 pb-0"><Notice tone="ok">{done}</Notice></div>}
+      {many && <ManyHolidays onClose={() => setMany(false)} onSaved={(text, firstYear) => { setMany(false); setDone(text); if (firstYear) setYear(firstYear); list.reload(); }} />}
       {list.error ? <div className="p-4"><Notice tone="bad">{list.error.message}</Notice></div> : !list.data ? <Spinner /> : list.data.length === 0 ? <Empty title={`No holidays added for ${year}`} /> : (
         <ul className="divide-y divide-line">
           {list.data.map((h) => (
@@ -287,6 +294,96 @@ function Holidays() {
         </ul>
       )}
     </Panel>
+  );
+}
+
+/** A ready-made sheet to fill in, so the format is never a guess. */
+function downloadTemplate() {
+  const csv = '\uFEFFDate,Holiday\n25-12-2026,Christmas\n01-01-2027,New Year\n26-01-2027,Republic Day\n';
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'holidays.csv';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** A whole list of holidays at once: pasted from Excel or Google Sheets, or from a CSV file. Checked before anything is saved. */
+function ManyHolidays({ onClose, onSaved }: { onClose: () => void; onSaved: (text: string, firstYear: number | null) => void }) {
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const lines: HolidayLine[] = useMemo(() => readHolidaySheet(text), [text]);
+  const good = lines.filter((l) => !l.problem);
+  const bad = lines.filter((l) => l.problem);
+
+  async function pick(file: File | undefined) {
+    if (!file) return;
+    if (!/\.(csv|txt)$/i.test(file.name)) {
+      setError('Choose a CSV file. From Excel you can also copy the two columns and paste them in the box.');
+      return;
+    }
+    setError(null);
+    setText(await file.text());
+  }
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await api<{ added: Holiday[]; skipped: { date: string; name: string; reason: string }[] }>('/holidays/bulk', {
+        method: 'POST',
+        body: { items: good.map((l) => ({ date: l.date!, name: l.name! })) },
+      });
+      const parts = [`${r.added.length} ${r.added.length === 1 ? 'holiday was' : 'holidays were'} added.`];
+      if (r.skipped.length) parts.push(`${r.skipped.length} already in the list and left as ${r.skipped.length === 1 ? 'it was' : 'they were'}: ${r.skipped.map((x) => nice(x.date)).join(', ')}.`);
+      onSaved(parts.join(' '), r.added[0] ? Number(r.added[0].date.slice(0, 4)) : null);
+    } catch (err) {
+      setError(errorText(err));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal title="Add many holidays" onClose={onClose} width="max-w-2xl">
+      <div className="space-y-4">
+        <p className="text-sm text-muted">Paste the holidays from Excel or Google Sheets (a date column and a name column), or choose a CSV file. Dates like 25-12-2026, 25/12/2026 or 25 Dec 2026 all work. Nothing is saved until you press Save.</p>
+        <div className="flex flex-wrap gap-2">
+          <label className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border border-line-strong bg-surface px-3.5 text-sm font-medium text-ink hover:bg-head">
+            <FileUp className="h-4 w-4" aria-hidden /> Choose a CSV file
+            <input type="file" accept=".csv,.txt,text/csv" className="sr-only" onChange={(e) => void pick(e.target.files?.[0])} />
+          </label>
+          <Button type="button" variant="ghost" onClick={downloadTemplate}><Download className="h-3.5 w-3.5" aria-hidden /> Download a sample sheet</Button>
+        </div>
+        <Field label="Or paste here" htmlFor="hol-paste">
+          <Textarea id="hol-paste" rows={7} value={text} onChange={(e) => setText(e.target.value)} placeholder={'25-12-2026\tChristmas\n01-01-2027\tNew Year\n26-01-2027\tRepublic Day'} className="font-mono text-sm" />
+        </Field>
+        {lines.length > 0 && (
+          <div className="max-h-64 overflow-y-auto rounded-md border border-line">
+            <table className="w-full text-left text-sm">
+              <thead className="sticky top-0 bg-head text-xs uppercase tracking-wide text-muted">
+                <tr><th className="px-3 py-2 font-semibold">Line</th><th className="px-3 py-2 font-semibold">Date</th><th className="px-3 py-2 font-semibold">Holiday</th></tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {lines.map((l) => (
+                  <tr key={l.line} className={l.problem ? 'bg-bad-50' : ''}>
+                    <td className="tabular px-3 py-2 text-muted">{l.line}</td>
+                    <td className="tabular px-3 py-2">{l.date ? nice(l.date) : '—'}</td>
+                    <td className="px-3 py-2">{l.problem ? <span className="text-bad">{l.problem}</span> : l.name}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {lines.length > 0 && <p className="text-sm">{good.length} ready to add{bad.length ? `, ${bad.length} with a problem (left out)` : ''}.</p>}
+        {error && <Notice tone="bad">{error}</Notice>}
+      </div>
+      <div className="mt-5 flex justify-end gap-2">
+        <Button variant="secondary" onClick={onClose}>Cancel</Button>
+        <Button onClick={() => void save()} loading={busy} disabled={good.length === 0 || good.length > 100}>{good.length > 100 ? 'At most 100 at a time' : `Save ${good.length || ''} ${good.length === 1 ? 'holiday' : 'holidays'}`}</Button>
+      </div>
+    </Modal>
   );
 }
 

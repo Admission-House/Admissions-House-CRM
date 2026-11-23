@@ -6,6 +6,7 @@ import { HolidaysService } from './holidays.service.js';
 import {
   BalancesQueryDto,
   CreateHolidayDto,
+  CreateHolidaysDto,
   CreateLeaveRequestDto,
   CreateLeaveTypeDto,
   DecisionDto,
@@ -40,6 +41,12 @@ export class LeaveController {
   @Post('holidays')
   createHoliday(@CurrentAuth() auth: AuthContext, @Body() body: CreateHolidayDto) {
     return this.holidays.create(auth, body);
+  }
+
+  @RequirePermissions('leave.settings')
+  @Post('holidays/bulk')
+  createHolidays(@CurrentAuth() auth: AuthContext, @Body() body: CreateHolidaysDto) {
+    return this.holidays.createMany(auth, body);
   }
 
   @RequirePermissions('leave.settings')

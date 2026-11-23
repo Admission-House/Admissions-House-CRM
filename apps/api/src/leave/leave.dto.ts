@@ -8,6 +8,12 @@ const year = z.coerce.number().int().min(2000).max(2100);
 export const createHolidaySchema = z.object({ date: calendarDate, name: z.string().trim().min(2).max(80) });
 export class CreateHolidayDto extends createZodDto(createHolidaySchema) {}
 
+/** Many holidays at once (a year's list pasted from a sheet). A date that already has a holiday is left as it is. */
+export const createHolidaysSchema = z.object({
+  items: z.array(createHolidaySchema).min(1).max(100),
+});
+export class CreateHolidaysDto extends createZodDto(createHolidaysSchema) {}
+
 export const updateHolidaySchema = z.object({ name: z.string().trim().min(2).max(80) });
 export class UpdateHolidayDto extends createZodDto(updateHolidaySchema) {}
 

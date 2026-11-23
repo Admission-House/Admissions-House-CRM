@@ -137,6 +137,29 @@ describe('holidays', () => {
     expect((await api.call('DELETE', `/holidays/${created.json().id}`, sa)).statusCode).toBe(204);
     expect((await api.call('DELETE', `/holidays/${created.json().id}`, sa)).statusCode).toBe(404);
   });
+
+  it('can be added many at once, skipping a date that already has one, and only by those who set the rules', async () => {
+    const d1 = await plusDays(await nextSunday(80), 1);
+    const d2 = await plusDays(d1, 1);
+    const d3 = await plusDays(d1, 2);
+    await api.call('POST', '/holidays', sa, { date: d2, name: 'Already there' });
+
+    const res = await api.call('POST', '/holidays/bulk', sa, { items: [{ date: d3, name: 'Third' }, { date: d1, name: 'First' }, { date: d2, name: 'Second' }] });
+    expect(res.statusCode, res.body).toBe(201);
+    expect(res.json().added.map((h: { date: string; name: string }) => `${h.date} ${h.name}`)).toEqual([`${d1} First`, `${d3} Third`]);
+    expect(res.json().skipped).toEqual([{ date: d2, name: 'Second', reason: 'There is already a holiday on that day' }]);
+    const names = (await api.call('GET', `/holidays?year=${d1.slice(0, 4)}`, sa)).json().filter((h: { date: string }) => [d1, d2, d3].includes(h.date)).map((h: { name: string }) => h.name);
+    expect(names).toEqual(['First', 'Already there', 'Third']);
+
+    // Sending the same list again changes nothing.
+    const again = await api.call('POST', '/holidays/bulk', sa, { items: [{ date: d1, name: 'First' }] });
+    expect(again.json()).toMatchObject({ added: [], skipped: [{ date: d1 }] });
+
+    expect(errorCode(await api.call('POST', '/holidays/bulk', sa, { items: [] }))).toBe('VALIDATION_FAILED');
+    expect(errorCode(await api.call('POST', '/holidays/bulk', sa, { items: [{ date: '2026-02-31', name: 'Bad' }] }))).toBe('VALIDATION_FAILED');
+    const token = await asOffice('lv2');
+    expect((await api.call('POST', '/holidays/bulk', token, { items: [{ date: await plusDays(d1, 5), name: 'Mine' }] }, OFFICE_IP)).statusCode).toBe(403);
+  });
 });
 
 // ================================================================== balances

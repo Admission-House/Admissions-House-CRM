@@ -4,7 +4,7 @@ import { AuditService } from '../audit/audit.service.js';
 import type { AuthContext } from '../auth/auth-context.js';
 import { AppError } from '../common/app-error.js';
 import { DatabaseService } from '../database/database.service.js';
-import type { CreateHolidayDto, UpdateHolidayDto } from './leave.dto.js';
+import type { CreateHolidayDto, CreateHolidaysDto, UpdateHolidayDto } from './leave.dto.js';
 
 export interface HolidayView {
   id: string;
@@ -42,6 +42,36 @@ export class HolidaysService {
         .executeTakeFirstOrThrow();
       await this.record(trx, auth, 'holiday.create', row.id, undefined, dto);
       return { id: row.id, date: row.holiday_date, name: row.name };
+    });
+  }
+
+  /**
+   * Adds a list of holidays together. A date that already has a holiday (in the company or twice in the list) is skipped
+   * and reported, so a list can be uploaded again safely.
+   */
+  createMany(auth: AuthContext, dto: CreateHolidaysDto): Promise<{ added: HolidayView[]; skipped: { date: string; name: string; reason: string }[] }> {
+    return this.db.withTenant(auth.tenantId, async (trx) => {
+      const dates = [...new Set(dto.items.map((i) => i.date))];
+      const taken = new Set(
+        (await trx.selectFrom('holidays').select(sql<string>`holiday_date::text`.as('d')).where('holiday_date', 'in', dates).execute()).map((r) => r.d),
+      );
+      const added: HolidayView[] = [];
+      const skipped: { date: string; name: string; reason: string }[] = [];
+      for (const item of [...dto.items].sort((a, b) => a.date.localeCompare(b.date))) {
+        if (taken.has(item.date)) {
+          skipped.push({ ...item, reason: 'There is already a holiday on that day' });
+          continue;
+        }
+        const row = await trx
+          .insertInto('holidays')
+          .values({ tenant_id: auth.tenantId, holiday_date: item.date, name: item.name })
+          .returning(['id', 'holiday_date', 'name'])
+          .executeTakeFirstOrThrow();
+        taken.add(item.date);
+        added.push({ id: row.id, date: row.holiday_date, name: row.name });
+      }
+      if (added.length > 0) await this.record(trx, auth, 'holiday.create_many', added[0]!.id, undefined, { added: added.map((h) => `${h.date} ${h.name}`), skipped: skipped.length });
+      return { added, skipped };
     });
   }
 
