@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { onBreakQuietMinutes } from '../auth/idle-rules.js';
+import { idleSignOutApplies, onBreakQuietMinutes } from '../auth/idle-rules.js';
 import { sql } from 'kysely';
 import { ENV } from '../config/config.module.js';
 import type { Env } from '../config/env.js';
@@ -88,7 +88,8 @@ export class IdleSweepService implements OnModuleInit {
 
     const { rows: idle } = await sql<{ user_id: string; last_active_at: Date }>`
       UPDATE user_sessions s SET ended_at = now(), ended_reason = 'inactivity'
-      WHERE s.ended_at IS NULL AND s.last_active_at < now() - make_interval(mins => GREATEST(${idleMin}, COALESCE(${onBreakQuietMinutes}, 0)))
+      WHERE s.ended_at IS NULL AND ${idleSignOutApplies}
+        AND s.last_active_at < now() - make_interval(mins => GREATEST(${idleMin}, COALESCE(${onBreakQuietMinutes}, 0)))
       RETURNING s.user_id, s.last_active_at`.execute(trx);
 
     const { rows: expired } = await sql<{ id: string }>`

@@ -1,5 +1,16 @@
 import { sql } from 'kysely';
 
+/**
+ * Whether the idle sign-out applies to the person of session `s`: only to those whose attendance is kept (the office staff).
+ * A Super Admin, who works from anywhere and keeps no attendance, is not signed out for being quiet. Written to be placed
+ * inside a query that has the session table as `s`.
+ */
+export const idleSignOutApplies = sql<boolean>`COALESCE((
+  SELECT r.tracks_attendance FROM users iu JOIN roles r ON r.id = iu.role_id AND r.tenant_id = iu.tenant_id WHERE iu.id = s.user_id), true)`;
+
+/** The idle limit, in minutes, for someone the idle sign-out does not apply to: more than any session lasts. */
+export const NO_IDLE_LIMIT_MIN = 525_600;
+
 /** A little past the day's break limit, so the sweep that ends a break at the limit acts before the idle sign-out does. */
 export const BREAK_GRACE_MINUTES = 5;
 

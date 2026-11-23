@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { onBreakQuietMinutes } from './idle-rules.js';
+import { idleSignOutApplies, NO_IDLE_LIMIT_MIN, onBreakQuietMinutes } from './idle-rules.js';
 import { sql } from 'kysely';
 import type { Trx } from '../database/database.service.js';
 import type { DataScope, RoleKey } from './auth-context.js';
@@ -60,6 +60,8 @@ export interface RefreshRow {
   refresh_token_hash: string;
   prev_refresh_token_hash: string | null;
   client_type: string;
+  /** The token was renewed a moment ago, so the previous one may still be on its way from another tab. */
+  rotated_recently: boolean;
   ended: boolean;
   expired: boolean;
   idle_seconds: number;
@@ -67,6 +69,12 @@ export interface RefreshRow {
   user_status: string;
   tenant_status: string;
 }
+
+/**
+ * Seconds after a renewal during which the token it replaced is still accepted from a web browser, because another tab of
+ * the same browser sent its renewal at the same moment. Not longer: an old token after that still ends the session.
+ */
+export const REFRESH_GRACE_SEC = 30;
 
 /** Idle limit used when a company has no attendance settings yet. */
 const DEFAULT_IDLE_MIN = 30;
@@ -254,10 +262,12 @@ export class AuthRepository {
              (s.ended_at IS NOT NULL) AS ended,
              (s.expires_at <= now()) AS expired,
              EXTRACT(EPOCH FROM now() - s.last_active_at)::float8 AS idle_seconds,
-             GREATEST(COALESCE((SELECT a.idle_timeout_min FROM attendance_settings a
+             CASE WHEN ${idleSignOutApplies} THEN
+               GREATEST(COALESCE((SELECT a.idle_timeout_min FROM attendance_settings a
                        WHERE a.tenant_id = s.tenant_id
                          AND a.effective_from <= (now() AT TIME ZONE t.timezone)::date
-                       ORDER BY a.effective_from DESC LIMIT 1), ${DEFAULT_IDLE_MIN}), COALESCE(${onBreakQuietMinutes}, 0)) AS idle_limit_min,
+                       ORDER BY a.effective_from DESC LIMIT 1), ${DEFAULT_IDLE_MIN}), COALESCE(${onBreakQuietMinutes}, 0))
+             ELSE ${NO_IDLE_LIMIT_MIN} END AS idle_limit_min,
              u.status AS user_status, t.status AS tenant_status,
              u.name, u.email, u.must_change_password, u.role_id,
              t.settings->>'require_two_step' AS require_two_step,
@@ -307,13 +317,16 @@ export class AuthRepository {
   async lockSessionForRefresh(trx: Trx, sessionId: string): Promise<RefreshRow | undefined> {
     const { rows } = await sql<RefreshRow>`
       SELECT s.id, s.user_id, s.refresh_token_hash, s.prev_refresh_token_hash, s.client_type,
+             (s.refresh_rotated_at IS NOT NULL AND s.refresh_rotated_at > now() - make_interval(secs => ${REFRESH_GRACE_SEC})) AS rotated_recently,
              (s.ended_at IS NOT NULL) AS ended,
              (s.expires_at <= now()) AS expired,
              EXTRACT(EPOCH FROM now() - s.last_active_at)::float8 AS idle_seconds,
-             GREATEST(COALESCE((SELECT a.idle_timeout_min FROM attendance_settings a
+             CASE WHEN ${idleSignOutApplies} THEN
+               GREATEST(COALESCE((SELECT a.idle_timeout_min FROM attendance_settings a
                        WHERE a.tenant_id = s.tenant_id
                          AND a.effective_from <= (now() AT TIME ZONE t.timezone)::date
-                       ORDER BY a.effective_from DESC LIMIT 1), ${DEFAULT_IDLE_MIN}), COALESCE(${onBreakQuietMinutes}, 0)) AS idle_limit_min,
+                       ORDER BY a.effective_from DESC LIMIT 1), ${DEFAULT_IDLE_MIN}), COALESCE(${onBreakQuietMinutes}, 0))
+             ELSE ${NO_IDLE_LIMIT_MIN} END AS idle_limit_min,
              u.status AS user_status, t.status AS tenant_status
       FROM user_sessions s
       JOIN users u   ON u.id = s.user_id AND u.tenant_id = s.tenant_id
@@ -326,7 +339,7 @@ export class AuthRepository {
   async rotateRefreshToken(trx: Trx, sessionId: string, oldHash: string, newHash: string): Promise<void> {
     await sql`
       UPDATE user_sessions
-      SET prev_refresh_token_hash = ${oldHash}, refresh_token_hash = ${newHash}, last_active_at = now()
+      SET prev_refresh_token_hash = ${oldHash}, refresh_token_hash = ${newHash}, last_active_at = now(), refresh_rotated_at = now()
       WHERE id = ${sessionId}`.execute(trx);
   }
 

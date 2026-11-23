@@ -18,6 +18,7 @@ import { SidebarSearch } from './sidebar-search';
 import { NotificationBell } from './notifications';
 import { WinCelebration } from './win-celebration';
 import { NewVersionNotice } from './new-version';
+import { ActivityHeartbeat } from './activity-heartbeat';
 import { WorkStatus } from './work-status';
 
 const VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? '';
@@ -273,6 +274,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <IncomingCalls />
       <WinCelebration />
       <NewVersionNotice />
+      <ActivityHeartbeat />
     </div>
     </RealtimeProvider>
   );

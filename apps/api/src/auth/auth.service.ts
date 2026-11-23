@@ -31,12 +31,17 @@ export interface RequestMeta {
 export interface SignedIn {
   accessToken: string;
   expiresIn: number;
-  /** Always present here; the controller decides whether it goes in a cookie or the response body. */
-  refreshToken: string;
+  /**
+   * The controller decides whether it goes in a cookie or the response body. Missing only when a second browser tab renewed
+   * at the same moment as the first: that tab's answer already carries the new cookie for the whole browser.
+   */
+  refreshToken?: string;
   clientType: 'web' | 'mobile';
 }
 
 export interface LoginResult extends SignedIn {
+  /** A new sign-in always comes with its own token. */
+  refreshToken: string;
   mustChangePassword: boolean;
   user: { id: string; name: string; email: string; role: { key: RoleKey | null; name: string } };
 }
@@ -361,6 +366,14 @@ export class AuthService {
         // An old token that is presented again means two parties hold the same token. End the
         // session, so neither the owner nor a thief can carry on with it.
         if (session.prev_refresh_token_hash && safeEqualHex(presented, session.prev_refresh_token_hash)) {
+          // Two tabs of one browser renewed together: the token was replaced a moment ago and this is the same web
+          // session. The browser already has the new cookie, so give this tab a fresh access token and leave the cookie.
+          if (!session.ended && session.client_type === 'web' && session.rotated_recently) {
+            const stopped = await this.sessionProblem(trx, session);
+            if (stopped) return fail(stopped);
+            const access = await this.tokens.signAccess({ userId: session.user_id, tenantId: parts.tenantId, sessionId: session.id });
+            return ok({ accessToken: access.token, expiresIn: access.expiresInSec, clientType: 'web' });
+          }
           if (!session.ended) {
             await this.repo.endSession(trx, session.id, 'reuse_detected');
             await this.audit.write(trx, {

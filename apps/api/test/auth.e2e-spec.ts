@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import pg from 'pg';
+import { IdleSweepService } from '../src/attendance/idle-sweep.service.js';
 import { TokenService } from '../src/auth/token.service.js';
 import { ENV } from '../src/config/config.module.js';
 import { loadEnv } from '../src/config/env.js';
@@ -349,18 +350,44 @@ describe('session lifetime', () => {
     expect((await sessionOf('logout')).ended_reason).toBe('logout');
   });
 
-  it('signs out after 30 minutes of inactivity, and counts a request as activity', async () => {
-    const { token } = await signIn('idle');
-    await owner.query(`UPDATE user_sessions SET last_active_at = now() - interval '10 minutes' WHERE user_id = $1`, [fx.user('idle').id]);
+  it('signs office staff out after 30 minutes of inactivity, and counts a request as activity', async () => {
+    const { token } = await signIn('att3', { location: inOffice }, OFFICE_IP);
+    await owner.query(`UPDATE user_sessions SET last_active_at = now() - interval '10 minutes' WHERE user_id = $1`, [fx.user('att3').id]);
     expect((await get('/api/v1/auth/me', token)).statusCode).toBe(200);
-    const touched = await sessionOf('idle');
+    const touched = await sessionOf('att3');
     expect(Date.now() - new Date(touched.last_active_at).getTime()).toBeLessThan(60_000);
 
-    await owner.query(`UPDATE user_sessions SET last_active_at = now() - interval '31 minutes' WHERE user_id = $1`, [fx.user('idle').id]);
+    await owner.query(`UPDATE user_sessions SET last_active_at = now() - interval '31 minutes' WHERE user_id = $1`, [fx.user('att3').id]);
     const res = await get('/api/v1/auth/me', token);
     expect(res.statusCode).toBe(401);
     expect(res.json().error).toMatchObject({ code: 'SESSION_IDLE', message: expect.stringContaining('30 minutes') });
-    expect((await sessionOf('idle')).ended_reason).toBe('inactivity');
+    expect((await sessionOf('att3')).ended_reason).toBe('inactivity');
+  });
+
+  it('does not sign out someone whose role keeps no attendance (the live Super Admin) for being quiet', async () => {
+    // As on the live CRM, where the Super Admin role keeps no attendance (the test company keeps it for every role).
+    const role = `UPDATE roles SET tracks_attendance = $2 WHERE tenant_id = $1 AND system_key = 'super_admin'`;
+    await owner.query(role, [fx.tenantId, false]);
+    try {
+      const { token } = await signIn('idle');
+      await owner.query(`UPDATE user_sessions SET last_active_at = now() - interval '3 hours' WHERE user_id = $1 AND ended_at IS NULL`, [fx.user('idle').id]);
+      expect((await get('/api/v1/auth/me', token)).statusCode).toBe(200);
+      expect((await sessionOf('idle')).ended_at).toBeNull();
+      // The sweep that ends idle sessions leaves it alone too.
+      await app.get(IdleSweepService).sweepOnce();
+      expect((await sessionOf('idle')).ended_at).toBeNull();
+    } finally {
+      await owner.query(role, [fx.tenantId, true]);
+    }
+  });
+
+  it('counts working on the page (the activity ping) as activity', async () => {
+    const { token } = await signIn('att2', { location: inOffice }, OFFICE_IP);
+    await owner.query(`UPDATE user_sessions SET last_active_at = now() - interval '14 minutes' WHERE user_id = $1 AND ended_at IS NULL`, [fx.user('att2').id]);
+    const ping = await app.inject({ method: 'POST', url: '/api/v1/auth/activity', headers: bearer(token), remoteAddress: OFFICE_IP });
+    expect(ping.statusCode).toBe(204);
+    expect(Date.now() - new Date((await sessionOf('att2')).last_active_at).getTime()).toBeLessThan(60_000);
+    expect((await app.inject({ method: 'POST', url: '/api/v1/auth/activity' })).statusCode).toBe(401);
   });
 
   it('ends a session that has reached its maximum age', async () => {
@@ -395,9 +422,11 @@ describe('refresh tokens', () => {
     expect((await get('/api/v1/auth/me', token)).statusCode).toBe(200);
   });
 
-  it('ends the whole session when an old token is used again', async () => {
+  it('ends the whole session when an old token is used again, after the moment two tabs may share', async () => {
     const { refreshCookie: first, token } = await signIn('reuse');
     const second = (await refreshWithCookie(first!)).cookies.find((c) => c.name === REFRESH_COOKIE)!.value;
+    // Past the few seconds in which another tab of the same browser may still send the replaced token.
+    await owner.query(`UPDATE user_sessions SET refresh_rotated_at = now() - interval '2 minutes' WHERE user_id = $1 AND ended_at IS NULL`, [fx.user('reuse').id]);
 
     const replay = await refreshWithCookie(first!);
     expect(replay.statusCode).toBe(401);
@@ -411,10 +440,17 @@ describe('refresh tokens', () => {
     expect(audit.rows[0].n).toBe(1);
   });
 
-  it('lets exactly one of two simultaneous refreshes through', async () => {
+  it('keeps the session when two tabs refresh at the same moment, renewing the token only once', async () => {
     const { refreshCookie } = await signIn('race');
     const results = await Promise.all([refreshWithCookie(refreshCookie!), refreshWithCookie(refreshCookie!)]);
-    expect(results.map((r) => r.statusCode).sort()).toEqual([200, 401]);
+    expect(results.map((r) => r.statusCode)).toEqual([200, 200]);
+    // Only one answer carries a new cookie; the other tab already shares it through the browser.
+    const cookies = results.map((r) => r.cookies.find((c) => c.name === REFRESH_COOKIE)?.value).filter(Boolean);
+    expect(cookies).toHaveLength(1);
+    expect((await sessionOf('race')).ended_at).toBeNull();
+    // Both access tokens work, and the new cookie keeps working.
+    for (const r of results) expect((await get('/api/v1/auth/me', r.json().accessToken)).statusCode).toBe(200);
+    expect((await refreshWithCookie(cookies[0]!)).statusCode).toBe(200);
   });
 
   it.each([
@@ -430,8 +466,8 @@ describe('refresh tokens', () => {
   });
 
   it('refuses to refresh a session that has been idle too long', async () => {
-    const { refreshCookie } = await signIn('idle');
-    await owner.query(`UPDATE user_sessions SET last_active_at = now() - interval '31 minutes' WHERE user_id = $1 AND ended_at IS NULL`, [fx.user('idle').id]);
+    const { refreshCookie } = await signIn('att1', { location: inOffice }, OFFICE_IP);
+    await owner.query(`UPDATE user_sessions SET last_active_at = now() - interval '31 minutes' WHERE user_id = $1 AND ended_at IS NULL`, [fx.user('att1').id]);
     const res = await refreshWithCookie(refreshCookie!);
     expect(res.statusCode).toBe(401);
     expect(res.json().error.code).toBe('SESSION_IDLE');

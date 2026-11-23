@@ -1027,6 +1027,7 @@ export interface UserSessions {
   ip: string | null;
   last_active_at: Generated<Timestamp>;
   prev_refresh_token_hash: string | null;
+  refresh_rotated_at: Timestamp | null;
   refresh_token_hash: string;
   tenant_id: string;
   user_agent: string | null;

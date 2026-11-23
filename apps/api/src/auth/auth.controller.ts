@@ -69,7 +69,7 @@ export class AuthController {
     return {
       accessToken: result.accessToken,
       expiresIn: result.expiresIn,
-      ...this.deliverRefreshToken(reply, result.clientType, result.refreshToken),
+      ...(result.refreshToken ? this.deliverRefreshToken(reply, result.clientType, result.refreshToken) : {}),
     };
   }
 
@@ -81,6 +81,19 @@ export class AuthController {
   async logout(@CurrentAuth() auth: AuthContext, @Res({ passthrough: true }) reply: FastifyReply): Promise<void> {
     await this.auth.logout(auth);
     void reply.clearCookie(REFRESH_COOKIE, { path: COOKIE_PATH });
+  }
+
+  /**
+   * The person is working on the page (typing, clicking, scrolling) without anything being saved. Answers nothing; passing
+   * the sign-in check is what counts as activity, so reading a lead does not end in an idle sign-out.
+   */
+  @ApiBearerAuth()
+  @AllowPasswordChange()
+  @AllowMfaSetup()
+  @Post('activity')
+  @HttpCode(204)
+  activity(): void {
+    return;
   }
 
   /** The signed-in user, their permissions and the company. Also serves as the activity heartbeat. */

@@ -1,6 +1,6 @@
 'use client';
 
-import { Coffee, LogIn } from 'lucide-react';
+import { Coffee, LogIn, Play } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Button, cx } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
@@ -87,21 +87,53 @@ export function WorkStatus() {
   const signOutIn = Math.max(0, hardLimit - dayUsed);
   const kindUsed = kindBefore + (onBreak ? sinceAnswer : 0);
   const over = onBreak ? kindUsed > onBreak.type.allowedMinutes : false;
+  const leftToday = onBreak ? Math.max(0, onBreak.type.allowedMinutes - kindUsed) : 0;
+  // The break button: with one kind of break (the usual case) one press starts it; with several the list opens to choose.
+  const kinds = t.breaks ?? [];
+  const canBreak = !!t.checkedIn && !onBreak && kinds.length > 0 && (t.breakMinutesToday ?? 0) < hardLimit;
+  const takeBreak = () => (kinds.length === 1 ? void act('/attendance/breaks/start', { breakTypeId: kinds[0]!.id }) : setOpen(true));
 
   return (
-    <div ref={box} className="relative">
+    <div ref={box} className="relative flex items-center gap-2">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
+        title="Today's sign-in and breaks"
         className={cx(
           'flex h-8 items-center gap-2 rounded-md border px-2.5 text-xs font-medium transition-colors',
           onBreak ? (over ? 'border-bad/40 bg-bad-50 text-bad' : 'border-warn/40 bg-warn-50 text-warn') : 'border-line-strong bg-surface text-ink hover:bg-head',
         )}
       >
         {onBreak ? <Coffee className="h-3.5 w-3.5" aria-hidden /> : <LogIn className="h-3.5 w-3.5 text-ok" aria-hidden />}
-        {onBreak ? (over ? `Over ${onBreak.type.allowedMinutes} min · signs out in ${signOutIn} min` : `${onBreak.type.name} · ${kindUsed} of ${onBreak.type.allowedMinutes} min today`) : t.record ? `In since ${clock(t.record.checkInAt)}` : 'Not signed in'}
+        <span className="hidden sm:inline">{onBreak ? (over ? `Over ${onBreak.type.allowedMinutes} min · signs out in ${signOutIn} min` : `${onBreak.type.name} · ${kindUsed} of ${onBreak.type.allowedMinutes} min today`) : t.record ? `In since ${clock(t.record.checkInAt)}` : 'Not signed in'}</span>
       </button>
+      {canBreak && (
+        <button
+          type="button"
+          onClick={takeBreak}
+          disabled={busy}
+          title="Going away from your desk? Start a break so you are not signed out."
+          className="flex h-8 items-center gap-1.5 rounded-md bg-brand px-3 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-brand-700 disabled:opacity-60"
+        >
+          <Coffee className="h-3.5 w-3.5" aria-hidden /> Take a break
+        </button>
+      )}
+      {error && !open && <p role="alert" className="absolute right-0 top-10 z-30 w-64 rounded-md border border-bad/30 bg-bad-50 px-3 py-2 text-xs text-bad shadow">{error}</p>}
+
+      {/* While a break runs, a bar at the bottom of every screen shows it and brings the person back in one press. */}
+      {onBreak && (
+        <div role="status" className={cx('fixed inset-x-3 bottom-3 z-[70] mx-auto flex max-w-xl flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 shadow-[0_8px_24px_rgb(20_38_43/0.18)] sm:inset-x-auto sm:left-1/2 sm:w-[36rem] sm:-translate-x-1/2', over ? 'border-bad/40 bg-bad-50 text-bad' : 'border-warn/40 bg-warn-50 text-ink')}>
+          <div className="flex min-w-0 items-center gap-3">
+            <Coffee className={cx('h-5 w-5 shrink-0', over ? 'text-bad' : 'text-warn')} aria-hidden />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold">You are on a break · {minutes} min</p>
+              <p className="text-xs">{over ? `Over the ${onBreak.type.allowedMinutes} min for today. You are signed out in ${signOutIn} min.` : `${leftToday} min of break left today. You are not signed out while on a break.`}</p>
+            </div>
+          </div>
+          <Button size="sm" loading={busy} onClick={() => void act('/attendance/breaks/end')}><Play className="h-3.5 w-3.5" aria-hidden /> Back to work</Button>
+        </div>
+      )}
 
       {open && (
         <div className="absolute right-0 z-30 mt-2 w-72 rounded-lg border border-line bg-surface p-4 shadow-lg">

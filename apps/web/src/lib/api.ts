@@ -57,9 +57,13 @@ async function parseError(res: Response): Promise<ApiError> {
   }
 }
 
-/** Gets a new access token with the refresh cookie. Several callers at once share one request. */
+/**
+ * Gets a new access token with the refresh cookie. Several callers at once share one request, and the CRM's tabs in this
+ * browser take turns (a Web Lock): each renewal replaces the cookie, so a tab that renewed with the replaced one at the same
+ * moment as another tab looked like a stolen token and signed the person out.
+ */
 export function refreshSession(): Promise<boolean> {
-  refreshing ??= (async () => {
+  const renew = async (): Promise<boolean> => {
     try {
       const res = await fetch(`${BASE}/auth/refresh`, { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: '{}' });
       if (!res.ok) return false;
@@ -67,6 +71,12 @@ export function refreshSession(): Promise<boolean> {
       return true;
     } catch {
       return false;
+    }
+  };
+  refreshing ??= (async () => {
+    try {
+      const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
+      return locks ? await locks.request('ah-sign-in-renewal', renew) : await renew();
     } finally {
       setTimeout(() => (refreshing = null), 0);
     }
