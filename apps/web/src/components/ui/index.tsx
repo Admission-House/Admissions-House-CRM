@@ -92,7 +92,7 @@ export function Panel({ title, actions, children, className, flush }: { title?: 
   return (
     <Card className={className}>
       {(title || actions) && (
-        <div className="flex min-h-11 items-center justify-between gap-3 border-b border-line/60 px-4 py-2">
+        <div className="flex min-h-11 items-center justify-between gap-3 border-b border-line px-4 py-2">
           <h2 className="text-sm font-semibold text-ink">{title}</h2>
           {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
         </div>
@@ -104,7 +104,7 @@ export function Panel({ title, actions, children, className, flush }: { title?: 
 
 /** The tinted band that starts a section of a long form. */
 export function SectionBand({ children }: { children: ReactNode }) {
-  return <h3 className="border-y border-line/60 bg-white/30 px-4 py-2 text-[13px] font-semibold text-ink">{children}</h3>;
+  return <h3 className="border-y border-line bg-head px-4 py-2 text-[13px] font-semibold text-ink">{children}</h3>;
 }
 
 type Tone = 'neutral' | 'ok' | 'warn' | 'bad' | 'info' | 'brand';
@@ -157,7 +157,7 @@ export function Avatar({ name, size = 32, tone = 'brand', photo }: { name: strin
 /** Tabs across the top of a workspace. */
 export function Tabs<T extends string>({ tabs, value, onChange, label }: { tabs: { key: T; label: string; count?: number }[]; value: T; onChange: (key: T) => void; label: string }) {
   return (
-    <div role="tablist" aria-label={label} className="flex overflow-x-auto overflow-y-hidden border-b border-line/60 bg-white/35">
+    <div role="tablist" aria-label={label} className="flex overflow-x-auto overflow-y-hidden border-b border-line bg-surface">
       {tabs.map((t) => {
         const on = t.key === value;
         return (
@@ -201,12 +201,15 @@ export function Empty({ title, children }: { title: string; children?: ReactNode
   );
 }
 
+/**
+ * The title row of a screen. The one-line description (`subtitle`) is not shown on the page, as in most business
+ * applications where the title is enough; it stays as the title's tooltip for whoever wonders what the screen is for.
+ */
 export function PageHeader({ title, subtitle, actions }: { title: string; subtitle?: string; actions?: ReactNode }) {
   return (
     <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight text-ink">{title}</h1>
-        {subtitle && <p className="mt-1 text-sm text-muted">{subtitle}</p>}
+        <h1 className="text-xl font-semibold tracking-tight text-ink" title={subtitle}>{title}</h1>
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </div>

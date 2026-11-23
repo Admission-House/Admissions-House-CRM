@@ -53,10 +53,10 @@ function NavLink({ item, active, narrow, nested, onNavigate }: { item: NavItem; 
       title={narrow ? item.label : undefined}
       aria-current={active ? 'page' : undefined}
       className={cx(
-        'group flex items-center rounded-xl text-sm font-medium transition-colors',
-        nested ? 'h-9 gap-3 pl-[2.625rem] pr-3' : 'h-9 gap-3 px-3',
+        'group flex items-center rounded-md text-sm font-medium transition-colors',
+        nested ? 'h-8 gap-3 pl-[2.625rem] pr-3' : 'h-9 gap-3 px-3',
         narrow && 'justify-center px-0',
-        active ? 'bg-teal/20 text-white shadow-[inset_0_0_0_1px_rgb(255_255_255/0.14)]' : 'text-mint/75 hover:bg-white/8 hover:text-white',
+        active ? 'bg-white/10 text-white shadow-[inset_3px_0_0_var(--color-teal)]' : 'text-white/70 hover:bg-white/6 hover:text-white',
       )}
     >
       {!nested && <item.icon className={cx('h-[18px] w-[18px] shrink-0', active ? 'text-teal' : 'text-mint/65 group-hover:text-mint')} aria-hidden />}

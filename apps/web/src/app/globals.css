@@ -21,8 +21,9 @@
   --color-line: #e1e7e9;
   --color-line-strong: #cfd8db;
   --color-surface: #ffffff;
-  --color-canvas: #f5f7f8;
-  --color-head: rgb(206 226 226 / 0.42);
+  --color-canvas: #f3f5f7;
+  /* Table headings, hovered rows and quiet fills: a plain light grey, as in any business application. */
+  --color-head: #f1f4f6;
 
   --color-ok: #12a150;
   --color-ok-50: #eaf9f0;
@@ -36,23 +37,16 @@
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-display: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 
-  --radius-card: 16px;
-  --shadow-card: 0 8px 32px rgb(6 59 57 / 0.08);
+  --radius-card: 10px;
+  --shadow-card: 0 1px 2px rgb(16 24 40 / 0.05);
 }
 
 @layer base {
   html, body { height: 100%; }
   html { font-size: 16px; }
   body {
-    /* A soft silk of teal and mint light behind everything, so the glass has something to frost. */
-    background:
-      radial-gradient(60rem 40rem at 8% -10%, rgb(0 223 194 / 0.38), transparent 62%),
-      radial-gradient(50rem 36rem at 95% 8%, rgb(15 98 94 / 0.30), transparent 62%),
-      radial-gradient(46rem 34rem at 60% 105%, rgb(194 253 240 / 0.95), transparent 62%),
-      radial-gradient(34rem 26rem at 30% 55%, rgb(0 185 161 / 0.16), transparent 65%),
-      linear-gradient(160deg, #f4fbfa 0%, #eaf3f3 55%, #f3f7f8 100%);
-    background-attachment: fixed;
-    background-color: var(--color-canvas);
+    /* A plain, calm page behind the white cards. */
+    background: var(--color-canvas);
     color: var(--color-ink);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
@@ -74,39 +68,22 @@
 
 
 /*
-  Glass. Frosted white panels over the silk background: translucent, blurred, with a bright 1px edge
-  and a soft teal shadow. Where a browser cannot blur, the panel is almost solid so text stays readable.
-  Menus, pop-ups and form fields stay solid on purpose.
+  Surfaces. The class names are kept from the earlier frosted look so every screen picks the new one up:
+  plain white cards with a thin border, a white top bar with a hairline, and a flat dark-teal menu.
 */
 @layer components {
   .glass {
-    background: rgb(255 255 255 / 0.58);
-    -webkit-backdrop-filter: blur(18px) saturate(165%);
-    backdrop-filter: blur(18px) saturate(165%);
-    border: 1px solid rgb(255 255 255 / 0.75);
-    box-shadow: var(--shadow-card), inset 0 1px 0 rgb(255 255 255 / 0.9);
+    background: var(--color-surface);
+    border: 1px solid var(--color-line);
+    box-shadow: var(--shadow-card);
   }
   .glass-bar {
-    background: rgb(255 255 255 / 0.62);
-    -webkit-backdrop-filter: blur(16px) saturate(160%);
-    backdrop-filter: blur(16px) saturate(160%);
-    border-bottom: 1px solid rgb(255 255 255 / 0.7);
-    box-shadow: 0 4px 24px rgb(6 59 57 / 0.05);
+    background: var(--color-surface);
+    border-bottom: 1px solid var(--color-line);
   }
   .glass-brand {
-    background: linear-gradient(180deg, rgb(10 79 76 / 0.92) 0%, rgb(6 59 57 / 0.94) 100%);
-    -webkit-backdrop-filter: blur(20px) saturate(150%);
-    backdrop-filter: blur(20px) saturate(150%);
-    border-right: 1px solid rgb(255 255 255 / 0.10);
-    box-shadow: 8px 0 32px rgb(6 59 57 / 0.14), inset -1px 0 0 rgb(255 255 255 / 0.06);
-  }
-  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-    .glass, .glass-bar { background: rgb(255 255 255 / 0.94); }
-    .glass-brand { background: #063b39; }
-  }
-  @media (prefers-reduced-transparency: reduce) {
-    .glass, .glass-bar { background: rgb(255 255 255 / 0.96); -webkit-backdrop-filter: none; backdrop-filter: none; }
-    .glass-brand { background: #063b39; -webkit-backdrop-filter: none; backdrop-filter: none; }
+    background: #0b3533;
+    border-right: 1px solid #0a2c2b;
   }
 }
 

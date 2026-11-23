@@ -120,9 +120,9 @@ function Workspace() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {/* Opened on the person's own phone or computer, so no calling provider is needed. */}
-            <a href={whatsappLink(l.phone)} target="_blank" rel="noopener noreferrer" className="inline-flex h-10 items-center gap-2 rounded-lg border border-white/80 bg-white/65 px-3.5 text-sm font-medium text-ink shadow-[0_2px_10px_rgb(6_59_57/0.06)] backdrop-blur-sm transition hover:bg-white/95"><MessageCircle className="h-4 w-4 text-ok" aria-hidden /> WhatsApp</a>
-            <a href={`sms:+${l.phone.replace(/\D/g, '')}`} className="inline-flex h-10 items-center gap-2 rounded-lg border border-white/80 bg-white/65 px-3.5 text-sm font-medium text-ink shadow-[0_2px_10px_rgb(6_59_57/0.06)] backdrop-blur-sm transition hover:bg-white/95"><MessageSquareText className="h-4 w-4 text-info" aria-hidden /> SMS</a>
-            {l.email && <a href={`mailto:${l.email}`} className="inline-flex h-10 items-center gap-2 rounded-lg border border-white/80 bg-white/65 px-3.5 text-sm font-medium text-ink shadow-[0_2px_10px_rgb(6_59_57/0.06)] backdrop-blur-sm transition hover:bg-white/95"><Mail className="h-4 w-4 text-muted" aria-hidden /> Email</a>}
+            <a href={whatsappLink(l.phone)} target="_blank" rel="noopener noreferrer" className="inline-flex h-9 items-center gap-2 rounded-md border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-head"><MessageCircle className="h-4 w-4 text-ok" aria-hidden /> WhatsApp</a>
+            <a href={`sms:+${l.phone.replace(/\D/g, '')}`} className="inline-flex h-9 items-center gap-2 rounded-md border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-head"><MessageSquareText className="h-4 w-4 text-info" aria-hidden /> SMS</a>
+            {l.email && <a href={`mailto:${l.email}`} className="inline-flex h-9 items-center gap-2 rounded-md border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-head"><Mail className="h-4 w-4 text-muted" aria-hidden /> Email</a>}
             {can('video.host') && video.data?.enabled && l.status.isOpen && <Button variant="secondary" onClick={() => setVideoOpen(true)}><Video className="h-4 w-4" aria-hidden /> Video</Button>}
             {can('call.place') && phoneReady && l.status.isOpen && <Button variant="accent" onClick={() => void call()} loading={calling}><PhoneCall className="h-4 w-4" aria-hidden /> Call</Button>}
           </div>

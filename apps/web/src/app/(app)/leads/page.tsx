@@ -311,7 +311,7 @@ function Leads() {
               type="button"
               aria-pressed={filters.followup === key}
               onClick={() => set({ followup: key })}
-              className={cx('rounded-full border px-3 py-1 text-xs font-medium', filters.followup === key ? 'border-brand bg-brand text-white' : 'border-line bg-white/70 text-muted hover:text-ink')}
+              className={cx('rounded-full border px-3 py-1 text-xs font-medium', filters.followup === key ? 'border-brand bg-brand text-white' : 'border-line bg-surface text-muted hover:text-ink')}
             >
               {label}
             </button>
