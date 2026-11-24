@@ -16,6 +16,7 @@ import { fmtDateTime, fmtPhone, fromNow } from '@/lib/format';
 import { useRealtime } from '@/lib/realtime';
 import type { LeadListItem, Page, Queues, SourceOption, StatusOption, UserOption } from '@/lib/types';
 import { useApi } from '@/lib/use-api';
+import { LogCallModal, telHref } from '@/components/leads/log-call-modal';
 import { readListContext, saveListContext } from '@/lib/lead-list-context';
 
 const QUEUE_CHIPS = [
@@ -289,6 +290,7 @@ function Leads() {
   // Voice and video calls and meetings need the calling service to be set up; ask once, not for every row.
   const comm = useApi<{ enabled: boolean }>(can('video.host') ? '/communications/status' : null);
   const [meetingFor, setMeetingFor] = useState<CallMenuLead | null>(null);
+  const [logFor, setLogFor] = useState<LeadListItem | null>(null);
 
   async function callLead(id: string) {
     setNotice(null);
@@ -484,7 +486,7 @@ function Leads() {
                       <td className={cx('sticky right-0 z-10 px-3 py-2.5 shadow-[-8px_0_8px_-8px_rgba(15,23,42,0.12)]', selected.has(l.id) ? 'bg-mint-soft' : 'bg-surface')}>
                         <div className="flex justify-end gap-1">
                           {(can('call.place') || can('video.host')) && l.status.isOpen && (
-                            <LeadCallMenu lead={{ id: l.id, name: l.name }} phone={can('call.place') && phoneReady ? { enabled: true, onCall: () => void callLead(l.id) } : undefined}
+                            <LeadCallMenu lead={{ id: l.id, name: l.name }} phone={!can('call.place') ? undefined : phoneReady ? { enabled: true, onCall: () => void callLead(l.id) } : { enabled: true, label: 'Call from mobile', href: telHref(l.phone), onCall: () => setLogFor(l) }}
                               internet={can('video.host') && comm.data?.enabled === true} onMeeting={setMeetingFor} onError={(text) => setNotice({ tone: 'bad', text })} />
                           )}
                           <Link href={`/leads/${l.id}`} target="_blank" rel="noopener noreferrer" aria-label={`Open ${l.name} in a new tab`} title="Open in a new tab" className="grid h-8 w-8 place-items-center rounded-md text-muted hover:bg-head hover:text-ink"><ExternalLink className="h-[17px] w-[17px]" /></Link>
@@ -540,6 +542,7 @@ function Leads() {
           }}
         />
       )}
+      {logFor && <LogCallModal leadId={logFor.id} leadName={logFor.name} phone={logFor.phone} onClose={() => setLogFor(null)} onSaved={(text) => { setLogFor(null); setNotice({ tone: 'ok', text: text.replace('Now update the lead in Dispose lead.', 'Open the lead to dispose it.') }); }} />}
       {meetingFor && <NewMeetingModal lead={meetingFor} onClose={() => setMeetingFor(null)} onCreated={() => undefined} />}
     </>
   );

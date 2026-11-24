@@ -16,7 +16,8 @@ export interface CallMenuLead {
 interface Props {
   lead: CallMenuLead;
   /** An ordinary phone call through the calling provider (rings the counsellor's own phone first). */
-  phone?: { enabled: boolean; onCall: () => void };
+  /** With `href` (a tel: link) the item opens the phone's own dialer as an ordinary link, and onCall runs as well. */
+  phone?: { enabled: boolean; onCall: () => void; label?: string; href?: string };
   /** Voice call, video call and meeting over the internet (the lead gets a link). */
   internet: boolean;
   onMeeting: (lead: CallMenuLead) => void;
@@ -80,9 +81,14 @@ export function LeadCallMenu({ lead, phone, internet, onMeeting, onError }: Prop
       </button>
       {open && place && createPortal(
         <div ref={menu} role="menu" aria-label={`Call ${lead.name}`} style={{ position: 'fixed', top: place.top, left: place.left }} className="z-[60] w-56 overflow-hidden rounded-lg border border-line bg-surface py-1 shadow-xl">
-          {phone && (
+          {phone?.href && (
+            <a href={phone.href} role="menuitem" className={item} onClick={() => { setOpen(false); phone.onCall(); }}>
+              <PhoneCall className="h-4 w-4 text-info" aria-hidden /> {phone.label ?? 'Phone call'}
+            </a>
+          )}
+          {phone && !phone.href && (
             <button type="button" role="menuitem" className={item} disabled={busy || !phone.enabled} onClick={() => { setOpen(false); phone.onCall(); }}>
-              <PhoneCall className="h-4 w-4 text-info" aria-hidden /> Phone call
+              <PhoneCall className="h-4 w-4 text-info" aria-hidden /> {phone.label ?? 'Phone call'}
             </button>
           )}
           {internet && (

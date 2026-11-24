@@ -69,12 +69,14 @@ export function StatusPanel({ lead, onChanged }: { lead: LeadDetail; onChanged: 
 
   // The company's own list to choose from, plus the status the lead already has (so it still shows, even if it is no longer offered).
   const options = statuses.data?.filter((s) => s.isActive !== false && (s.selectable !== false || s.id === lead.status.id)) ?? [];
-  const chosen = options.find((s) => s.id === (statusId || lead.status.id));
-  const changing = !!statusId && statusId !== lead.status.id;
-  const reasonNeeded = !!chosen?.requiresSubstatus && changing;
-  const chosenReason = chosen?.substatuses?.find((s) => s.id === substatusId);
-  const commentNeeded = !!chosenReason?.requiresComment;
-  const needsDate = !!chosen && chosen.isOpen && chosen.requiresFollowup && (changing || lead.openFollowUps === 0) && lead.openFollowUps === 0;
+  // Every disposition is complete (company rule, 24 Nov): the status is chosen each time (it does not start on the current
+  // one), a reason is chosen when the status has reasons, a comment is always written, and an open status always gets the
+  // next follow-up date and time. A closed status has no date: the lead is finished.
+  const chosen = options.find((s) => s.id === statusId);
+  const hasReasons = !!chosen?.substatuses && chosen.substatuses.length > 0;
+  const reasonNeeded = hasReasons;
+  const commentNeeded = true;
+  const needsDate = !!chosen && chosen.isOpen && can('followup.manage');
 
   if (!can('lead.update')) return null;
 
@@ -83,8 +85,9 @@ export function StatusPanel({ lead, onChanged }: { lead: LeadDetail; onChanged: 
     const thenNext = goNext;
     setGoNext(false);
     // Say what is missing, here, in words. The browser's own "fill this in" bubble is easy to miss, and then Save looks as if it does nothing.
-    const missing = reasonNeeded && !substatusId ? 'Choose a reason in "Lead sub-status" for this status.'
-      : commentNeeded && !remark.trim() ? 'This reason needs a comment. Write it in "Comments".'
+    const missing = !statusId ? 'Choose the lead status.'
+      : reasonNeeded && !substatusId ? 'Choose a reason in "Lead sub-status" for this status.'
+      : commentNeeded && !remark.trim() ? 'Write what was discussed in "Comments".'
       : needsDate && !due ? 'Choose the next follow-up date and time.'
       : null;
     if (missing) { setSaved(null); setError(missing); return; }
@@ -95,10 +98,10 @@ export function StatusPanel({ lead, onChanged }: { lead: LeadDetail; onChanged: 
       await api(`/leads/${lead.id}/status`, {
         method: 'POST',
         body: {
-          statusId: statusId || lead.status.id,
+          statusId,
           ...(substatusId && { substatusId }),
           ...(remark.trim() && { remark: remark.trim() }),
-          ...(due && can('followup.manage') && { followUp: { dueAt: toIso(due) } }),
+          ...(due && chosen?.isOpen && can('followup.manage') && { followUp: { dueAt: toIso(due) } }),
         },
       });
       if (thenNext) {
@@ -128,24 +131,25 @@ export function StatusPanel({ lead, onChanged }: { lead: LeadDetail; onChanged: 
       <form onSubmit={save} noValidate className="mt-4 space-y-4">
         {error && <Notice tone="bad">{error}</Notice>}
         {saved && <Notice tone="ok">{saved}</Notice>}
-        <Field label="Lead status" htmlFor="st" required>
-          <Select id="st" value={statusId || lead.status.id} onChange={(e) => { setStatusId(e.target.value); setSubstatusId(''); }}>
+        <Field label="Lead status" htmlFor="st" required hint={`Now: ${lead.status.name}${lead.substatus ? ` · ${lead.substatus.name}` : ''}`}>
+          <Select id="st" value={statusId} onChange={(e) => { setStatusId(e.target.value); setSubstatusId(''); }}>
+            <option value="">Select status</option>
             {options.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </Select>
         </Field>
         <Field label="Lead sub-status" htmlFor="sub" required={reasonNeeded}>
           <Select id="sub" value={substatusId} onChange={(e) => setSubstatusId(e.target.value)} required={reasonNeeded} disabled={!(chosen?.substatuses && chosen.substatuses.length > 0)}>
-            <option value="">{!(chosen?.substatuses && chosen.substatuses.length > 0) ? 'No reasons for this status' : reasonNeeded ? 'Select a reason' : 'None'}</option>
+            <option value="">{!chosen ? 'Choose a status first' : !hasReasons ? 'No reasons for this status' : 'Select a reason'}</option>
             {(chosen?.substatuses ?? []).map((s) => <option key={s.id} value={s.id}>{s.name}{s.requiresComment ? ' (comments required)' : ''}</option>)}
           </Select>
         </Field>
         <button type="button" onClick={() => setMap(true)} className="-mt-2 text-xs font-medium text-info hover:underline">View all dependencies</button>
         {can('followup.manage') && chosen?.isOpen && (
-          <Field label={needsDate ? 'Next follow-up (required)' : 'Next follow-up (optional)'} htmlFor="due">
+          <Field label="Next follow-up" htmlFor="due" required>
             <DateTimePicker id="due" min={minLocal()} value={due} onChange={setDue} required={needsDate} />
           </Field>
         )}
-        <Field label={commentNeeded ? 'Comments (required)' : 'Comments'} htmlFor="rm" required={commentNeeded}>
+        <Field label="Comments" htmlFor="rm" required>
           <Textarea id="rm" value={remark} onChange={(e) => setRemark(e.target.value)} maxLength={1000} required={commentNeeded} placeholder="What was discussed?" />
         </Field>
         {fromList ? (
