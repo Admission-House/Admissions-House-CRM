@@ -228,7 +228,10 @@ function Leads() {
   // The Follow-up queue is a list of calls to make: the one due soonest comes first, unless the person chose another order.
   const query = useMemo(() => {
     const { since, ...rest } = filters;
-    return { ...Object.fromEntries(Object.entries(rest).filter(([, v]) => v)), ...(since && { createdAfter: sinceIso(since) }), ...(filters.queue === 'followup' && !filters.sort && { sort: 'followup' }), limit: PAGE_SIZE };
+    // "All" is the leads still being worked: a lead given a closed status leaves it and is found under Closed. A search,
+    // a chosen status or the junk-only filter still looks through every lead, closed ones too.
+    const allOpen = !filters.queue && !filters.q && !filters.statusId && filters.junk !== 'only';
+    return { ...Object.fromEntries(Object.entries(rest).filter(([, v]) => v)), ...(allOpen && { queue: 'open' }), ...(since && { createdAfter: sinceIso(since) }), ...(filters.queue === 'followup' && !filters.sort && { sort: 'followup' }), limit: PAGE_SIZE };
   }, [filters]);
   const queryKey = JSON.stringify(query);
   const cursors = useMemo<(string | null)[]>(() => (trail?.key === queryKey ? trail.cursors : [null]), [trail, queryKey]);
@@ -264,7 +267,8 @@ function Leads() {
 
   const advanced = ['statusId', 'sourceId', 'assignedTo', 'intent', 'studyMode', 'followup', 'createdFrom', 'createdTo', 'since', 'junk'] as const;
   const activeFilters = advanced.filter((k) => filters[k]).length;
-  const count = (key: string) => (key === '' ? queues.data?.total : queues.data?.queues[key]);
+  // "All" counts the leads not closed, as the list shows them.
+  const count = (key: string) => (key === '' ? (queues.data ? queues.data.total - (queues.data.queues.closed ?? 0) : undefined) : queues.data?.queues[key]);
   const allSelected = items.length > 0 && items.every((l) => selected.has(l.id));
   // The box in the heading ticks or unticks this page only; leads ticked on other pages stay ticked.
   const selectPage = (on: boolean) =>
@@ -279,7 +283,7 @@ function Leads() {
     setNotice(null);
     try {
       const { q, queue, statusId, sourceId, assignedTo, intent, studyMode, followup, createdFrom, createdTo, since, junk } = filters;
-      await download('/leads/export', { q, queue, statusId, sourceId, assignedTo, intent, studyMode, followup, createdFrom, createdTo, junk, ...(since && { createdAfter: sinceIso(since) }), format });
+      await download('/leads/export', { q, queue: queue || (!q && !statusId && junk !== 'only' ? 'open' : undefined), statusId, sourceId, assignedTo, intent, studyMode, followup, createdFrom, createdTo, junk, ...(since && { createdAfter: sinceIso(since) }), format });
     } catch (e) {
       setNotice({ tone: 'bad', text: e instanceof ApiError ? e.message : 'The export failed. Try again.' });
     } finally {

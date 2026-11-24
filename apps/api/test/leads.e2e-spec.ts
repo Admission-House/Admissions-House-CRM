@@ -374,6 +374,20 @@ describe('queues', () => {
     expect(await queueOf()).toBe('fresh');
   });
 
+  it('"open" (the All leads list) leaves out a lead once it is closed, and Closed shows it', async () => {
+    const l = await lead(t.lc1!);
+    expect((await everything(t.lc1!, 'queue=open')).map((x) => x.id)).toContain(l.id);
+    const res = await api.call('POST', `/leads/${l.id}/status`, t.lc1!, { statusId: await statusId('Not Interested'), remark: 'Joined elsewhere' });
+    expect(res.statusCode, res.body).toBe(200);
+    expect((await everything(t.lc1!, 'queue=open')).map((x) => x.id)).not.toContain(l.id);
+    expect((await everything(t.lc1!, 'queue=closed')).map((x) => x.id)).toContain(l.id);
+    expect((await everything(t.lc1!)).map((x) => x.id)).toContain(l.id); // no queue: every lead, as search needs
+    const q = (await api.call('GET', '/leads/queues', t.sa!)).json();
+    const open = Number((await owner.query(
+      `SELECT count(*) FROM leads l JOIN lead_statuses s ON s.id = l.status_id WHERE l.tenant_id = $1 AND l.deleted_at IS NULL AND s.queue <> 'closed'`, [fx.tenantId])).rows[0].count);
+    expect(q.total - q.queues.closed).toBe(open);
+  });
+
   it('are what each person is allowed to see', async () => {
     const mine = (await api.call('GET', '/leads/queues', t.lc1!)).json();
     const all = (await api.call('GET', '/leads/queues', t.sa!)).json();

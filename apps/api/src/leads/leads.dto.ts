@@ -26,7 +26,8 @@ export const QUEUES = ['fresh', 'missed', 'followup', 'counselled', 'fee_paid', 
 
 export const listLeadsSchema = pageQuerySchema.extend({
   q: z.string().trim().max(100).optional(),
-  queue: z.enum(QUEUES).optional(),
+  /** One queue, or "open": every lead not in the Closed queue (the "All leads" list, where a closed lead leaves the list). */
+  queue: z.enum([...QUEUES, 'open']).optional(),
   statusId: z.uuid().optional(),
   sourceId: z.uuid().optional(),
   /** A person, "me", or "unassigned". */

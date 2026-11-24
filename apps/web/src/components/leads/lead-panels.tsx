@@ -11,7 +11,7 @@ import { useAuth } from '@/lib/auth';
 import { fmtDateTime, fromNow } from '@/lib/format';
 import type { Page, StatusOption, UserOption } from '@/lib/types';
 import { useApi } from '@/lib/use-api';
-import { inListContext, nextLeadId } from '@/lib/lead-list-context';
+import { backToListUrl, inListContext, nextLeadId } from '@/lib/lead-list-context';
 
 export interface LeadDetail {
   id: string;
@@ -111,6 +111,11 @@ export function StatusPanel({ lead, onChanged }: { lead: LeadDetail; onChanged: 
           return;
         }
         setSaved('Saved. That was the last lead in this list.');
+      } else if (fromList) {
+        // Save alone goes back to the list the lead came from (same section, filters and page), now without this lead
+        // if its new status moved it to another section.
+        router.push(backToListUrl(lead.id));
+        return;
       }
       setRemark('');
       setDue('');

@@ -903,7 +903,8 @@ export class LeadsService {
       c.push(sql<SqlBool>`l.id = ANY (ARRAY(SELECT lead_ids_matching_text(${likePattern(term.value)})))`);
     }
 
-    if (q.queue) c.push(sql<SqlBool>`${EFFECTIVE_QUEUE} = ${q.queue}`);
+    if (q.queue === 'open') c.push(sql<SqlBool>`${EFFECTIVE_QUEUE} <> 'closed'`);
+    else if (q.queue) c.push(sql<SqlBool>`${EFFECTIVE_QUEUE} = ${q.queue}`);
     if (q.statusId) c.push(sql<SqlBool>`l.status_id = ${q.statusId}::uuid`);
     if (q.sourceId && canSeeSource(auth)) c.push(sql<SqlBool>`l.source_id = ${q.sourceId}::uuid`);
     if (q.intent) c.push(sql<SqlBool>`l.intent = ${q.intent}`);
