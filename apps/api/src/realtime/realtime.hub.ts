@@ -5,7 +5,7 @@
  * carries no data. A browser that gets one asks the normal API for the new numbers, so it can never
  * be told more than its own permissions allow.
  */
-export const TOPICS = ['notification', 'team', 'lead', 'call', 'work', 'admin'] as const;
+export const TOPICS = ['notification', 'team', 'lead', 'call', 'calllog', 'work', 'admin'] as const;
 export type Topic = (typeof TOPICS)[number];
 
 export interface LiveEvent {
@@ -46,6 +46,9 @@ export function wants(sub: Pick<Subscriber, 'tenantId' | 'userId' | 'canSeeTeam'
       return e.u === null || e.u === sub.userId || sub.canSeeTeam;
     case 'work':
     case 'admin':
+      return true;
+    case 'calllog':
+      // A call started, connected or ended somewhere in the company: call lists and call reports look again.
       return true;
     case 'call':
       // A call or meeting invitation changed: the person invited and the person who started it.

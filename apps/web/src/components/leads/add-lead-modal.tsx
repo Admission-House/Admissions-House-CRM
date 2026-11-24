@@ -2,6 +2,8 @@
 
 import { useCallback, useState } from 'react';
 import { Button, Field, Input, Notice, Select, Textarea } from '@/components/ui';
+import { DateTimePicker } from '@/components/ui/date-time-picker';
+import { toLocalValue } from '@/lib/date-picker';
 import { Modal } from '@/components/ui/modal';
 import { LocationPicker, type Place } from '@/components/ui/location-picker';
 import { SearchSelect, type SearchOption } from '@/components/ui/search-select';
@@ -16,11 +18,6 @@ interface CollegeItem {
 }
 
 const today = () => new Date().toLocaleDateString('en-CA');
-const nowLocal = () => {
-  const d = new Date(Date.now() + 30 * 60_000);
-  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-  return d.toISOString().slice(0, 16);
-};
 
 /**
  * Adds a lead by hand: who they are, the course and place they are looking at, the university they
@@ -143,7 +140,7 @@ export function AddLeadModal({ sources, people, onClose, onCreated }: { sources:
             </Select>
           </Field>
           <Field label="Expected closure date" htmlFor="x" error={fe('expectedClosureOn')}><Input id="x" type="date" min={today()} value={form.expectedClosureOn} onChange={on('expectedClosureOn')} /></Field>
-          <Field label="Call back on" htmlFor="f" hint="Date and time of the next follow-up" error={fe('followUp.dueAt')}><Input id="f" type="datetime-local" min={nowLocal().slice(0, 10) + 'T00:00'} value={form.followUpAt} onChange={on('followUpAt')} /></Field>
+          <Field label="Call back on" htmlFor="f" hint="Date and time of the next follow-up" error={fe('followUp.dueAt')}><DateTimePicker id="f" min={toLocalValue(new Date())} value={form.followUpAt} onChange={(v) => setForm((f) => ({ ...f, followUpAt: v }))} /></Field>
           <Field label="What to talk about" htmlFor="fn"><Input id="fn" value={form.followUpNote} onChange={on('followUpNote')} maxLength={500} disabled={!form.followUpAt} /></Field>
         </div>
 

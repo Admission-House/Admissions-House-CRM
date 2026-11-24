@@ -157,7 +157,7 @@ export function Avatar({ name, size = 32, tone = 'brand', photo }: { name: strin
 /** Tabs across the top of a workspace. */
 export function Tabs<T extends string>({ tabs, value, onChange, label }: { tabs: { key: T; label: string; count?: number }[]; value: T; onChange: (key: T) => void; label: string }) {
   return (
-    <div role="tablist" aria-label={label} className="flex overflow-x-auto overflow-y-hidden border-b border-line bg-surface">
+    <div role="tablist" aria-label={label} className="flex overflow-x-auto overflow-y-hidden border-b border-line bg-surface [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {tabs.map((t) => {
         const on = t.key === value;
         return (

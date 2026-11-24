@@ -13,7 +13,8 @@ import { StorageService } from '../storage/storage.service.js';
 import { LeadAccess } from '../leads/lead-access.js';
 import { LeadsService } from '../leads/leads.service.js';
 import { z } from 'zod';
-import type { ListCallsDto, WrapUpDto } from './calls.dto.js';
+import type { ListCallsDto, LogCallDto, WrapUpDto } from './calls.dto.js';
+import { LeadWriter } from '../leads/lead-writer.js';
 import { ProviderRegistry } from './providers/registry.js';
 import { TelephonySettingsService } from './telephony-settings.service.js';
 
@@ -35,7 +36,7 @@ export interface CallView {
   remark: string | null;
   recording: 'none' | 'pending' | 'stored' | 'failed';
   /** phone: through the telephony provider. app: a voice call inside the CRM (no recording or after-call form). */
-  via: 'phone' | 'app';
+  via: 'phone' | 'app' | 'manual';
 }
 
 interface Row {
@@ -67,7 +68,7 @@ const LIST_SELECT = sql`
          c.duration_sec, c.outcome, c.lead_id, l.lead_no::text AS lead_no, l.name AS lead_name, c.user_id, u.name AS user_name,
          p.wrapped_up_at, p.remark, r.status AS recording, c.started_at::text AS started_text, c.via
   FROM call_log c
-  LEFT JOIN calls p ON c.via = 'phone' AND p.id = c.id AND p.started_at = c.started_at
+  LEFT JOIN calls p ON c.via IN ('phone', 'manual') AND p.id = c.id AND p.started_at = c.started_at
   LEFT JOIN leads l ON l.id = c.lead_id
   LEFT JOIN users u ON u.id = c.user_id
   LEFT JOIN call_recordings r ON r.call_id = p.id AND r.call_started_at = p.started_at
@@ -84,7 +85,38 @@ export class CallsService {
     private readonly audit: AuditService,
     private readonly links: FileLinks,
     private readonly storage: StorageService,
+    private readonly writer: LeadWriter,
   ) {}
+
+  // ------------------------------------------------------- a call from the counsellor's own mobile
+
+  /**
+   * Writes down a call made outside the CRM (from the counsellor's own phone), so it is counted like any other call:
+   * Calls today, Missed calls today, the Calls page, the lead's Calls tab and the reports. It ends now and began
+   * `minutes` ago. The lead's history gets a line too. Nothing is asked of a calling provider.
+   */
+  logManual(auth: AuthContext, leadId: string, dto: LogCallDto): Promise<{ callId: string }> {
+    return this.db.withTenant(auth.tenantId, async (trx) => {
+      const lead = await this.access.get(trx, auth, leadId);
+      const customer = await this.numberFor(trx, lead.id, lead.primary_phone, dto.phone);
+      const talkSec = dto.outcome === 'connected' ? (dto.minutes ?? 0) * 60 : null;
+      const { rows } = await sql<{ id: string }>`
+        INSERT INTO calls (tenant_id, lead_id, user_id, direction, provider_call_id, counterparty, started_at, answered_at, ended_at,
+                           duration_sec, outcome, logged_by_hand, wrapped_up_at, wrapped_up_by)
+        VALUES (${auth.tenantId}, ${lead.id}, ${auth.userId}, ${dto.direction}, ${`manual-${randomUUID()}`}, ${customer},
+                clock_timestamp() - make_interval(secs => ${talkSec ?? 0}),
+                ${talkSec !== null ? sql`clock_timestamp() - make_interval(secs => ${talkSec})` : null},
+                clock_timestamp(), ${talkSec}, ${dto.outcome}, true, clock_timestamp(), ${auth.userId})
+        RETURNING id`.execute(trx);
+      const label = { connected: 'connected', not_picked: 'not picked', busy: 'busy', failed: 'switched off or not reachable', missed: 'missed' }[dto.outcome];
+      const talk = talkSec ? `, ${dto.minutes} min` : '';
+      await this.writer.activity(trx, {
+        tenantId: auth.tenantId, leadId: lead.id, userId: auth.userId, type: 'call',
+        remark: `${dto.direction === 'incoming' ? 'Call from the student' : 'Called from mobile'}: ${label}${talk}`,
+      });
+      return { callId: rows[0]!.id };
+    });
+  }
 
   // ------------------------------------------------------------ place a call
 
@@ -256,6 +288,6 @@ function toView(r: Row): CallView {
     lead: r.lead_id ? { id: r.lead_id, leadNo: r.lead_no ?? '', name: r.lead_name ?? '' } : null,
     user: r.user_id ? { id: r.user_id, name: r.user_name ?? '' } : null,
     wrappedUp: r.wrapped_up_at !== null, remark: r.remark, recording: (r.recording as CallView['recording'] | null) ?? 'none',
-    via: r.via === 'app' ? 'app' : 'phone',
+    via: r.via === 'app' ? 'app' : r.via === 'manual' ? 'manual' : 'phone',
   };
 }

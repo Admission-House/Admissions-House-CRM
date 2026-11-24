@@ -1,8 +1,9 @@
 'use client';
 
-import { ArrowDownLeft, ArrowUpRight, ClipboardCheck, Play } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, ClipboardCheck, PhoneCall, Play } from 'lucide-react';
 import { useState } from 'react';
-import { Badge, Button, Card, Empty, Field, Input, Notice, Select, Spinner, Textarea } from '@/components/ui';
+import { Badge, Button, Card, Empty, Field, Notice, Select, Spinner, Textarea } from '@/components/ui';
+import { DateTimePicker } from '@/components/ui/date-time-picker';
 import { Modal } from '@/components/ui/modal';
 import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -10,6 +11,7 @@ import { fmtDateTime } from '@/lib/format';
 import type { Page, StatusOption } from '@/lib/types';
 import { useApi } from '@/lib/use-api';
 import type { LeadDetail } from './lead-panels';
+import { LogCallModal } from './log-call-modal';
 
 export interface Call {
   id: string;
@@ -23,12 +25,12 @@ export interface Call {
   remark: string | null;
   recording: 'none' | 'pending' | 'stored' | 'failed';
   /** phone: through the telephony provider. app: a voice call inside the CRM, which has no recording or after-call form. */
-  via?: 'phone' | 'app';
+  via?: 'phone' | 'app' | 'manual';
 }
 
 export const OUTCOME: Record<string, { label: string; tone: 'ok' | 'bad' | 'warn' | 'neutral' | 'info' }> = {
   connected: { label: 'Connected', tone: 'ok' }, missed: { label: 'Missed', tone: 'bad' }, not_picked: { label: 'Not picked', tone: 'warn' },
-  busy: { label: 'Busy', tone: 'warn' }, failed: { label: 'Failed', tone: 'bad' }, ringing: { label: 'Ringing', tone: 'info' }, requested: { label: 'Calling', tone: 'info' },
+  busy: { label: 'Busy', tone: 'warn' }, failed: { label: 'Not reachable', tone: 'bad' }, ringing: { label: 'Ringing', tone: 'info' }, requested: { label: 'Calling', tone: 'info' },
 };
 const errorText = (e: unknown) => (e instanceof ApiError ? e.message : 'Cannot reach the server. Try again.');
 export const length = (s: number | null) => (s ? `${Math.floor(s / 60)}m ${s % 60}s` : '—');
@@ -51,6 +53,7 @@ export function WrapUp({ call, onClose, onDone }: { call: Call; onClose: () => v
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
+    if (chosen?.requiresFollowup && !due) { setError('Choose the next follow-up date and time.'); return; }
     setBusy(true);
     setError(null);
     try {
@@ -74,7 +77,7 @@ export function WrapUp({ call, onClose, onDone }: { call: Call; onClose: () => v
         </Field>
         {can('followup.manage') && chosen?.isOpen && (
           <Field label={chosen.requiresFollowup ? 'Next follow-up (required)' : 'Next follow-up'} htmlFor="wd">
-            <Input id="wd" type="datetime-local" min={minLocal()} value={due} onChange={(e) => setDue(e.target.value)} required={!!chosen.requiresFollowup} />
+            <DateTimePicker id="wd" min={minLocal()} value={due} onChange={setDue} required={!!chosen.requiresFollowup} />
           </Field>
         )}
         <Field label="Remark" htmlFor="wr"><Textarea id="wr" value={remark} onChange={(e) => setRemark(e.target.value)} maxLength={1000} placeholder="What was discussed?" /></Field>
@@ -112,14 +115,28 @@ export function CallsTab({ lead, onChanged }: { lead: LeadDetail; onChanged: () 
   const { can } = useAuth();
   const calls = useApi<Page<Call>>(`/leads/${lead.id}/calls`, { limit: 50 });
   const [wrapping, setWrapping] = useState<Call | null>(null);
+  const [logging, setLogging] = useState(false);
+  const [saved, setSaved] = useState<string | null>(null);
 
   if (calls.loading && !calls.data) return <Spinner />;
   if (calls.error) return <Notice tone="bad">{calls.error.message}</Notice>;
   const items = calls.data?.items ?? [];
-  if (items.length === 0) return <Card><Empty title="No calls yet">Calls to and from this student will be listed here.</Empty></Card>;
+  // A call made from the counsellor's own mobile (or a call the student made to it) is written down here.
+  const logBar = can('call.place') && (
+    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-2.5">
+      <p className="text-xs text-muted">Called from your mobile, or the student called you? Write it down so it is counted.</p>
+      <Button size="sm" variant="secondary" onClick={() => { setSaved(null); setLogging(true); }}><PhoneCall className="h-3.5 w-3.5" aria-hidden /> Log a call</Button>
+    </div>
+  );
+  const modal = logging && <LogCallModal leadId={lead.id} leadName={lead.name} phone={lead.phone} onClose={() => setLogging(false)} onSaved={(text) => { setLogging(false); setSaved(text); calls.reload(); onChanged(); }} />;
+  if (items.length === 0) return <Card className="overflow-hidden">{logBar}{saved && <div className="p-3"><Notice tone="ok">{saved}</Notice></div>}<Empty title="No calls yet">Calls to and from this student will be listed here.</Empty>{modal}</Card>;
 
   return (
     <Card className="overflow-hidden">
+      {logBar}
+      {saved && <div className="p-3"><Notice tone="ok">{saved}</Notice></div>}
+      {modal}
+      <div className="overflow-x-auto">
       <table className="w-full text-left text-sm">
         <thead className="border-b border-line bg-head text-xs uppercase tracking-wide text-muted">
           <tr><th className="px-4 py-2.5">When</th><th className="px-3 py-2.5">Call</th><th className="px-3 py-2.5">By</th><th className="px-3 py-2.5">Outcome</th><th className="px-3 py-2.5">Length</th><th className="px-3 py-2.5">Remark</th><th className="px-4 py-2.5 text-right" /></tr>
@@ -130,7 +147,7 @@ export function CallsTab({ lead, onChanged }: { lead: LeadDetail; onChanged: () 
             return (
               <tr key={c.id}>
                 <td className="px-4 py-2.5 text-muted">{fmtDateTime(c.startedAt)}</td>
-                <td className="px-3 py-2.5"><span className="inline-flex items-center gap-1.5">{c.direction === 'incoming' ? <ArrowDownLeft className="h-3.5 w-3.5 text-info" aria-hidden /> : <ArrowUpRight className="h-3.5 w-3.5 text-ok" aria-hidden />}{c.direction === 'incoming' ? 'Incoming' : 'Outgoing'}</span></td>
+                <td className="px-3 py-2.5"><span className="inline-flex items-center gap-1.5">{c.direction === 'incoming' ? <ArrowDownLeft className="h-3.5 w-3.5 text-info" aria-hidden /> : <ArrowUpRight className="h-3.5 w-3.5 text-ok" aria-hidden />}{c.direction === 'incoming' ? 'Incoming' : 'Outgoing'}</span>{c.via === 'manual' && <p className="text-xs text-muted">From mobile</p>}{c.via === 'app' && <p className="text-xs text-muted">In the CRM</p>}</td>
                 <td className="px-3 py-2.5">{c.user?.name ?? <span className="text-subtle">Unknown</span>}</td>
                 <td className="px-3 py-2.5"><Badge tone={o.tone}>{o.label}</Badge></td>
                 <td className="tabular px-3 py-2.5">{length(c.durationSec)}</td>
@@ -147,6 +164,7 @@ export function CallsTab({ lead, onChanged }: { lead: LeadDetail; onChanged: () 
           })}
         </tbody>
       </table>
+      </div>
       {wrapping && <WrapUp call={wrapping} onClose={() => setWrapping(null)} onDone={() => { setWrapping(null); calls.reload(); onChanged(); }} />}
     </Card>
   );

@@ -46,10 +46,11 @@ export function topicsForPath(path: string | null): string[] {
   if (!path) return [];
   const p = path.split('?')[0]!.replace(/^\/+/, '');
   const head = p.split('/')[0]!;
+  if (head === 'leads' && p.endsWith('/calls')) return ['lead', 'calllog']; // a lead's Calls tab
   if (head === 'leads' || head === 'followups' || head === 'imports') return ['lead'];
   if (head === 'attendance' || head === 'leave' || head === 'salaries' || head === 'payroll') return ['work', 'team'];
-  if (head === 'reports') return ['lead', 'work', 'team'];
+  if (head === 'reports') return ['lead', 'work', 'team', 'calllog'];
   if (head === 'users' || head === 'roles' || head === 'branches' || head === 'lead-statuses' || head === 'lead-sources' || head === 'lead-policies') return ['admin'];
-  if (head === 'communications' || head === 'calls') return ['call'];
+  if (head === 'communications' || head === 'calls') return ['call', 'calllog'];
   return [];
 }

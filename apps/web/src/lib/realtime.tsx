@@ -6,7 +6,7 @@ import { useAuth } from './auth';
 import { changedTopics, nextWaitMs, type Pulse } from './pulse-rules';
 
 /** What a hint can be about. `resync` means the connection was lost for a while, so ask for everything again. */
-export type Topic = 'notification' | 'team' | 'lead' | 'call' | 'work' | 'admin' | 'resync';
+export type Topic = 'notification' | 'team' | 'lead' | 'call' | 'calllog' | 'work' | 'admin' | 'resync';
 type Listener = (topics: readonly string[]) => void;
 
 interface Live {
@@ -40,7 +40,7 @@ export const POLLING = process.env.NEXT_PUBLIC_REALTIME === 'poll';
 
 // How often the question is asked. Quiet and cheap by default: fast only while someone is ringing, slow when nobody is looking.
 const POLL_ACTIVE_MS = Math.max(5, Number(process.env.NEXT_PUBLIC_POLL_SEC ?? 15) || 15) * 1000;
-const POLL_QUIET_MS = 60_000; // tab hidden, or nobody has touched the screen for two minutes
+const POLL_QUIET_MS = 30_000; // tab hidden, or nobody has touched the screen for two minutes
 const POLL_RINGING_MS = 3_000;
 const POLL_MAX_BACKOFF_MS = 120_000;
 const QUIET_AFTER_MS = 120_000;

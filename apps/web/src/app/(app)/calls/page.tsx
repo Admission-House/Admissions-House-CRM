@@ -23,7 +23,7 @@ const DEFAULT_COLUMNS: ColId[] = ['when', 'lead', 'call', 'by', 'outcome', 'leng
 const COLUMNS: Record<ColId, { label: string; td: string; title?: (c: CallRow) => string | undefined; cell: (c: CallRow) => ReactNode }> = {
   when: { label: 'When', td: 'whitespace-nowrap px-4 py-3 text-muted', cell: (c) => <>{fmtDateTime(c.startedAt)}</> },
   lead: { label: 'Lead', td: 'px-3 py-3', cell: (c) => <>{c.lead ? <Link href={`/leads/${c.lead.id}`} className="font-medium text-ink hover:text-brand-600">{c.lead.name}</Link> : <span className="text-subtle">Not a lead</span>}<p className="tabular text-xs text-muted">{fmtPhone(c.number)}</p></> },
-  call: { label: 'Call', td: 'px-3 py-3', cell: (c) => <><span className="inline-flex items-center gap-1.5">{c.direction === 'incoming' ? <ArrowDownLeft className="h-4 w-4 text-info" aria-hidden /> : <ArrowUpRight className="h-4 w-4 text-ok" aria-hidden />}{c.direction === 'incoming' ? 'Incoming' : 'Outgoing'}</span>{c.via === 'app' && <p className="text-xs text-muted">In the CRM</p>}</> },
+  call: { label: 'Call', td: 'px-3 py-3', cell: (c) => <><span className="inline-flex items-center gap-1.5">{c.direction === 'incoming' ? <ArrowDownLeft className="h-4 w-4 text-info" aria-hidden /> : <ArrowUpRight className="h-4 w-4 text-ok" aria-hidden />}{c.direction === 'incoming' ? 'Incoming' : 'Outgoing'}</span>{c.via === 'app' && <p className="text-xs text-muted">In the CRM</p>}{c.via === 'manual' && <p className="text-xs text-muted">From mobile</p>}</> },
   by: { label: 'By', td: 'px-3 py-3', cell: (c) => <>{c.user?.name ?? <span className="text-subtle">Unknown</span>}</> },
   outcome: { label: 'Outcome', td: 'px-3 py-3', cell: (c) => <><Badge tone={(OUTCOME[c.outcome] ?? { label: c.outcome, tone: 'neutral' as const }).tone}>{(OUTCOME[c.outcome] ?? { label: c.outcome, tone: 'neutral' as const }).label}</Badge></> },
   length: { label: 'Length', td: 'tabular px-3 py-3', cell: (c) => <>{length(c.durationSec)}</> },
@@ -67,17 +67,41 @@ function Calls() {
       <Card className="overflow-hidden">
         <div className="flex flex-wrap items-center gap-3 border-b border-line p-3">
           {team.data && team.data.items.length > 1 && (
-            <Select aria-label="Counsellor" value={userId} onChange={(e) => setUserId(e.target.value)} className="w-48"><option value="">Every counsellor</option>{team.data.items.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}</Select>
+            <Select aria-label="Counsellor" value={userId} onChange={(e) => setUserId(e.target.value)} className="w-full sm:w-48"><option value="">Every counsellor</option>{team.data.items.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}</Select>
           )}
-          <Select aria-label="Direction" value={direction} onChange={(e) => setDirection(e.target.value)} className="w-40"><option value="">All calls</option><option value="incoming">Incoming</option><option value="outgoing">Outgoing</option></Select>
-          <Select aria-label="Outcome" value={outcome} onChange={(e) => setOutcome(e.target.value)} className="w-44"><option value="">Any outcome</option>{Object.entries(OUTCOME).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</Select>
-          <label className="flex items-center gap-2 text-sm text-muted">From<Input type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} className="w-40" /></label>
-          <label className="flex items-center gap-2 text-sm text-muted">To<Input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} className="w-40" /></label>
+          <Select aria-label="Direction" value={direction} onChange={(e) => setDirection(e.target.value)} className="w-full sm:w-40"><option value="">All calls</option><option value="incoming">Incoming</option><option value="outgoing">Outgoing</option></Select>
+          <Select aria-label="Outcome" value={outcome} onChange={(e) => setOutcome(e.target.value)} className="w-full sm:w-44"><option value="">Any outcome</option>{Object.entries(OUTCOME).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</Select>
+          <label className="flex w-full items-center gap-2 text-sm text-muted sm:w-auto"><span className="w-9 shrink-0 sm:w-auto">From</span><Input type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} className="w-full sm:w-40" /></label>
+          <label className="flex w-full items-center gap-2 text-sm text-muted sm:w-auto"><span className="w-9 shrink-0 sm:w-auto">To</span><Input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} className="w-full sm:w-40" /></label>
           <label className="flex h-10 items-center gap-2 text-sm"><input type="checkbox" checked={unwrapped} onChange={(e) => setUnwrapped(e.target.checked)} className="h-4 w-4 accent-[#0f625e]" /> After-call form pending</label>
         </div>
 
         {calls.error ? <div className="p-4"><Notice tone="bad">{calls.error.message}</Notice></div> : calls.loading && !calls.data ? <Spinner /> : items.length === 0 ? <Empty title="No calls match">Change the filters, or place a call from a lead.</Empty> : (
-          <div className="overflow-x-auto">
+          <>
+          <ul className="divide-y divide-line md:hidden">
+            {items.map((c) => (
+              <li key={c.id} className="space-y-1.5 px-4 py-3 text-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">{COLUMNS.lead.cell(c)}</div>
+                  {COLUMNS.outcome.cell(c)}
+                </div>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
+                  <span>{fmtDateTime(c.startedAt)}</span>
+                  <span>{COLUMNS.call.cell(c)}</span>
+                  {c.user?.name && <span>By {c.user.name}</span>}
+                  {c.durationSec != null && <span className="tabular">{length(c.durationSec)}</span>}
+                </div>
+                {c.remark && <p className="text-xs text-muted">{c.remark}</p>}
+                {(c.recording === 'stored' && can('call.listen')) || (c.outcome === 'connected' && c.via !== 'app' && !c.wrappedUp && c.lead && can('lead.update')) ? (
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    {c.recording === 'stored' && can('call.listen') && <Recording callId={c.id} />}
+                    {c.outcome === 'connected' && c.via !== 'app' && !c.wrappedUp && c.lead && can('lead.update') && <Button size="sm" onClick={() => setWrapping(c)}><ClipboardCheck className="h-3.5 w-3.5" aria-hidden /> After-call form</Button>}
+                  </div>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+          <div className="hidden overflow-x-auto md:block">
             {columns.changed && <div className="flex justify-end px-3 pt-2 text-xs"><button type="button" onClick={columns.reset} className="font-medium text-info hover:underline">Reset column order</button></div>}
             <table className="w-full text-left text-sm">
               <thead className="bg-head text-xs uppercase tracking-wide text-muted">
@@ -101,6 +125,7 @@ function Calls() {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </Card>
       {wrapping && <WrapUp call={wrapping} onClose={() => setWrapping(null)} onDone={() => { setWrapping(null); calls.reload(); }} />}

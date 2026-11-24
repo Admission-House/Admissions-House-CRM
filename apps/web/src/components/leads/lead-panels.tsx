@@ -1,14 +1,17 @@
 'use client';
 
 import { Check, CircleDot, FileText, MessageSquare, PhoneCall, RefreshCw, Repeat, UserCheck, CalendarClock, Clock } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
+import { useRouter } from 'next/navigation';
 import { Badge, Button, Card, Empty, Field, Input, Notice, Select, Spinner, Textarea, cx } from '@/components/ui';
 import { Modal } from '@/components/ui/modal';
+import { DateTimePicker } from '@/components/ui/date-time-picker';
 import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { fmtDateTime, fromNow } from '@/lib/format';
 import type { Page, StatusOption, UserOption } from '@/lib/types';
 import { useApi } from '@/lib/use-api';
+import { inListContext, nextLeadId } from '@/lib/lead-list-context';
 
 export interface LeadDetail {
   id: string;
@@ -46,6 +49,8 @@ const minLocal = () => {
 
 // ---------------------------------------------------------------- status
 
+const noSubscribe = () => () => undefined;
+
 export function StatusPanel({ lead, onChanged }: { lead: LeadDetail; onChanged: () => void }) {
   const { can } = useAuth();
   const statuses = useApi<StatusOption[]>('/lead-statuses');
@@ -55,8 +60,12 @@ export function StatusPanel({ lead, onChanged }: { lead: LeadDetail; onChanged: 
   const [due, setDue] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
+  const [saved, setSaved] = useState<string | null>(null);
   const [map, setMap] = useState(false);
+  const router = useRouter();
+  // "Save & next" is offered when the lead was opened from the leads list: the next lead of that list opens after saving.
+  const fromList = useSyncExternalStore(noSubscribe, () => inListContext(lead.id), () => false);
+  const [goNext, setGoNext] = useState(false);
 
   // The company's own list to choose from, plus the status the lead already has (so it still shows, even if it is no longer offered).
   const options = statuses.data?.filter((s) => s.isActive !== false && (s.selectable !== false || s.id === lead.status.id)) ?? [];
@@ -71,15 +80,17 @@ export function StatusPanel({ lead, onChanged }: { lead: LeadDetail; onChanged: 
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
+    const thenNext = goNext;
+    setGoNext(false);
     // Say what is missing, here, in words. The browser's own "fill this in" bubble is easy to miss, and then Save looks as if it does nothing.
     const missing = reasonNeeded && !substatusId ? 'Choose a reason in "Lead sub-status" for this status.'
       : commentNeeded && !remark.trim() ? 'This reason needs a comment. Write it in "Comments".'
       : needsDate && !due ? 'Choose the next follow-up date and time.'
       : null;
-    if (missing) { setSaved(false); setError(missing); return; }
+    if (missing) { setSaved(null); setError(missing); return; }
     setBusy(true);
     setError(null);
-    setSaved(false);
+    setSaved(null);
     try {
       await api(`/leads/${lead.id}/status`, {
         method: 'POST',
@@ -90,11 +101,19 @@ export function StatusPanel({ lead, onChanged }: { lead: LeadDetail; onChanged: 
           ...(due && can('followup.manage') && { followUp: { dueAt: toIso(due) } }),
         },
       });
+      if (thenNext) {
+        const next = await nextLeadId(lead.id).catch(() => null);
+        if (next) {
+          router.push(`/leads/${next}`);
+          return;
+        }
+        setSaved('Saved. That was the last lead in this list.');
+      }
       setRemark('');
       setDue('');
       setStatusId('');
       setSubstatusId('');
-      setSaved(true);
+      if (!thenNext) setSaved('Saved.');
       onChanged();
     } catch (err) {
       setError(errorText(err));
@@ -108,7 +127,7 @@ export function StatusPanel({ lead, onChanged }: { lead: LeadDetail; onChanged: 
       <h2 className="text-sm font-semibold text-ink">Dispose lead</h2>
       <form onSubmit={save} noValidate className="mt-4 space-y-4">
         {error && <Notice tone="bad">{error}</Notice>}
-        {saved && <Notice tone="ok">Saved.</Notice>}
+        {saved && <Notice tone="ok">{saved}</Notice>}
         <Field label="Lead status" htmlFor="st" required>
           <Select id="st" value={statusId || lead.status.id} onChange={(e) => { setStatusId(e.target.value); setSubstatusId(''); }}>
             {options.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -123,13 +142,20 @@ export function StatusPanel({ lead, onChanged }: { lead: LeadDetail; onChanged: 
         <button type="button" onClick={() => setMap(true)} className="-mt-2 text-xs font-medium text-info hover:underline">View all dependencies</button>
         {can('followup.manage') && chosen?.isOpen && (
           <Field label={needsDate ? 'Next follow-up (required)' : 'Next follow-up (optional)'} htmlFor="due">
-            <Input id="due" type="datetime-local" min={minLocal()} value={due} onChange={(e) => setDue(e.target.value)} required={needsDate} />
+            <DateTimePicker id="due" min={minLocal()} value={due} onChange={setDue} required={needsDate} />
           </Field>
         )}
         <Field label={commentNeeded ? 'Comments (required)' : 'Comments'} htmlFor="rm" required={commentNeeded}>
           <Textarea id="rm" value={remark} onChange={(e) => setRemark(e.target.value)} maxLength={1000} required={commentNeeded} placeholder="What was discussed?" />
         </Field>
-        <Button type="submit" loading={busy} className="w-full">Save</Button>
+        {fromList ? (
+          <div className="grid grid-cols-2 gap-2">
+            <Button type="submit" variant="secondary" loading={busy && !goNext} disabled={busy} onClick={() => setGoNext(false)}>Save</Button>
+            <Button type="submit" loading={busy && goNext} disabled={busy} onClick={() => setGoNext(true)} title="Save, then open the next lead of the list you came from">Save &amp; next</Button>
+          </div>
+        ) : (
+          <Button type="submit" loading={busy} className="w-full">Save</Button>
+        )}
       </form>
       {map && <DependencyMap statuses={options} onClose={() => setMap(false)} />}
     </Card>
@@ -232,6 +258,7 @@ export function FollowUpsPanel({ lead, onChanged }: { lead: LeadDetail; onChange
 
   async function add(e: React.FormEvent) {
     e.preventDefault();
+    if (!due) { setError('Choose when to follow up.'); return; }
     setBusy(true);
     setError(null);
     try {
@@ -263,7 +290,7 @@ export function FollowUpsPanel({ lead, onChanged }: { lead: LeadDetail; onChange
       <div className="border-b border-line px-4 py-3"><h2 className="text-sm font-semibold text-ink">Follow-ups</h2></div>
       {can('followup.manage') && lead.status.isOpen && (
         <form onSubmit={add} className="grid gap-3 border-b border-line p-5 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)_auto]">
-          <Input aria-label="When" type="datetime-local" min={minLocal()} value={due} onChange={(e) => setDue(e.target.value)} required />
+          <DateTimePicker min={minLocal()} value={due} onChange={setDue} required placeholder="When to follow up" />
           <Input aria-label="Note" placeholder="What to do (optional)" value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} />
           <Button type="submit" loading={busy}>Add</Button>
         </form>

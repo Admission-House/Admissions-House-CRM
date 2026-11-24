@@ -3,7 +3,7 @@
 import { ArrowLeft, Mail, MessageCircle, MessageSquareText, PhoneCall, Video } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useState } from 'react';
+import { Suspense, useState, useSyncExternalStore } from 'react';
 import { RecommendedTab, ShortlistTab } from '@/components/leads/admissions-tabs';
 import { CallsTab } from '@/components/leads/calls-tab';
 import { CustomFieldsPanel } from '@/components/leads/custom-fields-panel';
@@ -13,6 +13,7 @@ import { CopyButton } from '@/components/ui/copy-button';
 import { PartnerPanel } from '@/components/leads/partner-panel';
 import { ProfileTab } from '@/components/leads/profile-tab';
 import { VideoModal } from '@/components/leads/video-modal';
+import { LogCallModal, telHref } from '@/components/leads/log-call-modal';
 import { Avatar, Badge, Button, Card, Notice, Panel, Spinner, Tabs } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -20,6 +21,7 @@ import { whatsappLink } from '@/lib/communications';
 import { usePhoneReady } from '@/lib/use-phone';
 import { fmtDate, fmtDateTime, fmtPhone, fromNow } from '@/lib/format';
 import { useApi } from '@/lib/use-api';
+import { backToListUrl } from '@/lib/lead-list-context';
 
 const INTENT_TONE = { hot: 'bad', warm: 'warn', cold: 'info' } as const;
 
@@ -60,10 +62,14 @@ function Workspace() {
   // Shown only when the company has set video up (Agora keys in the environment).
   const video = useApi<{ enabled: boolean }>(can('video.host') ? '/communications/status' : null);
   const [callMessage, setCallMessage] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null);
+  const [logging, setLogging] = useState(false);
 
   const requested = params.get('tab');
   const tab: TabKey = TABS.some((t) => t.key === requested) ? (requested as TabKey) : 'activity';
   const setTab = (key: TabKey) => router.replace(`/leads/${id}${key === 'activity' ? '' : `?tab=${key}`}`, { scroll: false });
+
+  // Back to the list the lead was opened from: same section, filters, sort and page (see lead-list-context).
+  const back = useSyncExternalStore(noSubscribe, () => backToListUrl(id), () => '/leads');
 
   const changed = () => {
     lead.reload();
@@ -90,7 +96,7 @@ function Workspace() {
     return (
       <div className="space-y-4">
         <Notice tone="bad">{lead.error.status === 404 ? 'This lead does not exist, or it is not one you can see.' : lead.error.message}</Notice>
-        <Link href="/leads" className="inline-flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:underline"><ArrowLeft className="h-4 w-4" /> Back to leads</Link>
+        <Link href={back} className="inline-flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:underline"><ArrowLeft className="h-4 w-4" /> Back to leads</Link>
       </div>
     );
   }
@@ -102,7 +108,7 @@ function Workspace() {
       <Card className="mb-4 overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
           <div className="flex min-w-0 items-center gap-3">
-            <Link href="/leads" aria-label="Back to leads" className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-muted hover:bg-head hover:text-ink"><ArrowLeft className="h-4 w-4" /></Link>
+            <Link href={back} aria-label="Back to leads" className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-muted hover:bg-head hover:text-ink"><ArrowLeft className="h-4 w-4" /></Link>
             <Avatar name={l.name} size={40} />
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
@@ -125,8 +131,13 @@ function Workspace() {
             {l.email && <a href={`mailto:${l.email}`} className="inline-flex h-9 items-center gap-2 rounded-md border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-head"><Mail className="h-4 w-4 text-muted" aria-hidden /> Email</a>}
             {can('video.host') && video.data?.enabled && l.status.isOpen && <Button variant="secondary" onClick={() => setVideoOpen(true)}><Video className="h-4 w-4" aria-hidden /> Video</Button>}
             {can('call.place') && phoneReady && l.status.isOpen && <Button variant="accent" onClick={() => void call()} loading={calling}><PhoneCall className="h-4 w-4" aria-hidden /> Call</Button>}
+            {/* No calling provider: the call is made from the counsellor's own mobile, then its result is written down so it counts. */}
+            {can('call.place') && !phoneReady && (
+              <a href={telHref(l.phone)} onClick={() => setLogging(true)} title="Opens your phone's dialer, then asks how the call went" className="inline-flex h-9 items-center gap-2 rounded-md bg-brand px-3 text-sm font-medium text-white transition-colors hover:bg-brand-600"><PhoneCall className="h-4 w-4" aria-hidden /> Call</a>
+            )}
           </div>
         </div>
+        {logging && <LogCallModal leadId={id} leadName={l.name} phone={l.phone} onClose={() => setLogging(false)} onSaved={(text) => { setLogging(false); setCallMessage({ tone: 'ok', text }); changed(); }} />}
         {videoOpen && <VideoModal leadId={id} leadName={l.name} phone={l.phone} onClose={() => setVideoOpen(false)} />}
         {callMessage && <div className="border-t border-line px-4 py-2.5"><Notice tone={callMessage.tone}>{callMessage.text}</Notice></div>}
         <Tabs label="Lead sections" tabs={TABS.map((t) => ({ key: t.key, label: t.label, count: t.key === 'shortlisted' ? shortlisted.data?.length : t.key === 'nidnp' ? dnp.data?.length : undefined }))} value={tab} onChange={setTab} />
@@ -168,6 +179,8 @@ function Workspace() {
     </>
   );
 }
+
+const noSubscribe = () => () => undefined;
 
 export default function LeadPage() {
   return (

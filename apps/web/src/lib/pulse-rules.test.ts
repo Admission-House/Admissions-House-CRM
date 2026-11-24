@@ -62,4 +62,12 @@ describe('topicsForPath', () => {
     expect(topicsForPath('/auth/me')).toEqual([]);
     expect(topicsForPath(null)).toEqual([]);
   });
+
+  it('refreshes call lists and call reports when any call in the company starts, connects or ends', async () => {
+    const { topicsForPath } = await import('./pulse-rules');
+    expect(topicsForPath('/calls?from=2026-11-24')).toEqual(['call', 'calllog']);
+    expect(topicsForPath('/leads/abc/calls')).toEqual(['lead', 'calllog']);
+    expect(topicsForPath('/reports/calls')).toContain('calllog');
+    expect(topicsForPath('/reports/tat')).toContain('calllog');
+  });
 });

@@ -7,7 +7,7 @@ import type { AuthContext } from '../auth/auth-context.js';
 import { DownloadAlerts } from '../notifications/download-alerts.service.js';
 import { CurrentAuth, Heavy, RequirePermissions } from '../auth/decorators.js';
 import { pageQuerySchema } from '../common/pagination.js';
-import { ListCallsDto, PlaceCallDto, WrapUpDto } from './calls.dto.js';
+import { ListCallsDto, LogCallDto, PlaceCallDto, WrapUpDto } from './calls.dto.js';
 import { CallsService } from './calls.service.js';
 
 class PageDto extends createZodDto(pageQuerySchema) {}
@@ -34,6 +34,14 @@ export class CallsController {
   @HttpCode(202)
   place(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: PlaceCallDto) {
     return this.calls.place(auth, id, body);
+  }
+
+  /** A call made from the counsellor's own mobile, written down afterwards so it is counted. */
+  @RequirePermissions('call.place', 'lead.read')
+  @Post('leads/:id/calls/log')
+  @HttpCode(201)
+  logManual(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: LogCallDto) {
+    return this.calls.logManual(auth, id, body);
   }
 
   @RequirePermissions('call.read', 'lead.read')

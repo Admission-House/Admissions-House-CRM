@@ -1,15 +1,16 @@
 'use client';
 
-import { Bell, CheckCheck } from 'lucide-react';
+import { Bell, BellOff, CheckCheck, Volume2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Spinner, cx } from '@/components/ui';
 import { api } from '@/lib/api';
 import { fromNow } from '@/lib/format';
 import { useRealtime, useRealtimeStatus } from '@/lib/realtime';
 import type { Page } from '@/lib/types';
 import { useApi } from '@/lib/use-api';
+import { isChimeMuted, playChime, setChimeMuted, unlockChimeOnFirstInput } from '@/lib/chime';
 import { useDismiss } from '@/lib/use-dismiss';
 
 export interface Notification {
@@ -65,6 +66,17 @@ export function describeNotification(n: Notification): { title: string; detail?:
   }
 }
 
+const MUTE_EVENT = 'ah-notify-mute';
+/** Mute is read from this browser's storage; a change here or in another tab shows at once. */
+function subscribeMute(onChange: () => void): () => void {
+  window.addEventListener(MUTE_EVENT, onChange);
+  window.addEventListener('storage', onChange);
+  return () => {
+    window.removeEventListener(MUTE_EVENT, onChange);
+    window.removeEventListener('storage', onChange);
+  };
+}
+
 export function NotificationBell() {
   const router = useRouter();
   const count = useApi<{ unread: number }>('/notifications/unread-count');
@@ -72,6 +84,21 @@ export function NotificationBell() {
   const list = useApi<Page<Notification>>(open ? '/notifications' : null, { limit: 15 });
   const box = useRef<HTMLDivElement>(null);
   const unread = count.data?.unread ?? 0;
+  const muted = useSyncExternalStore(subscribeMute, isChimeMuted, () => false);
+  useEffect(() => unlockChimeOnFirstInput(), []);
+
+  // A sound when the number of unread notifications goes up (not when the page first loads, and not when they are read).
+  const seen = useRef<number | null>(null);
+  useEffect(() => {
+    if (count.data == null) return;
+    if (seen.current !== null && count.data.unread > seen.current) playChime();
+    seen.current = count.data.unread;
+  }, [count.data]);
+
+  function toggleMute() {
+    setChimeMuted(!muted);
+    window.dispatchEvent(new Event(MUTE_EVENT));
+  }
 
   // A new notification shows at once while the live connection is up; the timer is the fallback when it is not.
   const live = useRealtimeStatus();
@@ -102,14 +129,19 @@ export function NotificationBell() {
   return (
     <div ref={box} className="relative">
       <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-label={unread > 0 ? `${unread} unread notifications` : 'Notifications'} className="relative grid h-8 w-8 place-items-center rounded-md text-muted hover:bg-head hover:text-ink">
-        <Bell className="h-[18px] w-[18px]" aria-hidden />
+        {muted ? <BellOff className="h-[18px] w-[18px]" aria-hidden /> : <Bell className="h-[18px] w-[18px]" aria-hidden />}
         {unread > 0 && <span className="tabular absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-bad px-1 text-xs font-bold text-white">{unread > 99 ? '99+' : unread}</span>}
       </button>
       {open && (
         <div className="absolute right-0 z-30 mt-2 w-96 max-w-[92vw] overflow-hidden rounded-lg border border-line bg-surface shadow-lg">
           <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
             <p className="text-sm font-semibold">Notifications</p>
-            {unread > 0 && <button onClick={() => void markAllRead()} className="flex items-center gap-1 text-xs font-medium text-brand-600 hover:underline"><CheckCheck className="h-3.5 w-3.5" aria-hidden /> Mark all read</button>}
+            <div className="flex items-center gap-3">
+              <button type="button" onClick={toggleMute} aria-pressed={muted} title={muted ? 'Sound is off. Click to turn it on.' : 'Sound is on. Click to mute.'} className="flex items-center gap-1 text-xs font-medium text-muted hover:text-ink">
+                {muted ? <><BellOff className="h-3.5 w-3.5" aria-hidden /> Unmute</> : <><Volume2 className="h-3.5 w-3.5" aria-hidden /> Mute</>}
+              </button>
+              {unread > 0 && <button onClick={() => void markAllRead()} className="flex items-center gap-1 text-xs font-medium text-brand-600 hover:underline"><CheckCheck className="h-3.5 w-3.5" aria-hidden /> Mark all read</button>}
+            </div>
           </div>
           <div className="max-h-96 overflow-y-auto">
             {list.loading && !list.data ? <Spinner /> : (list.data?.items.length ?? 0) === 0 ? (

@@ -43,6 +43,51 @@ const hook = (events: unknown[]) =>
   app.inject({ method: 'POST', url: '/api/v1/telephony/webhook', payload: { events } as never, headers: { authorization: `Bearer ${webhookKey}` } });
 const clearBusy = () => owner.query(`UPDATE calls SET outcome = 'failed' WHERE tenant_id = $1 AND outcome IN ('requested', 'ringing')`, [fx.tenantId]);
 
+// ======================================================= from the counsellor's own mobile
+
+describe('a call made from the counsellor own mobile, written down afterwards', () => {
+  const today = async (token: string) => (await api.call('GET', '/dashboard', token)).json().today.calls as { total: number; connected: number; missed: number; talkSec: number };
+
+  it('is counted in Calls today, Missed calls today, the call history and the lead history', async () => {
+    const l = await newLead(t.lc1!, 'Mobile Call Student');
+    const before = await today(t.lc1!);
+    const res = await api.call('POST', `/leads/${l.id}/calls/log`, t.lc1!, { direction: 'outgoing', outcome: 'connected', minutes: 3 });
+    expect(res.statusCode, res.body).toBe(201);
+    const row = await callRow(res.json().callId);
+    expect(row).toMatchObject({ logged_by_hand: true, outcome: 'connected', direction: 'outgoing', duration_sec: 180, user_id: fx.user('lc1').id, lead_id: l.id });
+    expect(row.wrapped_up_at).not.toBeNull(); // no after-call form is asked for again
+    expect(row.answered_at).not.toBeNull();
+
+    const missed = await api.call('POST', `/leads/${l.id}/calls/log`, t.lc1!, { direction: 'incoming', outcome: 'missed' });
+    expect(missed.statusCode, missed.body).toBe(201);
+    const after = await today(t.lc1!);
+    expect(after.total).toBe(before.total + 2);
+    expect(after.connected).toBe(before.connected + 1);
+    expect(after.missed).toBe(before.missed + 1);
+    expect(after.talkSec).toBe(before.talkSec + 180);
+
+    const list = (await api.call('GET', `/leads/${l.id}/calls`, t.lc1!)).json().items as { via: string; outcome: string }[];
+    expect(list.map((c) => `${c.via}:${c.outcome}`).sort()).toEqual(['manual:connected', 'manual:missed']);
+    const history = await owner.query(`SELECT remark FROM lead_activities WHERE lead_id = $1 AND type = 'call' ORDER BY created_at`, [l.id]);
+    expect(history.rows.map((r) => r.remark)).toEqual(['Called from mobile: connected, 3 min', 'Call from the student: missed']);
+    expect((await owner.query(`SELECT first_called_at FROM leads WHERE id = $1`, [l.id])).rows[0].first_called_at).not.toBeNull();
+  });
+
+  it('asks only for results that make sense, and only for leads the person can see', async () => {
+    const l = await newLead(t.lc1!, 'Mobile Call Rules');
+    const code = async (body: Record<string, unknown>, token = t.lc1!) => errorCode(await api.call('POST', `/leads/${l.id}/calls/log`, token, body));
+    expect(await code({ direction: 'incoming', outcome: 'busy' })).toBe('VALIDATION_FAILED');
+    expect(await code({ direction: 'outgoing', outcome: 'missed' })).toBe('VALIDATION_FAILED');
+    expect(await code({ direction: 'outgoing', outcome: 'not_picked', minutes: 4 })).toBe('VALIDATION_FAILED');
+    expect(await code({ direction: 'outgoing', outcome: 'connected', minutes: 301 })).toBe('VALIDATION_FAILED');
+    const other = await api.call('POST', `/leads/${l.id}/calls/log`, t.lc2!, { direction: 'outgoing', outcome: 'busy' });
+    expect(other.statusCode).toBe(404);
+    const ok = await api.call('POST', `/leads/${l.id}/calls/log`, t.lc1!, { direction: 'outgoing', outcome: 'failed' });
+    expect(ok.statusCode, ok.body).toBe(201);
+    expect((await callRow(ok.json().callId)).duration_sec).toBeNull();
+  });
+});
+
 // ================================================================= placing
 
 describe('placing a call', () => {

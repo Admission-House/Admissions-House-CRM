@@ -26,7 +26,7 @@ export class FollowUpReminderService implements OnModuleInit {
   ) {}
 
   onModuleInit(): void {
-    this.jobs.register({ name: 'followup-reminder', group: 'quarter', everySec: this.env.FOLLOWUP_REMINDER_INTERVAL_SEC, run: () => this.runSafely() });
+    this.jobs.register({ name: 'followup-reminder', group: 'minute', everySec: this.env.FOLLOWUP_REMINDER_INTERVAL_SEC, run: () => this.runSafely() });
   }
 
   async runSafely(): Promise<void> {

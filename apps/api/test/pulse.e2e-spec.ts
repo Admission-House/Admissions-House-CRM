@@ -81,6 +81,31 @@ describe('the question "what changed since last time?"', () => {
     expect((await pulse(t.sa!)).stamps.work).toBeDefined();
   });
 
+  it('tells everyone, not only the person on the call, when a call starts or ends (call lists and call reports)', async () => {
+    const before = { sa: (await pulse(t.sa!)).stamps.calllog, lc2: (await pulse(t.lc2!)).stamps.calllog };
+    await sleep(20);
+    await owner.query('BEGIN');
+    await owner.query(`SELECT set_config('app.tenant_id', $1, true)`, [fx.tenantId]);
+    const { rows } = await owner.query(
+      `INSERT INTO calls (tenant_id, direction, provider_call_id, counterparty, started_at, outcome) VALUES ($1, 'incoming', 'pulse-call-1', '919811100099', now(), 'ringing') RETURNING id, started_at`,
+      [fx.tenantId],
+    );
+    await owner.query('COMMIT');
+    const started = { sa: (await pulse(t.sa!)).stamps.calllog, lc2: (await pulse(t.lc2!)).stamps.calllog };
+    for (const who of ['sa', 'lc2'] as const) {
+      expect(started[who], who).toBeDefined();
+      expect(before[who] === undefined || new Date(started[who]!) > new Date(before[who]!)).toBe(true);
+    }
+    await sleep(20);
+    await owner.query('BEGIN');
+    await owner.query(`SELECT set_config('app.tenant_id', $1, true)`, [fx.tenantId]);
+    await owner.query(`UPDATE calls SET outcome = 'missed', ended_at = now() WHERE id = $1`, [rows[0].id]);
+    await owner.query('COMMIT');
+    expect(new Date((await pulse(t.lc2!)).stamps.calllog!) > new Date(started.lc2!)).toBe(true);
+    // The other company hears nothing.
+    expect((await pulse(await makeClient(app, other).signIn('super'))).stamps.calllog).toBeUndefined();
+  });
+
   it('keeps one person\'s notifications to that person', async () => {
     const mine = (await pulse(t.lc!)).stamps.notification;
     const theirs = (await pulse(t.lc2!)).stamps.notification;

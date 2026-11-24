@@ -52,12 +52,12 @@ function Kpi({ icon: Icon, label, value, hint, href, tone = 'brand' }: { icon: L
   // The circle carries the colour: teal normally, amber, red or blue for what needs attention.
   const badge = { brand: 'bg-brand-600 text-white', bad: 'bg-bad text-white', warn: 'bg-warn text-white', info: 'bg-info text-white' };
   const body = (
-    <div className="glass h-full rounded-[var(--radius-card)] px-4 py-4 transition hover:-translate-y-0.5 hover:shadow-[0_12px_36px_rgb(6_59_57/0.14)]">
+    <div className="glass h-full rounded-[var(--radius-card)] px-3 py-3 transition sm:px-4 sm:py-4 hover:-translate-y-0.5 hover:shadow-[0_12px_36px_rgb(6_59_57/0.14)]">
       <div className="flex items-center gap-2.5">
         <span className={cx('grid h-9 w-9 shrink-0 place-items-center rounded-full', badge[tone])}><Icon className="h-[18px] w-[18px]" aria-hidden /></span>
         <p className="text-[13px] font-medium leading-tight text-muted">{label}</p>
       </div>
-      <p className="tabular mt-3 text-[28px] font-bold leading-none text-ink">{value}</p>
+      <p className="tabular mt-3 text-[24px] font-bold leading-none text-ink sm:text-[28px]">{value}</p>
       {hint && <p className="mt-2 text-xs text-subtle">{hint}</p>}
     </div>
   );
@@ -85,7 +85,7 @@ export default function DashboardPage() {
 
   const dash = useApi<Dashboard>('/dashboard');
   // The figures follow the team and the leads as they change, at most every few seconds.
-  useRealtime(['team', 'lead'], dash.reload, 5_000);
+  useRealtime(['team', 'lead', 'calllog'], dash.reload, 5_000);
   const reports = can('report.read');
   const range = reports && dates ? dates : undefined;
   const perDay = useApi<Report<{ name: string; leads: number }>>(range ? '/reports/leads' : null, { groupBy: 'day', ...range });
@@ -133,7 +133,7 @@ export default function DashboardPage() {
         )}
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-6">
         <Kpi icon={Users} label="All leads" value={d.total} href="/leads" />
         <Kpi icon={Inbox} label="Fresh leads" value={d.queues.fresh ?? 0} hint={d.unassigned > 0 ? `${d.unassigned} not assigned` : undefined} href="/leads?queue=fresh" />
         <Kpi icon={CalendarClock} label="Follow-ups today" value={d.dueToday} tone="warn" href="/leads?followup=today" />

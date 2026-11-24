@@ -16,6 +16,7 @@ import { fmtDateTime, fmtPhone, fromNow } from '@/lib/format';
 import { useRealtime } from '@/lib/realtime';
 import type { LeadListItem, Page, Queues, SourceOption, StatusOption, UserOption } from '@/lib/types';
 import { useApi } from '@/lib/use-api';
+import { readListContext, saveListContext } from '@/lib/lead-list-context';
 
 const QUEUE_CHIPS = [
   { key: '', label: 'All', dot: undefined },
@@ -178,7 +179,12 @@ function Leads() {
   const [typed, setTyped] = useState<string | null>(null);
   const search = typed ?? filters.q;
   // The pages already passed, as the cursor each one starts from (null = the first page). Kept per filter set.
-  const [trail, setTrail] = useState<{ key: string; cursors: (string | null)[] } | null>(null);
+  // Coming back from a lead opens the same page of the same list (see lead-list-context).
+  const [trail, setTrail] = useState<{ key: string; cursors: (string | null)[] } | null>(() => {
+    const c = readListContext();
+    const here = `/leads${params.toString() ? `?${params.toString()}` : ''}`;
+    return c && c.url === here ? { key: JSON.stringify(c.query), cursors: c.cursors } : null;
+  });
   const [adding, setAdding] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [notice, setNotice] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null);
@@ -224,7 +230,7 @@ function Leads() {
     return { ...Object.fromEntries(Object.entries(rest).filter(([, v]) => v)), ...(since && { createdAfter: sinceIso(since) }), ...(filters.queue === 'followup' && !filters.sort && { sort: 'followup' }), limit: PAGE_SIZE };
   }, [filters]);
   const queryKey = JSON.stringify(query);
-  const cursors = trail?.key === queryKey ? trail.cursors : [null];
+  const cursors = useMemo<(string | null)[]>(() => (trail?.key === queryKey ? trail.cursors : [null]), [trail, queryKey]);
   const pageNo = cursors.length - 1;
   const cursor = cursors[pageNo];
   const first = useApi<Page<LeadListItem>>('/leads', cursor ? { ...query, cursor } : query);
@@ -232,6 +238,13 @@ function Leads() {
   const items = first.data?.items ?? [];
   const next = first.data?.nextCursor ?? null;
   const from = pageNo * PAGE_SIZE + 1;
+
+  // Remember this list, so a lead opened from it can come back here and open the next one.
+  const listUrl = `/leads${params.toString() ? `?${params.toString()}` : ''}`;
+  useEffect(() => {
+    if (!first.data) return;
+    saveListContext({ url: listUrl, query, cursors, ids: first.data.items.map((l) => l.id), nextCursor: first.data.nextCursor });
+  }, [first.data, listUrl, query, cursors]);
 
   function goTo(list: (string | null)[]) {
     setTrail({ key: queryKey, cursors: list });
