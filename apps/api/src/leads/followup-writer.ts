@@ -44,6 +44,13 @@ export class FollowUpWriter {
     return Number(result.numAffectedRows ?? 0);
   }
 
+  /** closeAll for many leads at once (a bulk status change), in two statements. */
+  async closeAllMany(trx: Trx, leadIds: string[]): Promise<void> {
+    if (leadIds.length === 0) return;
+    await sql`UPDATE followups SET done_at = now() WHERE lead_id = ANY(${leadIds}::uuid[]) AND done_at IS NULL`.execute(trx);
+    await sql`UPDATE leads SET next_followup_at = NULL WHERE id = ANY(${leadIds}::uuid[]) AND next_followup_at IS NOT NULL`.execute(trx);
+  }
+
   /**
    * Finishes the follow-ups a disposition answers: every open one that has come due, and with `all` (a new date was
    * set) the later ones too. Returns how many were finished.

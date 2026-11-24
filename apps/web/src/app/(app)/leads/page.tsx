@@ -2,7 +2,7 @@
 
 import { LeadCallMenu, type CallMenuLead } from '@/components/communications/lead-call-menu';
 import { NewMeetingModal } from '@/components/communications/session-modals';
-import { ArrowDown, ArrowUp, ArrowUpDown, Download, ExternalLink, Plus, Search, SlidersHorizontal, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Download, ExternalLink, Plus, Search, SlidersHorizontal, X } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
@@ -45,7 +45,10 @@ const SINCE = [
 /** The moment "the last 3 hours" (and so on) began, as a timestamp the server understands. */
 const sinceIso = (key: string): string => new Date(Date.now() - (SINCE.find((x) => x.key === key)?.ms ?? 0)).toISOString();
 type FilterKey = (typeof FILTER_KEYS)[number];
-const PAGE_SIZE = 25;
+/** Leads on one page of the list: 1-100, then 101-200 and so on. */
+const PAGE_SIZE = 100;
+/** The most leads one bulk action takes (the server's limit too): ten full pages. */
+const MAX_BULK = 1000;
 
 const INTENT_TONE = { hot: 'bad', warm: 'warn', cold: 'info' } as const;
 const queueTone = (q: string) => (q === 'missed' ? 'bad' : q === 'fee_paid' ? 'ok' : q === 'closed' ? 'neutral' : q === 'fresh' ? 'brand' : 'info');
@@ -109,6 +112,7 @@ function BulkBar({ ids, statuses, people, onDone, onClear }: { ids: string[]; st
   const [error, setError] = useState<string | null>(null);
   // Set when the chosen person is absent, on leave or on a break: the Admin may still hand the leads over.
   const [unavailable, setUnavailable] = useState(false);
+  const tooMany = ids.length > MAX_BULK;
 
   async function run(label: string, path: string, body: object) {
     setBusy(true);
@@ -128,6 +132,7 @@ function BulkBar({ ids, statuses, people, onDone, onClear }: { ids: string[]; st
   return (
     <div className="sticky top-14 z-10 mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-brand/20 bg-mint-soft px-4 py-2.5 shadow-card">
       <span className="text-sm font-semibold text-brand">{ids.length} selected</span>
+      {tooMany && <span className="text-sm font-medium text-bad">At most {MAX_BULK} at a time. Untick {ids.length - MAX_BULK}.</span>}
       {can('lead.assign') && (
         <div className="flex gap-2">
           <Select aria-label="Assign selected leads to" value={assignTo} onChange={(e) => setAssignTo(e.target.value)} className="w-44">
@@ -135,7 +140,7 @@ function BulkBar({ ids, statuses, people, onDone, onClear }: { ids: string[]; st
             <option value="none">Unassigned pool</option>
             {people.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
           </Select>
-          <Button size="sm" variant="secondary" disabled={!assignTo} loading={busy} onClick={() => void run('Assigned', '/leads/bulk/assign', { userId: assignTo === 'none' ? null : assignTo })}>Assign</Button>
+          <Button size="sm" variant="secondary" disabled={!assignTo || tooMany} loading={busy} onClick={() => void run('Assigned', '/leads/bulk/assign', { userId: assignTo === 'none' ? null : assignTo })}>Assign</Button>
         </div>
       )}
       {can('lead.assign') && (
@@ -144,7 +149,7 @@ function BulkBar({ ids, statuses, people, onDone, onClear }: { ids: string[]; st
             <option value="">Change status to…</option>
             {statuses.filter((s) => s.isActive !== false && s.selectable !== false && !(s.isOpen && s.requiresFollowup)).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </Select>
-          <Button size="sm" variant="secondary" disabled={!statusId} loading={busy} onClick={() => void run('Status changed', '/leads/bulk/status', { statusId })}>Apply</Button>
+          <Button size="sm" variant="secondary" disabled={!statusId || tooMany} loading={busy} onClick={() => void run('Status changed', '/leads/bulk/status', { statusId })}>Apply</Button>
         </div>
       )}
       <button onClick={onClear} className="ml-auto text-xs font-medium text-muted hover:text-ink">Clear selection</button>
@@ -172,8 +177,8 @@ function Leads() {
 
   const [typed, setTyped] = useState<string | null>(null);
   const search = typed ?? filters.q;
-  const [extra, setExtra] = useState<{ key: string; items: LeadListItem[]; next: string | null } | null>(null);
-  const [more, setMore] = useState(false);
+  // The pages already passed, as the cursor each one starts from (null = the first page). Kept per filter set.
+  const [trail, setTrail] = useState<{ key: string; cursors: (string | null)[] } | null>(null);
   const [adding, setAdding] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [notice, setNotice] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null);
@@ -219,29 +224,41 @@ function Leads() {
     return { ...Object.fromEntries(Object.entries(rest).filter(([, v]) => v)), ...(since && { createdAfter: sinceIso(since) }), ...(filters.queue === 'followup' && !filters.sort && { sort: 'followup' }), limit: PAGE_SIZE };
   }, [filters]);
   const queryKey = JSON.stringify(query);
-  const first = useApi<Page<LeadListItem>>('/leads', query);
+  const cursors = trail?.key === queryKey ? trail.cursors : [null];
+  const pageNo = cursors.length - 1;
+  const cursor = cursors[pageNo];
+  const first = useApi<Page<LeadListItem>>('/leads', cursor ? { ...query, cursor } : query);
   const loading = first.loading && !first.data;
-  const extraNow = extra?.key === queryKey ? extra : null;
-  const items = [...(first.data?.items ?? []), ...(extraNow?.items ?? [])];
-  const next = extraNow ? extraNow.next : (first.data?.nextCursor ?? null);
+  const items = first.data?.items ?? [];
+  const next = first.data?.nextCursor ?? null;
+  const from = pageNo * PAGE_SIZE + 1;
 
-  async function showMore() {
-    if (!next) return;
-    setMore(true);
-    try {
-      const page = await api<Page<LeadListItem>>('/leads', { query: { ...query, cursor: next } });
-      setExtra({ key: queryKey, items: [...(extraNow?.items ?? []), ...page.items], next: page.nextCursor });
-    } catch (e) {
-      setNotice({ tone: 'bad', text: e instanceof ApiError ? e.message : 'Cannot reach the server.' });
-    } finally {
-      setMore(false);
-    }
+  function goTo(list: (string | null)[]) {
+    setTrail({ key: queryKey, cursors: list });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
+
+  const pager = (
+    <>
+      <span className="tabular" aria-live="polite">Showing {from}&ndash;{from + items.length - 1}</span>
+      <div className="ml-auto flex items-center gap-2">
+        <Button variant="secondary" size="sm" disabled={pageNo === 0 || first.loading} onClick={() => goTo(cursors.slice(0, -1))}><ChevronLeft className="h-3.5 w-3.5" aria-hidden /> Previous</Button>
+        <Button variant="secondary" size="sm" disabled={!next || first.loading} onClick={() => next && goTo([...cursors, next])}>Next <ChevronRight className="h-3.5 w-3.5" aria-hidden /></Button>
+      </div>
+    </>
+  );
 
   const advanced = ['statusId', 'sourceId', 'assignedTo', 'intent', 'studyMode', 'followup', 'createdFrom', 'createdTo', 'since', 'junk'] as const;
   const activeFilters = advanced.filter((k) => filters[k]).length;
   const count = (key: string) => (key === '' ? queues.data?.total : queues.data?.queues[key]);
   const allSelected = items.length > 0 && items.every((l) => selected.has(l.id));
+  // The box in the heading ticks or unticks this page only; leads ticked on other pages stay ticked.
+  const selectPage = (on: boolean) =>
+    setSelected((s) => {
+      const n = new Set(s);
+      for (const l of items) if (on) n.add(l.id); else n.delete(l.id);
+      return n;
+    });
 
   async function exportFile(format: 'csv' | 'xlsx') {
     setExporting(true);
@@ -396,12 +413,13 @@ function Leads() {
           onDone={(text) => {
             setNotice({ tone: 'ok', text });
             setSelected(new Set());
-            setExtra(null);
             first.reload();
             queues.reload();
           }}
         />
       )}
+
+      {items.length > 0 && !first.error && <div className="mb-2 flex items-center text-xs text-muted">{pager}</div>}
 
       {first.error ? (
         <Notice tone="bad">{first.error.message}</Notice>
@@ -416,7 +434,7 @@ function Leads() {
               <thead className="border-b border-line bg-head text-[13px] text-muted">
                 <tr>
                   <th className="w-10 px-4 py-2.5">
-                    <input type="checkbox" aria-label="Select all leads on this page" checked={allSelected} onChange={(e) => setSelected(e.target.checked ? new Set(items.map((l) => l.id)) : new Set())} className="h-3.5 w-3.5 accent-[#0f625e]" />
+                    <input type="checkbox" aria-label="Select all leads on this page" title="Select the leads on this page" checked={allSelected} onChange={(e) => selectPage(e.target.checked)} className="h-3.5 w-3.5 accent-[#0f625e]" />
                   </th>
                   {columns.order.map((id) => {
                     const by = ORDER_BY[id];
@@ -491,10 +509,9 @@ function Leads() {
             ))}
           </ul>
 
-          <div className="mt-3 flex items-center justify-between text-xs text-muted">
+          <div className="mt-3 flex items-center gap-3 text-xs text-muted">
             {columns.changed && <button type="button" onClick={columns.reset} className="font-medium text-info hover:underline">Reset column order</button>}
-            <span className="tabular">Showing {items.length} lead{items.length === 1 ? '' : 's'}</span>
-            {next && <Button variant="secondary" loading={more} onClick={() => void showMore()}>Show more</Button>}
+            {pager}
           </div>
         </>
       )}

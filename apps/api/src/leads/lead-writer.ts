@@ -94,6 +94,27 @@ export class LeadWriter {
     return row && { id: row.id, leadNo: row.lead_no };
   }
 
+  /** Adds the same kind of entry to the history of many leads, in a few statements instead of one per lead. */
+  async activities(trx: Trx, list: NewActivity[]): Promise<void> {
+    for (let i = 0; i < list.length; i += 500) {
+      await trx
+        .insertInto('lead_activities')
+        .values(
+          list.slice(i, i + 500).map((a) => ({
+            tenant_id: a.tenantId,
+            lead_id: a.leadId,
+            user_id: a.userId ?? null,
+            type: a.type,
+            field: a.field ?? null,
+            old_value: a.oldValue ?? null,
+            new_value: a.newValue ?? null,
+            remark: a.remark ?? null,
+          })),
+        )
+        .execute();
+    }
+  }
+
   /** Adds an entry to the lead's history. */
   async activity(trx: Trx, a: NewActivity): Promise<void> {
     await trx

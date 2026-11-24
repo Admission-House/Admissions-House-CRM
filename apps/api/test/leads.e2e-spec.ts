@@ -656,6 +656,29 @@ describe('handing out leads', () => {
       const l = await lead(t.lc1!);
       expect((await api.call('POST', '/leads/bulk/assign', t.lc1!, { leadIds: [l.id], userId: idOf('lc2') })).statusCode).toBe(403);
       expect(errorCode(await api.call('POST', '/leads/bulk/assign', t.admin!, { leadIds: [], userId: idOf('lc2') }))).toBe('VALIDATION_FAILED');
+      const tooMany = Array.from({ length: 1001 }, () => crypto.randomUUID());
+      const refused = await api.call('POST', '/leads/bulk/assign', t.admin!, { leadIds: tooMany, userId: idOf('lc2') });
+      expect(errorCode(refused)).toBe('VALIDATION_FAILED');
+      expect(refused.body).toContain('at most 1000 leads');
+    });
+
+    it('takes more than 200 leads in one go (the 221 the client chose), with history and follow-ups for each', async () => {
+      const made: { id: string }[] = [];
+      for (let i = 0; i < 230; i += 23) made.push(...(await Promise.all(Array.from({ length: 23 }, (_x, j) => lead(t.lc1!, i + j === 0 ? { followUp: { dueAt: inAnHour() } } : {})))));
+      const ids = made.map((m) => m.id);
+      const moved = await api.call('POST', '/leads/bulk/assign', t.admin!, { leadIds: ids, userId: idOf('lc3') });
+      expect(moved.json(), moved.body).toEqual({ requested: 230, changed: 230 });
+      const owners = await owner.query(`SELECT count(*)::int AS n FROM leads WHERE id = ANY($1::uuid[]) AND assigned_to = $2`, [ids, idOf('lc3')]);
+      expect(owners.rows[0].n).toBe(230);
+      const history = await owner.query(`SELECT count(*)::int AS n FROM lead_activities WHERE lead_id = ANY($1::uuid[]) AND type = 'assignment' AND new_value = 'lc3'`, [ids]);
+      expect(history.rows[0].n).toBe(230);
+      expect((await owner.query(`SELECT user_id FROM followups WHERE lead_id = $1 AND done_at IS NULL`, [ids[0]])).rows[0].user_id).toBe(idOf('lc3'));
+
+      const closed = await api.call('POST', '/leads/bulk/status', t.admin!, { leadIds: ids, statusId: await statusId('Not Interested'), remark: 'Bulk close' });
+      expect(closed.json(), closed.body).toEqual({ requested: 230, changed: 230 });
+      expect((await owner.query(`SELECT count(*)::int AS n FROM followups WHERE lead_id = ANY($1::uuid[]) AND done_at IS NULL`, [ids])).rows[0].n).toBe(0);
+      expect((await row(ids[0]!)).next_followup_at).toBeNull();
+      expect((await owner.query(`SELECT count(*)::int AS n FROM lead_activities WHERE lead_id = ANY($1::uuid[]) AND type = 'status_change' AND remark = 'Bulk close'`, [ids])).rows[0].n).toBe(230);
     });
   });
 });

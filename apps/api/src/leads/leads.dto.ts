@@ -110,7 +110,13 @@ export class ChangeStatusDto extends createZodDto(changeStatusSchema) {}
 export const assignSchema = z.object({ userId: z.uuid().nullable(), allowUnavailable: z.boolean().optional() });
 export class AssignDto extends createZodDto(assignSchema) {}
 
-const leadIds = z.array(z.uuid()).min(1).max(200).transform((ids) => [...new Set(ids)]);
+/** The most leads one bulk action takes: ten pages of the list (100 a page). */
+export const MAX_BULK_LEADS = 1000;
+const leadIds = z
+  .array(z.uuid())
+  .min(1)
+  .max(MAX_BULK_LEADS, `Choose at most ${MAX_BULK_LEADS} leads at a time`)
+  .transform((ids) => [...new Set(ids)]);
 export const bulkAssignSchema = z.object({ leadIds, userId: z.uuid().nullable(), allowUnavailable: z.boolean().optional() });
 export class BulkAssignDto extends createZodDto(bulkAssignSchema) {}
 

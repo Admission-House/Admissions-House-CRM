@@ -723,8 +723,9 @@ export class LeadsService {
         const names = new Map(
           (await trx.selectFrom('lead_statuses').select(['id', 'name']).where('id', 'in', oldIds).execute()).map((r) => [r.id, r.name]),
         );
-        for (const lead of changing) {
-          await this.writer.activity(trx, {
+        await this.writer.activities(
+          trx,
+          changing.map((lead) => ({
             tenantId: auth.tenantId,
             leadId: lead.id,
             userId: auth.userId,
@@ -733,9 +734,9 @@ export class LeadsService {
             oldValue: names.get(lead.status_id) ?? null,
             newValue: status.name,
             remark: dto.remark,
-          });
-          if (!status.is_open) await this.followUps.closeAll(trx, lead.id);
-        }
+          })),
+        );
+        if (!status.is_open) await this.followUps.closeAllMany(trx, changing.map((l) => l.id));
         await this.announceWins(trx, auth, changing, status);
       }
       return { requested: leads.length, changed: changing.length };
@@ -1111,8 +1112,9 @@ export class LeadsService {
         trx,
       );
 
-    for (const lead of leads) {
-      await this.writer.activity(trx, {
+    await this.writer.activities(
+      trx,
+      leads.map((lead) => ({
         tenantId: auth.tenantId,
         leadId: lead.id,
         userId: auth.userId,
@@ -1121,8 +1123,8 @@ export class LeadsService {
         oldValue: lead.assignee_name,
         newValue: target?.name ?? null,
         remark: `By ${auth.name}`,
-      });
-    }
+      })),
+    );
     if (target && target.id !== auth.userId) {
       await this.notifications.notify(trx, {
         tenantId: auth.tenantId,
