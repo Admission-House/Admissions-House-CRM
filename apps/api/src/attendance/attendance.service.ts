@@ -217,7 +217,7 @@ export class AttendanceService {
       const { rows } = await sql<ListRow>`
         SELECT a.id, a.user_id, u.name AS user_name, a.work_date::text AS work_date, a.check_in_at, a.check_out_at,
                a.check_out_reason, a.late_minutes, a.method,
-               floor(EXTRACT(EPOCH FROM COALESCE(a.check_out_at, now()) - a.check_in_at) / 60)::int AS present_minutes,
+               greatest(0, floor(EXTRACT(EPOCH FROM COALESCE(a.check_out_at, now()) - a.check_in_at) / 60)::int - a.away_minutes) AS present_minutes,
                COALESCE((SELECT floor(sum(EXTRACT(EPOCH FROM COALESCE(b.ended_at, now()) - b.started_at)) / 60)::int
                          FROM break_logs b WHERE b.attendance_id = a.id), 0) AS break_minutes
         FROM attendance_records a
@@ -338,7 +338,7 @@ export class AttendanceService {
     const { rows } = await sql<ListRow>`
       SELECT a.id, a.user_id, u.name AS user_name, a.work_date::text AS work_date, a.check_in_at, a.check_out_at,
              a.check_out_reason, a.late_minutes, a.method,
-             floor(EXTRACT(EPOCH FROM COALESCE(a.check_out_at, now()) - a.check_in_at) / 60)::int AS present_minutes,
+             greatest(0, floor(EXTRACT(EPOCH FROM COALESCE(a.check_out_at, now()) - a.check_in_at) / 60)::int - a.away_minutes) AS present_minutes,
              COALESCE((SELECT floor(sum(EXTRACT(EPOCH FROM COALESCE(b.ended_at, now()) - b.started_at)) / 60)::int
                        FROM break_logs b WHERE b.attendance_id = a.id), 0) AS break_minutes
       FROM attendance_records a JOIN users u ON u.id = a.user_id WHERE a.id = ${id}`.execute(trx);

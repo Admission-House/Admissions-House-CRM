@@ -88,10 +88,12 @@ async function seed() {
   );
 
   // in2: absent on 2 and 3 March, a half day on the 4th, and five late arrivals on the 5th, 6th, 7th, 9th and 10th.
+  // The half day is nine hours from first sign-in to last sign-out, of which 340 minutes were away (signed out): 200 worked.
   for (const d of DAYS) {
     if (d === '2026-03-02' || d === '2026-03-03') continue;
-    await attend('in2', d, { workedMinutes: d === '2026-03-04' ? 200 : 540, late: ['2026-03-05', '2026-03-06', '2026-03-07', '2026-03-09', '2026-03-10'].includes(d) ? 15 : 0 });
+    await attend('in2', d, { workedMinutes: 540, late: ['2026-03-05', '2026-03-06', '2026-03-07', '2026-03-09', '2026-03-10'].includes(d) ? 15 : 0 });
   }
+  await owner.query(`UPDATE attendance_records SET away_minutes = 340 WHERE user_id = $1 AND work_date = '2026-03-04'`, [idOf('in2')]);
 
   // in3: paid leave on the 11th, unpaid leave on the 12th, in on every other day.
   await leave('in3', 'Casual Leave', '2026-03-11');

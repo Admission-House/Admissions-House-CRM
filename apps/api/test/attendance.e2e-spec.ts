@@ -68,7 +68,7 @@ async function checkIn(name: string): Promise<string> {
 const records = async (name: string) =>
   (
     await owner.query(
-      `SELECT id, work_date::text AS work_date, check_in_at, check_out_at, check_out_reason, late_minutes, method,
+      `SELECT id, work_date::text AS work_date, check_in_at, check_out_at, check_out_reason, late_minutes, method, away_minutes,
               branch_id, check_in_ip::text AS ip, check_in_lat::float8 AS lat, check_in_lng::float8 AS lng
        FROM attendance_records WHERE user_id = $1 ORDER BY work_date DESC`,
       [fx.user(name).id],
@@ -121,6 +121,32 @@ describe('attendance starts when someone signs in from the office', () => {
     expect(all).toHaveLength(1);
     expect(all[0]).toMatchObject({ id: first.id, check_out_at: null, check_out_reason: null, late_minutes: first.late_minutes });
     expect(all[0].check_in_at).toEqual(first.check_in_at);
+  });
+
+  it('does not count the time between signing out and signing in again as worked time', async () => {
+    await useSettings({ start: '00:00', grace: 0 });
+    const token = await checkIn('in1');
+    await api.call('POST', '/auth/logout', token, undefined, OFFICE_IP);
+    // Signed in for 60 minutes, then away for 90 (the record is moved back in time to stand for it).
+    await owner.query(
+      `UPDATE attendance_records SET check_in_at = now() - interval '150 minutes', check_out_at = now() - interval '90 minutes' WHERE user_id = $1`,
+      [fx.user('in1').id],
+    );
+    const again = await checkIn('in1');
+    const row = (await records('in1'))[0];
+    expect(row.away_minutes).toBeGreaterThanOrEqual(89);
+    expect(row.away_minutes).toBeLessThanOrEqual(91);
+    // Worked so far: about 60 minutes, not 150.
+    const mine = (await api.call('GET', '/attendance/me', again, undefined, OFFICE_IP)).json().items[0];
+    expect(mine.workedMinutes).toBeGreaterThanOrEqual(59);
+    expect(mine.workedMinutes).toBeLessThanOrEqual(61);
+    // A second time away adds up.
+    await api.call('POST', '/auth/logout', again, undefined, OFFICE_IP);
+    await owner.query(`UPDATE attendance_records SET check_out_at = now() - interval '30 minutes' WHERE user_id = $1`, [fx.user('in1').id]);
+    await checkIn('in1');
+    const twice = (await records('in1'))[0];
+    expect(twice.away_minutes - row.away_minutes).toBeGreaterThanOrEqual(29);
+    expect(twice.away_minutes - row.away_minutes).toBeLessThanOrEqual(31);
   });
 
   it('records attendance for a Super Admin too, who can sign in from anywhere, without asking for the office', async () => {

@@ -41,7 +41,7 @@ export class AttendanceRepository {
   /**
    * Records that a person is in the office. There is one record a day: the first sign-in is the
    * check-in, and signing in again the same day (after a break away, or an idle sign-out) reopens
-   * the day without counting it twice or changing the late minutes.
+   * the day without counting it twice or changing the late minutes; the time away is kept apart.
    *
    * A person is late when they arrive after the shift start plus the grace period; the minutes are
    * counted from the shift start. Times are compared as dates and times together, so a shift near
@@ -76,6 +76,9 @@ export class AttendanceRepository {
                            THEN floor(EXTRACT(EPOCH FROM l.ts - (l.ts::date + s.shift_start)) / 60)::int END, 0)
       FROM l LEFT JOIN s ON true
       ON CONFLICT (user_id, work_date) DO UPDATE
-        SET check_out_at = NULL, check_out_reason = NULL`.execute(trx);
+        -- Back after signing out (idle, or by hand): the time away is not worked time (see migration 060).
+        SET away_minutes = attendance_records.away_minutes + CASE WHEN attendance_records.check_out_at IS NULL THEN 0
+              ELSE greatest(0, floor(EXTRACT(EPOCH FROM now() - attendance_records.check_out_at) / 60))::int END,
+            check_out_at = NULL, check_out_reason = NULL`.execute(trx);
   }
 }

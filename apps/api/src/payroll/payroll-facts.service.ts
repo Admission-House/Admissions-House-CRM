@@ -41,7 +41,7 @@ export class PayrollFactsService {
     const attendance = await sql<{ user_id: string; day: string; late_minutes: number; worked_minutes: number | null; over_minutes: number }>`
         SELECT a.user_id, a.work_date::text AS day, a.late_minutes,
                CASE WHEN a.check_out_at IS NULL THEN NULL
-                    ELSE greatest(0, floor(extract(epoch FROM a.check_out_at - a.check_in_at) / 60) - coalesce(b.taken, 0))::int END AS worked_minutes,
+                    ELSE greatest(0, floor(extract(epoch FROM a.check_out_at - a.check_in_at) / 60) - a.away_minutes - coalesce(b.taken, 0))::int END AS worked_minutes,
                coalesce(b.over, 0)::int AS over_minutes
         FROM attendance_records a
         LEFT JOIN LATERAL (
