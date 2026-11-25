@@ -36,7 +36,25 @@ export function readListContext(): LeadListContext | null {
   }
 }
 
+/**
+ * The list each open lead belongs to, taken once when the lead is first shown and kept while this page lives. The
+ * remembered list itself keeps changing: a leads list open in another tab refreshes every few seconds, and a lead that
+ * was just disposed leaves its section. Reading it afresh on every render made "Save & next" come and go while a
+ * person was filling the form; the copy taken when the lead opened does not move.
+ */
+const opened = new Map<string, LeadListContext | null>();
+
+function contextFor(leadId: string): LeadListContext | null {
+  if (!opened.has(leadId)) {
+    const c = readListContext();
+    opened.set(leadId, c && c.ids.includes(leadId) ? c : null);
+  }
+  return opened.get(leadId) ?? null;
+}
+
 export function saveListContext(c: LeadListContext): void {
+  // Back on a list: the leads opened from now on belong to this one.
+  opened.clear();
   try {
     localStorage.setItem(KEY, JSON.stringify(c));
   } catch {
@@ -46,13 +64,12 @@ export function saveListContext(c: LeadListContext): void {
 
 /** Where "Back to leads" goes from this lead. */
 export function backToListUrl(leadId: string): string {
-  const c = readListContext();
-  return c && c.ids.includes(leadId) ? c.url : '/leads';
+  return contextFor(leadId)?.url ?? '/leads';
 }
 
-/** Whether this lead was opened from the remembered list (so "Save & next" makes sense). */
+/** Whether this lead was opened from a leads list (so "Save & next" makes sense). */
 export function inListContext(leadId: string): boolean {
-  return !!readListContext()?.ids.includes(leadId);
+  return contextFor(leadId) !== null;
 }
 
 // localStorage has no change event for the same tab; the value is read when the page renders, which is all these need.
@@ -79,21 +96,26 @@ export const useInListContext = (leadId: string): boolean =>
  * Null at the end of the list.
  */
 export async function nextLeadId(leadId: string): Promise<string | null> {
-  const c = readListContext();
+  const c = contextFor(leadId);
   if (!c) return null;
   const at = c.ids.indexOf(leadId);
-  if (at < 0) return null;
-  if (at + 1 < c.ids.length) return c.ids[at + 1]!;
-  if (!c.nextCursor) return null;
-  const page = await api<Page<LeadListItem>>('/leads', {
-    query: { ...c.query, cursor: c.nextCursor },
-  });
-  const fresh = page.items.map((l) => l.id).filter((id) => !c.ids.includes(id));
-  saveListContext({
-    ...c,
-    cursors: [...c.cursors, c.nextCursor],
-    ids: [...c.ids, ...fresh],
-    nextCursor: page.nextCursor,
-  });
-  return fresh[0] ?? null;
+  let list = c;
+  let next: string | null = at + 1 < c.ids.length ? c.ids[at + 1]! : null;
+  if (!next && c.nextCursor) {
+    const page = await api<Page<LeadListItem>>('/leads', {
+      query: { ...c.query, cursor: c.nextCursor },
+    });
+    const fresh = page.items.map((l) => l.id).filter((id) => !c.ids.includes(id));
+    list = {
+      ...c,
+      cursors: [...c.cursors, c.nextCursor],
+      ids: [...c.ids, ...fresh],
+      nextCursor: page.nextCursor,
+    };
+    saveListContext(list);
+    next = fresh[0] ?? null;
+  }
+  // The next lead continues in the same list, so "Save & next" and "Back to leads" carry on from it.
+  if (next) opened.set(next, list);
+  return next;
 }
