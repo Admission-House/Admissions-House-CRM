@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { sql } from 'kysely';
-import { scopeCondition } from '../access/scope.js';
+import { scopeCondition, andIf } from '../access/scope.js';
 import { AuditService } from '../audit/audit.service.js';
 import { AppError } from '../common/app-error.js';
 import { DatabaseService, Trx } from '../database/database.service.js';
@@ -169,7 +169,7 @@ export class OfficeComputersService {
       const { rows } = await sql<Row>`
         SELECT c.id, c.user_id, u.name AS user_name, c.state, c.label, host(c.last_ip) AS last_ip, c.registered_by, d.name AS decider, c.last_used_at, c.created_at
         FROM office_computers c JOIN users u ON u.id = c.user_id LEFT JOIN users d ON d.id = c.decided_by
-        WHERE c.state = ${state} ${scoped ? sql`AND ${scoped}` : sql``}
+        WHERE c.state = ${state} ${andIf(scoped)}
         ORDER BY c.created_at DESC LIMIT 200`.execute(trx);
       return rows.map(toView);
     });
@@ -189,15 +189,11 @@ export class OfficeComputersService {
           token_hash: string;
         }>`SELECT token_hash FROM office_computers WHERE id = ${id}`.execute(trx);
         await this.keepNewest(trx, row.user_id, rows[0]!.token_hash);
-        await this.audit.write(trx, {
-          tenantId: auth.tenantId,
-          actorId: auth.userId,
+        await this.audit.by(trx, auth, {
           action: 'office_computer.approve',
           entity: 'office_computer',
           entityId: id,
           after: { userId: row.user_id, label: row.label },
-          ip: auth.ip,
-          requestId: auth.requestId,
         });
       }
       return toView(await this.loadScoped(trx, auth, id));
@@ -212,15 +208,11 @@ export class OfficeComputersService {
       await sql`UPDATE office_computers SET state = ${next}, registered_by = NULL, decided_by = ${auth.userId}, decided_at = now(), updated_at = now() WHERE id = ${id}`.execute(
         trx,
       );
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: next === 'rejected' ? 'office_computer.reject' : 'office_computer.remove',
         entity: 'office_computer',
         entityId: id,
         after: { userId: row.user_id, label: row.label },
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
       return { ok: true as const };
     });
@@ -235,9 +227,7 @@ export class OfficeComputersService {
     const { rows } = await sql<Row>`
       SELECT c.id, c.user_id, u.name AS user_name, c.state, c.label, host(c.last_ip) AS last_ip, c.registered_by, d.name AS decider, c.last_used_at, c.created_at
       FROM office_computers c JOIN users u ON u.id = c.user_id LEFT JOIN users d ON d.id = c.decided_by
-      WHERE c.id = ${id} AND c.state IN ('pending', 'approved') ${scoped ? sql`AND ${scoped}` : sql``}`.execute(
-      trx,
-    );
+      WHERE c.id = ${id} AND c.state IN ('pending', 'approved') ${andIf(scoped)}`.execute(trx);
     if (!rows[0]) throw AppError.notFound('Computer');
     return rows[0];
   }

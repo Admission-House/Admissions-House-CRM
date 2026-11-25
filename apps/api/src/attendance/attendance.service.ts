@@ -82,14 +82,10 @@ export class AttendanceService {
         branchId: me.branch_id,
         ip: auth.ip,
       });
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: 'attendance.self_check_in',
         entity: 'user',
         entityId: auth.userId,
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
     });
     return this.today(auth);
@@ -394,9 +390,7 @@ export class AttendanceService {
           reason: dto.reason,
         })
         .execute();
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: 'attendance.exception',
         entity: 'attendance',
         entityId: id,
@@ -407,8 +401,6 @@ export class AttendanceService {
           checkInTime,
           checkOutTime: checkOutTime ?? null,
         },
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
       const { rows: who } = await sql<{
         name: string;

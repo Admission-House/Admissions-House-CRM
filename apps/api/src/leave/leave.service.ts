@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { sql, SqlBool } from 'kysely';
 import { z } from 'zod';
-import { scopeCondition } from '../access/scope.js';
+import { scopeCondition, andIf } from '../access/scope.js';
 import { AttendanceRepository } from '../attendance/attendance.repository.js';
 import { AuditService } from '../audit/audit.service.js';
 import type { AuthContext } from '../auth/auth-context.js';
@@ -518,7 +518,7 @@ ${this.leaveLink()}
       SELECT lr.id, lr.user_id, lr.status, lr.days::float8 AS days, lr.from_date::text AS from_date, lr.to_date::text AS to_date,
              lr.leave_type_id, lt.is_paid
       FROM leave_requests lr JOIN leave_types lt ON lt.id = lr.leave_type_id
-      WHERE lr.id = ${id} ${visible ? sql`AND ${visible}` : sql``}
+      WHERE lr.id = ${id} ${andIf(visible)}
       FOR UPDATE OF lr`.execute(trx);
     if (!rows[0]) throw AppError.notFound('Leave request');
     return rows[0];
@@ -621,17 +621,7 @@ ${this.leaveLink()}
     before: unknown,
     after: unknown,
   ) {
-    return this.audit.write(trx, {
-      tenantId: auth.tenantId,
-      actorId: auth.userId,
-      action,
-      entity,
-      entityId: id,
-      before,
-      after,
-      ip: auth.ip,
-      requestId: auth.requestId,
-    });
+    return this.audit.by(trx, auth, { action, entity, entityId: id, before, after });
   }
 }
 

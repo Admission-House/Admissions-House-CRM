@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { AuthContext } from '../auth/auth-context.js';
 import type { Trx } from '../database/database.service.js';
 
 export interface AuditEntry {
@@ -20,6 +21,21 @@ export interface AuditEntry {
  */
 @Injectable()
 export class AuditService {
+  /** The same, for an action done by a signed-in person: their company, their id, where from and the request. */
+  by(
+    trx: Trx,
+    auth: Pick<AuthContext, 'tenantId' | 'userId' | 'ip' | 'requestId'>,
+    entry: Omit<AuditEntry, 'tenantId' | 'actorId' | 'ip' | 'requestId'>,
+  ): Promise<void> {
+    return this.write(trx, {
+      ...entry,
+      tenantId: auth.tenantId,
+      actorId: auth.userId,
+      ip: auth.ip,
+      requestId: auth.requestId,
+    });
+  }
+
   async write(trx: Trx, entry: AuditEntry): Promise<void> {
     await trx
       .insertInto('audit_logs')

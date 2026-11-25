@@ -287,16 +287,12 @@ export class CustomFieldsService {
     before: unknown,
     after: unknown,
   ) {
-    return this.audit.write(trx, {
-      tenantId: auth.tenantId,
-      actorId: auth.userId,
+    return this.audit.by(trx, auth, {
       action,
       entity: 'custom_field',
       entityId: id,
       before,
       after,
-      ip: auth.ip,
-      requestId: auth.requestId,
     });
   }
 }

@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { sql } from 'kysely';
 import { z } from 'zod';
-import { scopeCondition } from '../access/scope.js';
+import { scopeCondition, andIf } from '../access/scope.js';
 import { AuditService } from '../audit/audit.service.js';
 import type { AuthContext } from '../auth/auth-context.js';
 import { AppError } from '../common/app-error.js';
@@ -99,14 +99,10 @@ export class ProfileService {
       const full = reveal && (userId === auth.userId || auth.permissions.has('salary.write'));
       if (reveal && !full) throw AppError.forbidden();
       if (reveal && row.bank_account_no_enc) {
-        await this.audit.write(trx, {
-          tenantId: auth.tenantId,
-          actorId: auth.userId,
+        await this.audit.by(trx, auth, {
           action: 'profile.reveal_bank',
           entity: 'user',
           entityId: userId,
-          ip: auth.ip,
-          requestId: auth.requestId,
         });
       }
       return this.toView(auth.tenantId, row, full);
@@ -148,9 +144,7 @@ export class ProfileService {
           oc.column('user_id').doUpdateSet({ ...set, updated_at: sql`now()` } as never),
         )
         .execute();
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: 'profile.update',
         entity: 'user',
         entityId: userId,
@@ -163,8 +157,6 @@ export class ProfileService {
               : (change as Record<string, unknown>)[k],
           ]),
         ),
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
       return this.toView(auth.tenantId, await this.row(trx, userId), false);
     });
@@ -178,9 +170,7 @@ export class ProfileService {
     const scoped = scopeCondition(auth, 'u.id');
     const { rows } = await sql<{
       id: string;
-    }>`SELECT u.id FROM users u WHERE u.id = ${userId}::uuid ${scoped ? sql`AND ${scoped}` : sql``}`.execute(
-      trx,
-    );
+    }>`SELECT u.id FROM users u WHERE u.id = ${userId}::uuid ${andIf(scoped)}`.execute(trx);
     if (!rows[0]) throw AppError.notFound('User');
   }
 

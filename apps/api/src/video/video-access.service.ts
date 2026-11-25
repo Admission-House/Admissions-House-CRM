@@ -23,6 +23,7 @@ import {
 import { statusBeforeAnyRecording } from '../recording/recording-rules.js';
 import { RecordingService, type SessionRecordingStatus } from '../recording/recording.service.js';
 import { InviteRow, SessionRow, VideoStore } from './video-store.js';
+import { andIf } from '../access/scope.js';
 
 /** What a student may know before joining: who invited them and to what. Nothing that lets them in. */
 export interface GuestInfo {
@@ -377,9 +378,7 @@ export class VideoAccessService {
   }
 
   /** What is ringing for this person right now. */
-  incoming(
-    auth: AuthContext,
-  ): Promise<
+  incoming(auth: AuthContext): Promise<
     {
       sessionId: string;
       kind: SessionKind;
@@ -404,8 +403,8 @@ export class VideoAccessService {
         left: number;
       }>`
         SELECT v.id AS session_id, v.kind, v.type, v.title, u.name AS from_name,
-               CASE WHEN l.id IS NOT NULL ${lead ? sql`AND ${lead}` : sql``} THEN l.id END AS lead_id,
-               CASE WHEN l.id IS NOT NULL ${lead ? sql`AND ${lead}` : sql``} THEN l.name END AS lead_name,
+               CASE WHEN l.id IS NOT NULL ${andIf(lead)} THEN l.id END AS lead_id,
+               CASE WHEN l.id IS NOT NULL ${andIf(lead)} THEN l.name END AS lead_name,
                GREATEST(0, ${this.env.COMMUNICATION_RING_SECONDS} - EXTRACT(EPOCH FROM now() - i.invited_at))::int AS left
         FROM video_session_invites i JOIN video_sessions v ON v.id = i.session_id AND v.status = 'open'
         JOIN users u ON u.id = v.created_by LEFT JOIN leads l ON l.id = v.lead_id

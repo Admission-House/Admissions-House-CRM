@@ -89,9 +89,7 @@ export class TelephonySettingsService {
                  config_enc = ${sealed ?? sql`config_enc`}
           WHERE tenant_id = ${auth.tenantId}`.execute(trx);
       }
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: existing ? 'telephony.update' : 'telephony.create',
         entity: 'telephony_connection',
         before: existing,
@@ -101,8 +99,6 @@ export class TelephonySettingsService {
           recordingHosts: input.recordingHosts,
           credentialsChanged: !!input.config,
         },
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
       return { connection: (await this.view(trx))!, webhookKey };
     });
@@ -116,13 +112,9 @@ export class TelephonySettingsService {
       await sql`UPDATE telephony_connections SET webhook_key_prefix = ${key.slice(0, 8)}, webhook_key_hash = ${hashWebhookKey(key)} WHERE tenant_id = ${auth.tenantId}`.execute(
         trx,
       );
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: 'telephony.rotate_key',
         entity: 'telephony_connection',
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
       return { webhookKey: key, connection: (await this.view(trx))! };
     });

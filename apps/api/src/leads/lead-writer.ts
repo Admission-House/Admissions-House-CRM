@@ -53,9 +53,7 @@ export interface NewActivity {
 @Injectable()
 export class LeadWriter {
   /** The company's rules for new leads. Without a saved choice: add repeat enquiries to the lead, assign automatically. */
-  async policy(
-    trx: Trx,
-  ): Promise<{
+  async policy(trx: Trx): Promise<{
     duplicateAction: 'reject' | 'attach';
     autoAssign: boolean;
     downloadForms: string[];

@@ -335,17 +335,7 @@ export class BranchesService {
     before: unknown,
     after: unknown,
   ): Promise<void> {
-    return this.audit.write(trx, {
-      tenantId: auth.tenantId,
-      actorId: auth.userId,
-      action,
-      entity: 'branch',
-      entityId: id,
-      before,
-      after,
-      ip: auth.ip,
-      requestId: auth.requestId,
-    });
+    return this.audit.by(trx, auth, { action, entity: 'branch', entityId: id, before, after });
   }
 }
 

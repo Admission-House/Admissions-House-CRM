@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { sql, SqlBool } from 'kysely';
-import { scopeCondition } from '../access/scope.js';
+import { scopeCondition, andIf } from '../access/scope.js';
 import type { AuthContext } from '../auth/auth-context.js';
 import { AppError } from '../common/app-error.js';
 import { decodeCursor, Page, toPage } from '../common/pagination.js';
@@ -312,10 +312,9 @@ export class CallsService {
 
   private async one(trx: Trx, auth: AuthContext, id: string): Promise<Row> {
     const scoped = scopeCondition(auth, 'c.user_id');
-    const { rows } =
-      await sql<Row>`${SELECT} WHERE c.id = ${id}::uuid ${scoped ? sql`AND ${scoped}` : sql``}`.execute(
-        trx,
-      );
+    const { rows } = await sql<Row>`${SELECT} WHERE c.id = ${id}::uuid ${andIf(scoped)}`.execute(
+      trx,
+    );
     if (!rows[0]) throw AppError.notFound('Call');
     return rows[0];
   }
@@ -360,15 +359,11 @@ export class CallsService {
           409,
         );
       }
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: 'call.listen',
         entity: 'call',
         entityId: id,
         after: { lead: call.lead_id, number: call.counterparty },
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
       const ext = rec.file_key.split('.').pop() ?? 'bin';
       const mime: Record<string, string> = {

@@ -284,17 +284,7 @@ export class LeadStatusesService {
     before: unknown,
     after: unknown,
   ) {
-    return this.audit.write(trx, {
-      tenantId: auth.tenantId,
-      actorId: auth.userId,
-      action,
-      entity: 'lead_status',
-      entityId: id,
-      before,
-      after,
-      ip: auth.ip,
-      requestId: auth.requestId,
-    });
+    return this.audit.by(trx, auth, { action, entity: 'lead_status', entityId: id, before, after });
   }
 }
 

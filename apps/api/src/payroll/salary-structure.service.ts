@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { sql } from 'kysely';
 import { z } from 'zod';
-import { scopeCondition } from '../access/scope.js';
+import { scopeCondition, andIf } from '../access/scope.js';
 import { AuditService } from '../audit/audit.service.js';
 import type { AuthContext } from '../auth/auth-context.js';
 import { AppError } from '../common/app-error.js';
@@ -109,9 +109,7 @@ export class SalaryStructureService {
       const scoped = scopeCondition(auth, 'u.id');
       const { rows: people } = await sql<{ id: string; name: string; email: string; role: string }>`
         SELECT u.id, u.name, u.email::text AS email, r.name AS role FROM users u JOIN roles r ON r.id = u.role_id
-        WHERE u.status = 'active' ${scoped ? sql`AND ${scoped}` : sql``} ORDER BY u.name, u.id`.execute(
-        trx,
-      );
+        WHERE u.status = 'active' ${andIf(scoped)} ORDER BY u.name, u.id`.execute(trx);
       const { rows } = await sql<Row>`
         ${SELECT} WHERE s.id IN (
           SELECT DISTINCT ON (user_id) id FROM salary_structures WHERE user_id = ANY(${people.map((p) => p.id)}::uuid[]) AND effective_from <= ${month}::date
@@ -205,16 +203,12 @@ export class SalaryStructureService {
       }
       const { rows } = await sql<Row>`${SELECT} WHERE s.id = ${id}::uuid`.execute(trx);
       const view = toView(rows[0]!, await this.lines(trx, [id]));
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: old[0] ? 'salary_structure.update' : 'salary_structure.create',
         entity: 'salary_structure',
         entityId: id,
         before: old[0] && toView(old[0], oldLines),
         after: view,
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
       return view;
     });
@@ -253,9 +247,7 @@ export class SalaryStructureService {
     const scoped = scopeCondition(auth, 'u.id');
     const { rows } = await sql<{
       id: string;
-    }>`SELECT u.id FROM users u WHERE u.id = ${userId}::uuid ${scoped ? sql`AND ${scoped}` : sql``}`.execute(
-      trx,
-    );
+    }>`SELECT u.id FROM users u WHERE u.id = ${userId}::uuid ${andIf(scoped)}`.execute(trx);
     if (!rows[0]) throw AppError.notFound('Employee');
   }
 

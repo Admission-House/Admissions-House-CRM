@@ -143,15 +143,11 @@ export class PartnersService {
         newValue: 'DNP',
         remark: `Marked DNP with ${name}: ${reason}`,
       });
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: 'lead.partner_dnp',
         entity: 'lead',
         entityId: leadId,
         after: { partner: rows[0].partner },
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
       return { ok: true as const };
     });
@@ -297,9 +293,7 @@ export class PartnersService {
           remark: `Sent to ${partner.name}: ${input.course}, ${input.specialization}. ${input.city}, ${input.state}.`,
         });
       }
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: 'lead.partner_send',
         entity: 'lead',
         entityId: leadId,
@@ -310,8 +304,6 @@ export class PartnersService {
           ok: outcome.ok,
           status,
         },
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
     });
     return { ok: outcome.ok, message: outcome.message, submissionId: started.id };

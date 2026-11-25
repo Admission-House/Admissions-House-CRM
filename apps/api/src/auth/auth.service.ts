@@ -778,14 +778,10 @@ export class AuthService {
           await this.passwords.hash(input.newPassword),
         );
         const ended = await this.repo.endOtherSessions(trx, auth.userId, auth.sessionId, 'revoked');
-        await this.audit.write(trx, {
-          tenantId: auth.tenantId,
-          actorId: auth.userId,
+        await this.audit.by(trx, auth, {
           action: 'auth.password_changed',
           entity: 'user',
           entityId: auth.userId,
-          ip: auth.ip,
-          requestId: auth.requestId,
         });
         return ok(ended);
       },
@@ -875,15 +871,11 @@ export class AuthService {
         target = { userId: rows[0].user_id, userName: rows[0].name };
       }
       await this.repo.endSession(trx, sessionId, 'revoked');
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: isOwn ? 'auth.session_revoked' : 'auth.session_revoked_by_admin',
         entity: 'session',
         entityId: sessionId,
         after: target ? { userId: target.userId } : undefined,
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
       if (target) {
         await this.notifications.notifyOversight(trx, {

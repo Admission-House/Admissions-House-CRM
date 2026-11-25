@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { sql } from 'kysely';
-import { scopeCondition } from '../access/scope.js';
+import { scopeCondition, andIf } from '../access/scope.js';
 import { AuditService } from '../audit/audit.service.js';
 import { AppError } from '../common/app-error.js';
 import { DatabaseService, Trx } from '../database/database.service.js';
@@ -200,7 +200,7 @@ export class RemoteSigninService {
       const { rows } = await sql<Row>`
         ${VIEW_SELECT}
         WHERE ${state === 'pending' ? sql`r.state = 'pending'` : sql`r.state <> 'pending' AND r.created_at > now() - interval '30 days'`}
-          ${scoped ? sql`AND ${scoped}` : sql``}
+          ${andIf(scoped)}
         ORDER BY r.created_at DESC LIMIT 100`.execute(trx);
       return rows.map(toView);
     });
@@ -215,7 +215,7 @@ export class RemoteSigninService {
       const scoped = scopeCondition(auth, 'r.user_id');
       const { rows } = await sql<{ user_id: string; state: string; expired: boolean }>`
         SELECT r.user_id, r.state, r.expires_at <= now() AS expired FROM remote_signin_requests r
-        WHERE r.id = ${id} ${scoped ? sql`AND ${scoped}` : sql``} FOR UPDATE OF r`.execute(trx);
+        WHERE r.id = ${id} ${andIf(scoped)} FOR UPDATE OF r`.execute(trx);
       const r = rows[0];
       if (!r) throw AppError.notFound('Request');
       if (r.user_id === auth.userId)
@@ -239,15 +239,11 @@ export class RemoteSigninService {
       await sql`UPDATE remote_signin_requests SET state = ${decision}, decided_by = ${auth.userId}, decided_at = now() WHERE id = ${id}`.execute(
         trx,
       );
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: decision === 'approved' ? 'remote_signin.approve' : 'remote_signin.reject',
         entity: 'user',
         entityId: r.user_id,
         after: { requestId: id },
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
       const { rows: view } = await sql<Row>`${VIEW_SELECT} WHERE r.id = ${id}`.execute(trx);
       return toView(view[0]!);

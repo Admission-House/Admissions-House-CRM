@@ -147,16 +147,12 @@ export class PayrollPolicyService {
           unpaid_leave_deduction_days = EXCLUDED.unpaid_leave_deduction_days, break_overrun_per_minute = EXCLUDED.break_overrun_per_minute,
           created_by = EXCLUDED.created_by`.execute(trx);
       const after = await this.effective(trx, start);
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: 'payroll.policy_change',
         entity: 'payroll_policy',
         entityId: null,
         before: before.isDefault ? null : before,
         after,
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
       return after;
     });

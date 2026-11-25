@@ -634,17 +634,7 @@ export class MastersService {
     before: unknown,
     after: unknown,
   ) {
-    return this.audit.write(trx, {
-      tenantId: auth.tenantId,
-      actorId: auth.userId,
-      action,
-      entity,
-      entityId: id,
-      before,
-      after,
-      ip: auth.ip,
-      requestId: auth.requestId,
-    });
+    return this.audit.by(trx, auth, { action, entity, entityId: id, before, after });
   }
 }
 

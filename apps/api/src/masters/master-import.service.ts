@@ -233,9 +233,7 @@ export class MasterImportService {
 
       out.problems.sort((a, b) => a.row - b.row);
       if (apply) {
-        await this.audit.write(trx, {
-          tenantId: auth.tenantId,
-          actorId: auth.userId,
+        await this.audit.by(trx, auth, {
           action: 'master.import',
           entity: 'college',
           after: {
@@ -245,8 +243,6 @@ export class MasterImportService {
             offers: out.offers,
             skipped: out.problems.length,
           },
-          ip: auth.ip,
-          requestId: auth.requestId,
         });
       }
       return out;

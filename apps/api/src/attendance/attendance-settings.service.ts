@@ -74,15 +74,11 @@ export class AttendanceSettingsService {
       );
 
       const after = await this.snapshot(trx);
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: 'attendance.settings',
         entity: 'attendance_settings',
         before: before.current,
         after: { ...dto, effectiveFrom },
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
       return after;
     });
@@ -109,15 +105,11 @@ export class AttendanceSettingsService {
         .values({ tenant_id: auth.tenantId, name: dto.name, allowed_minutes: dto.allowedMinutes })
         .returning(['id', 'name', 'allowed_minutes', 'is_active'])
         .executeTakeFirstOrThrow();
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: 'break_type.create',
         entity: 'break_type',
         entityId: row.id,
         after: dto,
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
       return toBreakType(row);
     });
@@ -144,16 +136,12 @@ export class AttendanceSettingsService {
         .where('id', '=', id)
         .returning(['id', 'name', 'allowed_minutes', 'is_active'])
         .executeTakeFirstOrThrow();
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: 'break_type.update',
         entity: 'break_type',
         entityId: id,
         before: toBreakType(before),
         after: toBreakType(after),
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
       return toBreakType(after);
     });

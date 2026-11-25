@@ -201,15 +201,11 @@ export class DocumentsService {
     doc: Row,
     how: 'download' | 'link',
   ): Promise<void> {
-    await this.audit.write(trx, {
-      tenantId: auth.tenantId,
-      actorId: auth.userId,
+    await this.audit.by(trx, auth, {
       action: 'document.view',
       entity: 'lead_document',
       entityId: doc.id,
       after: { lead: leadId, type: doc.doc_type, via: how },
-      ip: auth.ip,
-      requestId: auth.requestId,
     });
   }
 

@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { sql, SqlBool } from 'kysely';
 import { z } from 'zod';
-import { scopeCondition } from '../access/scope.js';
+import { scopeCondition, andIf } from '../access/scope.js';
 import {
   AttendanceSummaryService,
   MonthSummary,
@@ -196,9 +196,7 @@ export class PayrollService {
     const scoped = scopeCondition(auth, 'u.id');
     const { rows: target } = await sql<{
       id: string;
-    }>`SELECT u.id FROM users u WHERE u.id = ${input.userId}::uuid ${scoped ? sql`AND ${scoped}` : sql``}`.execute(
-      trx,
-    );
+    }>`SELECT u.id FROM users u WHERE u.id = ${input.userId}::uuid ${andIf(scoped)}`.execute(trx);
     if (!target[0]) throw AppError.notFound('Employee');
 
     const { rows: before } = await sql<{
@@ -226,9 +224,7 @@ export class PayrollService {
         RETURNING id`.execute(trx);
       id = rows[0]!.id;
     }
-    await this.audit.write(trx, {
-      tenantId: auth.tenantId,
-      actorId: auth.userId,
+    await this.audit.by(trx, auth, {
       action: before[0] ? 'salary.update' : 'salary.create',
       entity: 'salary_record',
       entityId: id,
@@ -246,8 +242,6 @@ export class PayrollService {
         deductions: input.deductions,
         notes,
       },
-      ip: auth.ip,
-      requestId: auth.requestId,
     });
     return id;
   }
@@ -299,9 +293,7 @@ export class PayrollService {
         const scoped = scopeCondition(auth, 'u.id');
         const { rows } = await sql<{
           id: string;
-        }>`SELECT u.id FROM users u WHERE u.email = ${r.email} ${scoped ? sql`AND ${scoped}` : sql``}`.execute(
-          trx,
-        );
+        }>`SELECT u.id FROM users u WHERE u.email = ${r.email} ${andIf(scoped)}`.execute(trx);
         if (!rows[0])
           problems.push({
             row: r.row,
@@ -354,9 +346,7 @@ export class PayrollService {
           batch[0]!.id,
         );
       }
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: 'salary.import',
         entity: 'salary_import_batch',
         entityId: batch[0]!.id,
@@ -366,8 +356,6 @@ export class PayrollService {
           saved: good.length,
           skipped: problems.length,
         },
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
       return { ...result, batchId: batch[0]!.id };
     });

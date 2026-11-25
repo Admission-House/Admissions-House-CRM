@@ -81,15 +81,11 @@ export class DevicesService {
           .set({ approved_by: auth.userId, approved_at: sql`now()` })
           .where('id', '=', id)
           .execute();
-        await this.audit.write(trx, {
-          tenantId: auth.tenantId,
-          actorId: auth.userId,
+        await this.audit.by(trx, auth, {
           action: 'device.approve',
           entity: 'device',
           entityId: id,
           after: { userId: device.user_id, platform: device.platform, label: device.label },
-          ip: auth.ip,
-          requestId: auth.requestId,
         });
       }
       return toView(await this.loadScoped(trx, auth, id));
@@ -108,15 +104,11 @@ export class DevicesService {
       const { numAffectedRows } = await sql`
         UPDATE user_sessions SET ended_at = now(), ended_reason = 'revoked'
         WHERE device_id = ${id} AND ended_at IS NULL`.execute(trx);
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: 'device.revoke',
         entity: 'device',
         entityId: id,
         after: { userId: device.user_id, sessionsEnded: Number(numAffectedRows ?? 0) },
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
       return toView(await this.loadScoped(trx, auth, id));
     });

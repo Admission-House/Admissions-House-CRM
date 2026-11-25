@@ -29,3 +29,7 @@ export function scopeCondition(
         OR ${col} IN (SELECT id FROM users WHERE manager_id = ${auth.userId}))`;
   }
 }
+
+/** "AND <condition>" when there is a condition (a person's reach, a filter), nothing otherwise: for the end of a WHERE. */
+export const andIf = (condition: Expression<SqlBool> | null | undefined) =>
+  condition ? sql`AND ${condition}` : sql``;

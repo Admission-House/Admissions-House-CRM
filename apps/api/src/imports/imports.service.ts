@@ -1,7 +1,7 @@
 import { AuditService } from '../audit/audit.service.js';
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { sql } from 'kysely';
-import { scopeCondition } from '../access/scope.js';
+import { scopeCondition, andIf } from '../access/scope.js';
 import type { AuthContext } from '../auth/auth-context.js';
 import { AppError } from '../common/app-error.js';
 import { CSV_BOM, csvRow } from '../common/csv.js';
@@ -300,15 +300,11 @@ export class ImportsService implements OnModuleInit {
         UPDATE lead_import_batches SET status = 'cancelled', finished_at = now(), rows = '[]'::jsonb
         WHERE id = ${id} AND status IN ('queued', 'processing') RETURNING next_row`.execute(trx);
       if (rows[0]) {
-        await this.audit.write(trx, {
-          tenantId: auth.tenantId,
-          actorId: auth.userId,
+        await this.audit.by(trx, auth, {
           action: 'lead_import.cancel',
           entity: 'lead_import',
           entityId: id,
           after: { rowsFiled: rows[0].next_row },
-          ip: auth.ip,
-          requestId: auth.requestId,
         });
       }
       return toView(await this.one(trx, auth, id));
@@ -346,9 +342,7 @@ export class ImportsService implements OnModuleInit {
   private async one(trx: Trx, auth: AuthContext, id: string): Promise<BatchRow> {
     const scoped = scopeCondition(auth, 'b.created_by');
     const { rows } =
-      await sql<BatchRow>`${this.select()} WHERE b.id = ${id} ${scoped ? sql`AND ${scoped}` : sql``}`.execute(
-        trx,
-      );
+      await sql<BatchRow>`${this.select()} WHERE b.id = ${id} ${andIf(scoped)}`.execute(trx);
     if (!rows[0]) throw AppError.notFound('Import');
     return rows[0];
   }

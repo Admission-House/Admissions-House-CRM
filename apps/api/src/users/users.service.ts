@@ -107,16 +107,12 @@ export class UsersService {
         email: emailChanges ? dto.email! : me.email,
         phone: dto.phone !== undefined ? dto.phone : me.phone,
       };
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: 'user.update_self',
         entity: 'user',
         entityId: me.id,
         before: { name: me.name, email: me.email, phone: me.phone },
         after: next,
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
       return next;
     });
@@ -228,15 +224,11 @@ export class UsersService {
                EXTRACT(YEAR FROM now() AT TIME ZONE (SELECT timezone FROM tenants))::int, lt.yearly_quota
         FROM leave_types lt`.execute(trx);
 
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: 'user.create',
         entity: 'user',
         entityId: created.id,
         after: { name: dto.name, email: dto.email, roleId: role.id, branchId, managerId },
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
       return toView(await this.loadScoped(trx, auth, created.id));
     });
@@ -329,16 +321,12 @@ export class UsersService {
         await this.authRepo.endAllSessions(trx, id, 'revoked');
 
       const updated = await this.loadScoped(trx, auth, id);
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: 'user.update',
         entity: 'user',
         entityId: id,
         before: auditShape(target),
         after: auditShape(updated),
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
       return toView(updated);
     });
@@ -379,15 +367,11 @@ export class UsersService {
         done: boolean;
       }>`SELECT delete_unused_user(${id}::uuid) AS done`.execute(trx);
       if (!rows[0]?.done) throw history;
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: 'user.delete',
         entity: 'user',
         entityId: id,
         before: auditShape(target),
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
     });
   }
@@ -404,16 +388,12 @@ export class UsersService {
         await sql`UPDATE users SET receives_auto_leads = ${enabled} WHERE id = ${id}::uuid`.execute(
           trx,
         );
-        await this.audit.write(trx, {
-          tenantId: auth.tenantId,
-          actorId: auth.userId,
+        await this.audit.by(trx, auth, {
           action: 'user.lead_automation',
           entity: 'user',
           entityId: id,
           before: { receivesAutoLeads: before.receives_auto_leads },
           after: { receivesAutoLeads: enabled },
-          ip: auth.ip,
-          requestId: auth.requestId,
         });
       }
       return toView(await this.loadScoped(trx, auth, id));
@@ -447,15 +427,11 @@ export class UsersService {
         .where('id', '=', id)
         .execute();
       const ended = await this.authRepo.endAllSessions(trx, id, 'revoked');
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: 'user.password_reset',
         entity: 'user',
         entityId: id,
         after: { sessionsEnded: ended },
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
     });
     return { temporaryPassword };

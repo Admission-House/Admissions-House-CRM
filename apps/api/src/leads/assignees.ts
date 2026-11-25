@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { onLeaveNow } from '../leave/on-leave-now.js';
 import { sql } from 'kysely';
-import { scopeCondition } from '../access/scope.js';
+import { scopeCondition, andIf } from '../access/scope.js';
 import type { AuthContext } from '../auth/auth-context.js';
 import { AppError } from '../common/app-error.js';
 import type { Trx } from '../database/database.service.js';
@@ -31,7 +31,7 @@ export class Assignees {
       WHERE u.id = ${userId} AND u.status = 'active'
         AND EXISTS (SELECT 1 FROM role_permissions rp JOIN permissions p ON p.id = rp.permission_id
                     WHERE rp.role_id = u.role_id AND p.code = 'lead.read')
-        ${scoped ? sql`AND ${scoped}` : sql``}`.execute(trx);
+        ${andIf(scoped)}`.execute(trx);
     if (!rows[0]) {
       throw AppError.badRequest(
         'ASSIGNEE_INVALID',

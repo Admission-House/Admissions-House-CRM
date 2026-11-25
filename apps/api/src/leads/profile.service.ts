@@ -8,6 +8,7 @@ import { LeadAccess } from './lead-access.js';
 import { LeadWriter } from './lead-writer.js';
 import { diffFields } from './lead-rules.js';
 import type { UpdateProfileDto } from './profile.dto.js';
+import { andIf } from '../access/scope.js';
 
 const SCALARS = [
   'alternate_email',
@@ -51,7 +52,7 @@ export class ProfileService {
       const visible = leadVisibility(auth);
       const { rows } = await sql<{ v: string }>`
         SELECT s.v FROM (${source}) s JOIN leads l ON l.id = s.lead_id
-        WHERE s.v IS NOT NULL AND btrim(s.v) <> '' AND l.deleted_at IS NULL ${visible ? sql`AND ${visible}` : sql``}
+        WHERE s.v IS NOT NULL AND btrim(s.v) <> '' AND l.deleted_at IS NULL ${andIf(visible)}
         GROUP BY s.v ORDER BY count(*) DESC, s.v LIMIT 100`.execute(trx);
       return rows.map((r) => r.v);
     });

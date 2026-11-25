@@ -4,6 +4,7 @@ import { leadVisibility } from '../access/lead-scope.js';
 import type { AuthContext } from '../auth/auth-context.js';
 import { AppError } from '../common/app-error.js';
 import type { Trx } from '../database/database.service.js';
+import { andIf } from '../access/scope.js';
 
 export interface AccessibleLead {
   id: string;
@@ -29,7 +30,7 @@ export class LeadAccess {
     const { rows } = await sql<AccessibleLead>`
       SELECT l.id, l.lead_no::text AS lead_no, l.name, l.primary_phone, l.assigned_to, l.study_mode, l.status_id, s.is_open
       FROM leads l JOIN lead_statuses s ON s.id = l.status_id
-      WHERE l.id = ${leadId} AND l.deleted_at IS NULL ${visible ? sql`AND ${visible}` : sql``}
+      WHERE l.id = ${leadId} AND l.deleted_at IS NULL ${andIf(visible)}
       ${lock ? sql`FOR UPDATE OF l` : sql``}`.execute(trx);
     if (!rows[0]) throw AppError.notFound('Lead');
     return rows[0];

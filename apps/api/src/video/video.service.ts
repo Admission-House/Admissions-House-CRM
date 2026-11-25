@@ -343,15 +343,11 @@ export class VideoService {
         type: 'note',
         remark: `${input.kind === 'voice' ? 'Voice' : 'Video'} call ${input.scheduledFor ? `planned for ${input.scheduledFor}` : 'created'} by ${auth.name}`,
       });
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: 'comm.create',
         entity: 'communication',
         entityId: id,
         after: { type: 'call', kind: input.kind, leadNo: lead.lead_no },
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
       return this.fullView(trx, auth, id);
     });
@@ -403,15 +399,11 @@ export class VideoService {
           leadName: session.lead_name ?? undefined,
         });
       }
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: 'comm.create',
         entity: 'communication',
         entityId: id,
         after: { type: 'call', kind: input.kind, to: callee.name, busy },
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
       return { session: await this.fullView(trx, auth, id), busy };
     });
@@ -484,9 +476,7 @@ export class VideoService {
           remark: `Meeting "${input.title}" ${input.scheduledFor ? `planned for ${input.scheduledFor}` : 'created'} by ${auth.name}`,
         });
       }
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: 'comm.create',
         entity: 'communication',
         entityId: id,
@@ -497,8 +487,6 @@ export class VideoService {
           staff: staff.length,
           guests: input.guests.length,
         },
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
       return this.fullView(trx, auth, id);
     });
@@ -663,9 +651,7 @@ export class VideoService {
    * package, and the same in plain words: how many minutes of a video call or of a voice call the rest of
    * the allowance would buy.
    */
-  usage(
-    auth: AuthContext,
-  ): Promise<{
+  usage(auth: AuthContext): Promise<{
     usedStandardMinutes: number;
     limitStandardMinutes: number | null;
     videoMinutesLeft: number | null;
@@ -716,15 +702,11 @@ export class VideoService {
             cancelled: outcome === 'cancelled',
           },
         );
-        await this.audit.write(trx, {
-          tenantId: auth.tenantId,
-          actorId: auth.userId,
+        await this.audit.by(trx, auth, {
           action: 'comm.end',
           entity: 'communication',
           entityId: id,
           after: { outcome },
-          ip: auth.ip,
-          requestId: auth.requestId,
         });
       }
       return this.fullView(trx, auth, id);
@@ -793,14 +775,10 @@ export class VideoService {
         });
         await this.store.event(trx, auth.tenantId, id, inviteId, 'invited', 'guest');
       }
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: 'comm.invite',
         entity: 'communication',
         entityId: id,
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
       return this.fullView(trx, auth, id);
     });
@@ -830,15 +808,11 @@ export class VideoService {
           'removed',
           `removed by ${auth.name}`,
         );
-        await this.audit.write(trx, {
-          tenantId: auth.tenantId,
-          actorId: auth.userId,
+        await this.audit.by(trx, auth, {
           action: 'comm.remove',
           entity: 'communication',
           entityId: id,
           after: { invite: inviteId },
-          ip: auth.ip,
-          requestId: auth.requestId,
         });
       }
       return this.fullView(trx, auth, id);

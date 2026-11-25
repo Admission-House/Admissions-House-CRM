@@ -204,14 +204,12 @@ export class LeadConfigService {
           ...(dto.downloadForms && { download_forms: dto.downloadForms }),
         })
         .onConflict((oc) =>
-          oc
-            .column('tenant_id')
-            .doUpdateSet({
-              duplicate_action: dto.duplicateAction,
-              auto_assign: dto.autoAssign,
-              ...(dto.downloadForms && { download_forms: dto.downloadForms }),
-              updated_at: sql`now()`,
-            }),
+          oc.column('tenant_id').doUpdateSet({
+            duplicate_action: dto.duplicateAction,
+            auto_assign: dto.autoAssign,
+            ...(dto.downloadForms && { download_forms: dto.downloadForms }),
+            updated_at: sql`now()`,
+          }),
         )
         .execute();
       await this.record(trx, auth, 'lead_policy.update', 'lead_policy', auth.tenantId, before, dto);
@@ -357,17 +355,7 @@ export class LeadConfigService {
     before: unknown,
     after: unknown,
   ) {
-    return this.audit.write(trx, {
-      tenantId: auth.tenantId,
-      actorId: auth.userId,
-      action,
-      entity,
-      entityId: id,
-      before,
-      after,
-      ip: auth.ip,
-      requestId: auth.requestId,
-    });
+    return this.audit.by(trx, auth, { action, entity, entityId: id, before, after });
   }
 }
 

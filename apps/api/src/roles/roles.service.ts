@@ -129,9 +129,7 @@ export class RolesService {
         .executeTakeFirstOrThrow();
       await this.setPermissions(trx, auth.tenantId, role.id, permissionIds);
 
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: 'role.create',
         entity: 'role',
         entityId: role.id,
@@ -142,8 +140,6 @@ export class RolesService {
           tracksAttendance: tracks,
           permissions: dto.permissions,
         },
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
       const created = await this.load(trx, role.id);
       return { ...created.summary, permissions: created.permissions };
@@ -195,16 +191,12 @@ export class RolesService {
         await trx.updateTable('roles').set(changes).where('id', '=', id).execute();
 
       const after = await this.load(trx, id);
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: 'role.update',
         entity: 'role',
         entityId: id,
         before: { ...current.summary, permissions: current.permissions },
         after: { ...after.summary, permissions: after.permissions },
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
       return { ...after.summary, permissions: after.permissions };
     });
@@ -222,15 +214,11 @@ export class RolesService {
         );
       }
       await trx.deleteFrom('roles').where('id', '=', id).execute();
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: 'role.delete',
         entity: 'role',
         entityId: id,
         before: { ...role.summary, permissions: role.permissions },
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
     });
   }

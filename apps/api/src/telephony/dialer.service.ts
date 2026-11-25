@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { sql } from 'kysely';
-import { scopeCondition } from '../access/scope.js';
+import { scopeCondition, andIf } from '../access/scope.js';
 import type { AuthContext } from '../auth/auth-context.js';
 import { AppError } from '../common/app-error.js';
 import { DatabaseService, Trx } from '../database/database.service.js';
@@ -135,7 +135,7 @@ export class DialerService {
     return this.db.withTenant(auth.tenantId, async (trx) => {
       const scoped = scopeCondition(auth, 's.user_id');
       const { rows } = await sql<SessionRow>`
-        ${SELECT} WHERE true ${query.status ? sql`AND s.status = ${query.status}` : sql``} ${scoped ? sql`AND ${scoped}` : sql``}
+        ${SELECT} WHERE true ${query.status ? sql`AND s.status = ${query.status}` : sql``} ${andIf(scoped)}
         ORDER BY s.started_at DESC, s.id DESC LIMIT ${query.limit}`.execute(trx);
       return Promise.all(rows.map(async (r) => toView(r, await this.leadsOf(trx, r.id), false)));
     });
@@ -264,7 +264,7 @@ export class DialerService {
   ): Promise<{ status: Status; user_id: string }> {
     const scoped = scopeCondition(auth, 's.user_id');
     const { rows } = await sql<{ status: Status; user_id: string }>`
-      SELECT s.status, s.user_id FROM dialer_sessions s WHERE s.id = ${id}::uuid ${scoped ? sql`AND ${scoped}` : sql``} FOR UPDATE OF s`.execute(
+      SELECT s.status, s.user_id FROM dialer_sessions s WHERE s.id = ${id}::uuid ${andIf(scoped)} FOR UPDATE OF s`.execute(
       trx,
     );
     if (!rows[0]) throw AppError.notFound('Dialer session');
@@ -279,9 +279,7 @@ export class DialerService {
   ): Promise<SessionView> {
     const scoped = scopeCondition(auth, 's.user_id');
     const { rows } =
-      await sql<SessionRow>`${SELECT} WHERE s.id = ${id}::uuid ${scoped ? sql`AND ${scoped}` : sql``}`.execute(
-        trx,
-      );
+      await sql<SessionRow>`${SELECT} WHERE s.id = ${id}::uuid ${andIf(scoped)}`.execute(trx);
     if (!rows[0]) throw AppError.notFound('Dialer session');
     return toView(rows[0], await this.leadsOf(trx, id), withLeads);
   }

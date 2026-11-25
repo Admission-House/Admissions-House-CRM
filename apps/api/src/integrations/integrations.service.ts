@@ -99,15 +99,11 @@ export class IntegrationsService {
         })
         .returning(['id'])
         .executeTakeFirstOrThrow();
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: 'api_key.create',
         entity: 'api_key',
         entityId: row.id,
         after: { name: dto.name, source: source.name },
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
       return {
         id: row.id,
@@ -129,15 +125,11 @@ export class IntegrationsService {
         .returning(['id', 'name'])
         .executeTakeFirst();
       if (!row) throw AppError.notFound('API key');
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: 'api_key.revoke',
         entity: 'api_key',
         entityId: id,
         after: { name: row.name },
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
     });
   }
@@ -200,14 +192,10 @@ export class IntegrationsService {
         .where('id', '=', id)
         .executeTakeFirst();
       if (!row) throw AppError.notFound('Event');
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: 'intake_event.view',
         entity: 'intake_event',
         entityId: id,
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
       return row;
     });
@@ -228,14 +216,10 @@ export class IntegrationsService {
           'NOT_RETRYABLE',
           'Only a failed or refused event can be tried again',
         );
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: 'intake_event.retry',
         entity: 'intake_event',
         entityId: id,
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
     });
     const outcome = await this.intake.process(auth.tenantId, id);

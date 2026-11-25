@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { sql, SqlBool } from 'kysely';
 import { z } from 'zod';
 import { leadVisibility } from '../access/lead-scope.js';
-import { scopeCondition } from '../access/scope.js';
+import { scopeCondition, andIf } from '../access/scope.js';
 import type { AuthContext } from '../auth/auth-context.js';
 import { AppError } from '../common/app-error.js';
 import { decodeCursor, Page, toPage } from '../common/pagination.js';
@@ -265,7 +265,7 @@ export class FollowUpsService {
     const { rows } = await sql<{ id: string; lead_id: string; due_at: Date; done_at: Date | null }>`
       SELECT f.id, f.lead_id, f.due_at, f.done_at
       FROM followups f JOIN leads l ON l.id = f.lead_id AND l.deleted_at IS NULL
-      WHERE f.id = ${id} ${visible ? sql`AND ${visible}` : sql``}
+      WHERE f.id = ${id} ${andIf(visible)}
       FOR UPDATE OF f`.execute(trx);
     if (!rows[0]) throw AppError.notFound('Follow-up');
     return rows[0];

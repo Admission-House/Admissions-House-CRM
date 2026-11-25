@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { sql, SqlBool } from 'kysely';
 import { z } from 'zod';
-import { scopeCondition } from '../access/scope.js';
+import { scopeCondition, andIf } from '../access/scope.js';
 import { AuditService } from '../audit/audit.service.js';
 import type { AuthContext } from '../auth/auth-context.js';
 import { AppError } from '../common/app-error.js';
@@ -183,9 +183,7 @@ export class PayrollRunService {
       const result = await this.calculateInto(trx, auth, runId, monthDate, policy, {
         keepAdjusted: false,
       });
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: 'payroll.run_create',
         entity: 'payroll_run',
         entityId: runId,
@@ -194,8 +192,6 @@ export class PayrollRunService {
           payslips: result.count,
           withoutStructure: result.missing.length,
         },
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
       return this.detail(trx, auth, runId);
     });
@@ -220,9 +216,7 @@ export class PayrollRunService {
       const result = await this.calculateInto(trx, auth, runId, run.month, policy, {
         keepAdjusted: !input.discardAdjustments,
       });
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: 'payroll.run_recalculate',
         entity: 'payroll_run',
         entityId: runId,
@@ -232,8 +226,6 @@ export class PayrollRunService {
           keptAdjusted: result.kept,
           discardedAdjustments: input.discardAdjustments,
         },
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
       return { ...(await this.detail(trx, auth, runId)), keptAdjusted: result.kept };
     });
@@ -284,9 +276,7 @@ export class PayrollRunService {
         UPDATE payslip_lines SET amount = ${input.amount},
                reason = ${unchanged ? null : input.reason}, adjusted_by = ${unchanged ? null : auth.userId}::uuid, adjusted_at = ${unchanged ? null : sql`now()`}
         WHERE id = ${lineId}::uuid`.execute(trx);
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: 'payroll.line_adjust',
         entity: 'payslip',
         entityId: payslipId,
@@ -298,8 +288,6 @@ export class PayrollRunService {
           employee: row.user_name,
           month: monthLabel(row.month),
         },
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
     });
   }
@@ -320,9 +308,7 @@ export class PayrollRunService {
         VALUES (${auth.tenantId}, ${payslipId}, ${input.kind}, ${input.label}, ${input.amount}, 0, 'adjustment', ${input.reason}, ${auth.userId}, now(), ${rows[0]!.next})`.execute(
         trx,
       );
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: 'payroll.line_add',
         entity: 'payslip',
         entityId: payslipId,
@@ -334,8 +320,6 @@ export class PayrollRunService {
           employee: row.user_name,
           month: monthLabel(row.month),
         },
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
     });
   }
@@ -355,9 +339,7 @@ export class PayrollRunService {
           'A calculated line cannot be removed. Set its amount to 0 and give a reason instead.',
         );
       await sql`DELETE FROM payslip_lines WHERE id = ${lineId}::uuid`.execute(trx);
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: 'payroll.line_remove',
         entity: 'payslip',
         entityId: payslipId,
@@ -369,8 +351,6 @@ export class PayrollRunService {
           employee: row.user_name,
           month: monthLabel(row.month),
         },
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
     });
   }
@@ -435,9 +415,7 @@ export class PayrollRunService {
         }),
         { gross: 0, deductions: 0 },
       );
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: 'payroll.approve',
         entity: 'payroll_run',
         entityId: runId,
@@ -449,8 +427,6 @@ export class PayrollRunService {
           net: toRupees(totals.gross - totals.deductions),
           replacedManualRecords: overwritten,
         },
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
       return this.detail(trx, auth, runId);
     });
@@ -473,9 +449,7 @@ export class PayrollRunService {
         await sql`UPDATE salary_records SET is_live = false, updated_at = now() WHERE payslip_id IN (SELECT id FROM payslips WHERE run_id = ${runId}::uuid)`.execute(
           trx,
         );
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: 'payroll.reopen',
         entity: 'payroll_run',
         entityId: runId,
@@ -486,8 +460,6 @@ export class PayrollRunService {
           reason: input.reason,
           hiddenSalaryRecords: Number(hidden.numAffectedRows ?? 0),
         },
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
       return this.detail(trx, auth, runId);
     });
@@ -614,7 +586,7 @@ export class PayrollRunService {
       const month = rows[0].month;
       const { rows: people } = await sql<PersonRow>`
         SELECT u.id, u.name, u.email::text AS email, r.name AS role FROM users u JOIN roles r ON r.id = u.role_id
-        WHERE u.status = 'active' ${scopedU ? sql`AND ${scopedU}` : sql``}
+        WHERE u.status = 'active' ${andIf(scopedU)}
           AND NOT EXISTS (SELECT 1 FROM payslips p WHERE p.run_id = ${runId}::uuid AND p.user_id = u.id)
           AND NOT EXISTS (SELECT 1 FROM salary_structures s WHERE s.user_id = u.id AND s.effective_from <= ${month}::date)
         ORDER BY u.name, u.id`.execute(trx);

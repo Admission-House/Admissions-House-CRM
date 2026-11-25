@@ -99,16 +99,12 @@ export class CompanyService {
         trx,
       );
       const after = await this.load(trx);
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: 'company.update',
         entity: 'company',
         entityId: auth.tenantId,
         before: view(before),
         after: view(after),
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
       return view(after);
     });
@@ -147,16 +143,12 @@ export class CompanyService {
         trx,
       );
       if (was !== requireTwoStep) {
-        await this.audit.write(trx, {
-          tenantId: auth.tenantId,
-          actorId: auth.userId,
+        await this.audit.by(trx, auth, {
           action: 'company.security_change',
           entity: 'company',
           entityId: auth.tenantId,
           before: { requireTwoStep: was },
           after: { requireTwoStep },
-          ip: auth.ip,
-          requestId: auth.requestId,
         });
       }
       return { requireTwoStep };
@@ -183,14 +175,10 @@ export class CompanyService {
         await sql`UPDATE tenants SET settings = ${JSON.stringify(s)}::jsonb WHERE id = ${auth.tenantId}`.execute(
           trx,
         );
-        await this.audit.write(trx, {
-          tenantId: auth.tenantId,
-          actorId: auth.userId,
+        await this.audit.by(trx, auth, {
           action: 'company.logo_change',
           entity: 'company',
           entityId: auth.tenantId,
-          ip: auth.ip,
-          requestId: auth.requestId,
         });
         return view(await this.load(trx));
       });
@@ -213,14 +201,10 @@ export class CompanyService {
       await sql`UPDATE tenants SET settings = ${JSON.stringify(rest)}::jsonb WHERE id = ${auth.tenantId}`.execute(
         trx,
       );
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: 'company.logo_remove',
         entity: 'company',
         entityId: auth.tenantId,
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
       return view(await this.load(trx));
     });

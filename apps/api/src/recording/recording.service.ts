@@ -161,15 +161,11 @@ export class RecordingService {
         UPDATE recording_policies SET mode = ${mode}, retention_days = ${retention}, notice_text = ${notice},
                version = version + ${changesMeaning ? 1 : 0}, updated_by = ${auth.userId}
         WHERE tenant_id = ${auth.tenantId}`.execute(trx);
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: 'recording.policy',
         entity: 'recording_policy',
         before: { mode: before.mode, retentionDays: before.retentionDays, version: before.version },
         after: { mode, retentionDays: retention, noticeChanged: notice !== before.noticeText },
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
       return {
         ...(await this.policy(trx, auth.tenantId)),
@@ -874,15 +870,11 @@ export class RecordingService {
         },
         300,
       );
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: purpose === 'play' ? 'recording.play' : 'recording.download',
         entity: 'communication',
         entityId: sessionId,
         after: { recording: file.recording_id, file: file.id },
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
       return {
         url: `/api/v1/recordings/files/${signed.token}`,

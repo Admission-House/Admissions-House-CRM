@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { sql } from 'kysely';
-import { scopeCondition } from '../access/scope.js';
+import { scopeCondition, andIf } from '../access/scope.js';
 import type { AuthContext } from '../auth/auth-context.js';
 import { distanceMeters } from '../auth/office-rules.js';
 import { AppError } from '../common/app-error.js';
@@ -88,7 +88,7 @@ export class LocationLogService {
                  b.id AS branch_id, b.name AS branch_name, b.latitude::text AS b_lat, b.longitude::text AS b_lng
           FROM attendance_records a JOIN users u ON u.id = a.user_id LEFT JOIN branches b ON b.id = a.branch_id
           WHERE a.check_in_at >= ${lower} AND a.check_in_at < ${upper} AND a.method = 'office_check'
-            ${q.userId ? sql`AND a.user_id = ${q.userId}::uuid` : sql``} ${scopeA ? sql`AND ${scopeA}` : sql``}`);
+            ${q.userId ? sql`AND a.user_id = ${q.userId}::uuid` : sql``} ${andIf(scopeA)}`);
       }
       if (q.kind !== 'signed_in') {
         parts.push(sql`
@@ -97,7 +97,7 @@ export class LocationLogService {
                  b.id AS branch_id, b.name AS branch_name, b.latitude::text AS b_lat, b.longitude::text AS b_lng
           FROM login_attempts l JOIN users u ON u.id = l.user_id LEFT JOIN branches b ON b.id = u.branch_id
           WHERE l.result IN ('outside_office', 'device_blocked') AND l.created_at >= ${lower} AND l.created_at < ${upper}
-            ${q.userId ? sql`AND l.user_id = ${q.userId}::uuid` : sql``} ${scopeL ? sql`AND ${scopeL}` : sql``}`);
+            ${q.userId ? sql`AND l.user_id = ${q.userId}::uuid` : sql``} ${andIf(scopeL)}`);
       }
       const { rows } =
         await sql<Row>`SELECT * FROM (${sql.join(parts, sql` UNION ALL `)}) x ORDER BY at DESC LIMIT ${q.limit}`.execute(

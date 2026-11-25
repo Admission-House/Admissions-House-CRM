@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Expression, sql, SqlBool } from 'kysely';
 import { leadVisibility } from '../access/lead-scope.js';
-import { scopeCondition } from '../access/scope.js';
+import { scopeCondition, andIf } from '../access/scope.js';
 import { AttendanceSummaryService } from '../attendance/attendance-summary.service.js';
 import type { AuthContext } from '../auth/auth-context.js';
 import { AppError } from '../common/app-error.js';
@@ -51,7 +51,7 @@ export class ReportsService {
       }>`
         SELECT count(*) AS total, count(*) FILTER (WHERE c.outcome = 'connected') AS connected,
                count(*) FILTER (WHERE c.outcome = 'missed') AS missed, coalesce(sum(c.duration_sec), 0) AS talk
-        FROM call_log c WHERE c.started_at >= now() - interval '1 day' AND c.started_at >= ${range.todayStart}::timestamptz ${scoped ? sql`AND ${scoped}` : sql``}`.execute(
+        FROM call_log c WHERE c.started_at >= now() - interval '1 day' AND c.started_at >= ${range.todayStart}::timestamptz ${andIf(scoped)}`.execute(
         trx,
       );
       const overdue = await sql<{ n: string }>`
@@ -73,7 +73,7 @@ export class ReportsService {
       const v = leadVisibility(auth);
       const { rows } = await sql<{ name: string; n: string }>`
         SELECT s.name, count(*) AS n FROM leads l JOIN lead_statuses s ON s.id = l.status_id
-        WHERE l.deleted_at IS NULL ${v ? sql`AND ${v}` : sql``} GROUP BY s.name, s.sort_order ORDER BY s.sort_order`.execute(
+        WHERE l.deleted_at IS NULL ${andIf(v)} GROUP BY s.name, s.sort_order ORDER BY s.sort_order`.execute(
         trx,
       );
       return rows.map((r) => ({ status: r.name, leads: Number(r.n) }));
@@ -84,7 +84,7 @@ export class ReportsService {
 
   private vis(auth: AuthContext, column: string) {
     const s = scopeCondition(auth, column);
-    return s ? sql`AND ${s}` : sql``;
+    return andIf(s);
   }
 
   // ------------------------------------------------------------ team status
@@ -112,7 +112,7 @@ export class ReportsService {
         FROM users u JOIN roles r ON r.id = u.role_id
         LEFT JOIN LATERAL (SELECT max(last_active_at) AS last_active_at FROM user_sessions s
                            WHERE s.user_id = u.id AND s.ended_at IS NULL AND s.expires_at > now()) x ON true
-        WHERE u.status = 'active' ${scoped ? sql`AND ${scoped}` : sql``}
+        WHERE u.status = 'active' ${andIf(scoped)}
         ORDER BY u.name`.execute(trx);
       return rows;
     });
@@ -160,7 +160,7 @@ export class ReportsService {
         JOIN lead_sources src ON src.id = l.source_id
         LEFT JOIN users u ON u.id = l.assigned_to
         LEFT JOIN first_call fc ON fc.lead_id = l.id AND fc.at >= l.created_at
-        WHERE l.deleted_at IS NULL AND l.created_at >= ${r.fromTs}::timestamptz AND l.created_at < ${r.toTs}::timestamptz ${v ? sql`AND ${v}` : sql``}
+        WHERE l.deleted_at IS NULL AND l.created_at >= ${r.fromTs}::timestamptz AND l.created_at < ${r.toTs}::timestamptz ${andIf(v)}
         GROUP BY 1 ORDER BY 1`.execute(trx);
       return {
         title: `TAT by ${q.groupBy}`,
@@ -274,7 +274,7 @@ export class ReportsService {
         SELECT ${key} AS name, count(*) AS leads, count(*) FILTER (WHERE s.is_open) AS open, count(*) FILTER (WHERE NOT s.is_open) AS closed,
                count(*) FILTER (WHERE l.assigned_to IS NULL) AS unassigned
         FROM leads l JOIN lead_statuses s ON s.id = l.status_id JOIN lead_sources src ON src.id = l.source_id LEFT JOIN users u ON u.id = l.assigned_to
-        WHERE l.deleted_at IS NULL AND l.created_at >= ${r.fromTs}::timestamptz AND l.created_at < ${r.toTs}::timestamptz ${v ? sql`AND ${v}` : sql``}
+        WHERE l.deleted_at IS NULL AND l.created_at >= ${r.fromTs}::timestamptz AND l.created_at < ${r.toTs}::timestamptz ${andIf(v)}
         GROUP BY 1 ORDER BY ${q.groupBy === 'day' ? sql`1 DESC` : sql`count(*) DESC, 1`}`.execute(
         trx,
       );
@@ -317,7 +317,7 @@ export class ReportsService {
                count(*) FILTER (WHERE a.type = 'document') AS documents, count(*) FILTER (WHERE a.type = 'shortlist') AS shortlists,
                count(*) FILTER (WHERE a.type IN ('assignment', 'field_change', 'enquiry')) AS other
         FROM lead_activities a JOIN users u ON u.id = a.user_id
-        WHERE a.created_at >= ${r.fromTs}::timestamptz AND a.created_at < ${r.toTs}::timestamptz ${scoped ? sql`AND ${scoped}` : sql``}
+        WHERE a.created_at >= ${r.fromTs}::timestamptz AND a.created_at < ${r.toTs}::timestamptz ${andIf(scoped)}
           ${q.userId ? sql`AND a.user_id = ${q.userId}::uuid` : sql``}
         GROUP BY 1, 2 ORDER BY 1 DESC, 2`.execute(trx);
       return {
@@ -364,7 +364,7 @@ export class ReportsService {
                count(*) FILTER (WHERE c.outcome = 'missed') AS missed, count(*) FILTER (WHERE c.via = 'app') AS app, coalesce(sum(c.duration_sec), 0) AS talk,
                avg(c.duration_sec) FILTER (WHERE c.outcome = 'connected') AS avg_secs
         FROM call_log c LEFT JOIN users u ON u.id = c.user_id
-        WHERE c.started_at >= ${r.fromTs}::timestamptz AND c.started_at < ${r.toTs}::timestamptz ${scoped ? sql`AND ${scoped}` : sql``}
+        WHERE c.started_at >= ${r.fromTs}::timestamptz AND c.started_at < ${r.toTs}::timestamptz ${andIf(scoped)}
         GROUP BY 1 ORDER BY 1`.execute(trx);
       return {
         title: 'Call activity',
@@ -409,7 +409,7 @@ export class ReportsService {
       const scoped = scopeCondition(auth, 'u.id');
       const { rows: people } = await sql<{ id: string; name: string; role: string }>`
         SELECT u.id, u.name, r.name AS role FROM users u JOIN roles r ON r.id = u.role_id
-        WHERE u.status = 'active' AND r.tracks_attendance ${scoped ? sql`AND ${scoped}` : sql``} ORDER BY u.name`.execute(
+        WHERE u.status = 'active' AND r.tracks_attendance ${andIf(scoped)} ORDER BY u.name`.execute(
         trx,
       );
       const sums = await this.summary.forMonth(
@@ -468,7 +468,7 @@ export class ReportsService {
         joined_on: string | null;
       }>`
         SELECT u.id, u.name, r.name AS role, u.joined_on::text AS joined_on FROM users u JOIN roles r ON r.id = u.role_id
-        WHERE u.status = 'active' AND r.tracks_attendance ${scoped ? sql`AND ${scoped}` : sql``} ORDER BY u.name`.execute(
+        WHERE u.status = 'active' AND r.tracks_attendance ${andIf(scoped)} ORDER BY u.name`.execute(
         trx,
       );
       const ids = people.map((p) => p.id);

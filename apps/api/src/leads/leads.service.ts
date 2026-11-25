@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { sql, SqlBool, type RawBuilder } from 'kysely';
 import { z } from 'zod';
 import { leadVisibility } from '../access/lead-scope.js';
-import { scopeCondition } from '../access/scope.js';
+import { scopeCondition, andIf } from '../access/scope.js';
 import type { AuthContext } from '../auth/auth-context.js';
 import { AppError } from '../common/app-error.js';
 import { decodeCursor, Page, toPage } from '../common/pagination.js';
@@ -315,9 +315,7 @@ export class LeadsService {
           422,
         );
       }
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: 'lead.export',
         entity: 'lead',
         after: {
@@ -325,8 +323,6 @@ export class LeadsService {
           format: query.format,
           filters: { ...query, format: undefined },
         },
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
       const stamp = new Date().toISOString().slice(0, 10);
       return query.format === 'xlsx'
@@ -376,7 +372,7 @@ export class LeadsService {
                count(*) FILTER (WHERE s.is_open AND l.next_followup_at >= now()
                                   AND (l.next_followup_at AT TIME ZONE t.timezone)::date = (now() AT TIME ZONE t.timezone)::date) AS due_today
         ${FROM_LEADS}
-        WHERE l.deleted_at IS NULL ${visible ? sql`AND ${visible}` : sql``}
+        WHERE l.deleted_at IS NULL ${andIf(visible)}
         GROUP BY 1`.execute(trx);
 
       const counts: Record<string, number> = {
@@ -837,7 +833,7 @@ export class LeadsService {
       // The person the leads come from must be inside the caller's reach (404 otherwise).
       const reach = scopeCondition(auth, 'u.id');
       const { rows: from } = await sql<{ id: string; name: string }>`
-        SELECT u.id, u.name FROM users u WHERE u.id = ${dto.fromUserId}::uuid ${reach ? sql`AND ${reach}` : sql``}`.execute(
+        SELECT u.id, u.name FROM users u WHERE u.id = ${dto.fromUserId}::uuid ${andIf(reach)}`.execute(
         trx,
       );
       if (!from[0]) throw AppError.notFound('Person');
@@ -851,7 +847,7 @@ export class LeadsService {
         SELECT l.id FROM leads l JOIN lead_statuses s ON s.id = l.status_id
         WHERE l.assigned_to = ${dto.fromUserId}::uuid AND l.deleted_at IS NULL
           ${dto.which === 'open' ? sql`AND s.is_open` : sql``}
-          ${visible ? sql`AND ${visible}` : sql``}
+          ${andIf(visible)}
         ORDER BY l.created_at, l.id
         LIMIT ${MAX_TRANSFER + 1}`.execute(trx);
       const ids = due.slice(0, MAX_TRANSFER).map((r) => r.id);
@@ -881,9 +877,7 @@ export class LeadsService {
         await sql`UPDATE users SET receives_auto_leads = false WHERE id = ${dto.fromUserId}::uuid`.execute(
           trx,
         );
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: 'lead.transfer',
         entity: 'user',
         entityId: dto.fromUserId,
@@ -895,8 +889,6 @@ export class LeadsService {
           pausedAutomation: dto.pauseAutomation,
           to: targets.map((t) => ({ name: t.name, leads: given.get(t.id) ?? 0 })),
         },
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
       return {
         moved: ids.length,
@@ -951,15 +943,11 @@ export class LeadsService {
         newValue: 'yes',
         remark: `Personal data of lead ${lead.lead_no} erased by ${auth.name}`,
       });
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: 'lead.erase',
         entity: 'lead',
         entityId: id,
         after: { leadNo: lead.lead_no, files: rows[0].keys.length },
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
       return rows[0].keys;
     });
@@ -1040,7 +1028,7 @@ export class LeadsService {
   private async requireVisible(trx: Trx, auth: AuthContext, id: string): Promise<void> {
     const visible = leadVisibility(auth);
     const { rows } = await sql<{ id: string }>`
-      SELECT l.id FROM leads l WHERE l.id = ${id} AND l.deleted_at IS NULL ${visible ? sql`AND ${visible}` : sql``}`.execute(
+      SELECT l.id FROM leads l WHERE l.id = ${id} AND l.deleted_at IS NULL ${andIf(visible)}`.execute(
       trx,
     );
     if (!rows[0]) throw AppError.notFound('Lead');
@@ -1062,7 +1050,7 @@ export class LeadsService {
              l.expected_closure_on::text AS expected_closure_on, l.interested_course_id, l.interested_location_id,
              l.interest_note, l.status_id, l.substatus_id, l.assigned_to, a.name AS assignee_name
       FROM leads l LEFT JOIN users a ON a.id = l.assigned_to
-      WHERE l.id = ANY(${ids}::uuid[]) AND l.deleted_at IS NULL ${visible ? sql`AND ${visible}` : sql``}
+      WHERE l.id = ANY(${ids}::uuid[]) AND l.deleted_at IS NULL ${andIf(visible)}
       ORDER BY l.id
       FOR UPDATE OF l`.execute(trx);
     if (rows.length !== ids.length) {
@@ -1097,9 +1085,7 @@ export class LeadsService {
       LEFT JOIN courses c ON c.id = l.interested_course_id
       LEFT JOIN locations loc ON loc.id = l.interested_location_id
       LEFT JOIN users cb ON cb.id = l.created_by
-      WHERE l.id = ${id} AND l.deleted_at IS NULL ${visible ? sql`AND ${visible}` : sql``}`.execute(
-      trx,
-    );
+      WHERE l.id = ${id} AND l.deleted_at IS NULL ${andIf(visible)}`.execute(trx);
     const r = rows[0];
     if (!r) throw AppError.notFound('Lead');
 

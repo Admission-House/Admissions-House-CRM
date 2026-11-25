@@ -173,14 +173,10 @@ export class MfaService {
           trx,
         );
       }
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: 'auth.mfa_enabled',
         entity: 'user',
         entityId: auth.userId,
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
       return { recoveryCodes };
     });
@@ -221,14 +217,10 @@ export class MfaService {
         return new AppError('MFA_CODE_WRONG', 'The code is not correct.', 403);
       }
       await this.remove(trx, auth.userId);
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: 'auth.mfa_disabled',
         entity: 'user',
         entityId: auth.userId,
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
       return { enabled: false } as const;
     });
@@ -251,14 +243,10 @@ export class MfaService {
         ).rows.length > 0;
       await this.remove(trx, userId);
       if (had)
-        await this.audit.write(trx, {
-          tenantId: auth.tenantId,
-          actorId: auth.userId,
+        await this.audit.by(trx, auth, {
           action: 'auth.mfa_reset',
           entity: 'user',
           entityId: userId,
-          ip: auth.ip,
-          requestId: auth.requestId,
         });
       return { reset: had };
     });

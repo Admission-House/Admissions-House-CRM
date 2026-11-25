@@ -185,16 +185,12 @@ export class HolidaysService {
       if (days === 0)
         await sql`UPDATE leave_requests SET status = 'cancelled' WHERE id = ${r.id}`.execute(trx);
       else await sql`UPDATE leave_requests SET days = ${days} WHERE id = ${r.id}`.execute(trx);
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
+      await this.audit.by(trx, auth, {
         action: 'leave.recount',
         entity: 'leave_request',
         entityId: r.id,
         before: { days: r.days, status: r.status },
         after: days === 0 ? { days: r.days, status: 'cancelled' } : { days, status: r.status },
-        ip: auth.ip,
-        requestId: auth.requestId,
       });
     }
   }
@@ -207,16 +203,6 @@ export class HolidaysService {
     before: unknown,
     after: unknown,
   ) {
-    return this.audit.write(trx, {
-      tenantId: auth.tenantId,
-      actorId: auth.userId,
-      action,
-      entity: 'holiday',
-      entityId: id,
-      before,
-      after,
-      ip: auth.ip,
-      requestId: auth.requestId,
-    });
+    return this.audit.by(trx, auth, { action, entity: 'holiday', entityId: id, before, after });
   }
 }
