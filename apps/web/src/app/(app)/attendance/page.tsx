@@ -401,8 +401,9 @@ function LocationLog() {
 
 export default function AttendancePage() {
   const { can } = useAuth();
+  const own = useApi<{ tracked: boolean }>(can('attendance.self') ? '/attendance/me/today' : null);
   const tabs = [
-    can('attendance.self') && { key: 'mine' as const, label: 'My attendance' },
+    can('attendance.self') && own.data?.tracked !== false && { key: 'mine' as const, label: 'My attendance' },
     can('attendance.read') && { key: 'team' as const, label: 'Team log' },
     can('report.read') && can('attendance.read') && { key: 'days' as const, label: 'By day' },
     can('attendance.read') && { key: 'places' as const, label: 'Sign-in places' },

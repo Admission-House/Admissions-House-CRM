@@ -183,6 +183,23 @@ describe('lead and call reports', () => {
     expect(row(res, 'name', 'super')).toBeUndefined();
     expect(errorCode(await api.call('GET', '/reports/attendance-days?month=nope', t.admin!))).toBe('MONTH_INVALID');
   });
+
+  it('does not count the days before a person joined as absent', async () => {
+    // lc2 joins today: every earlier day of the month is blank in the grid and is not a working day in the summary.
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+    const before = await owner.query(`SELECT joined_on FROM users WHERE id = $1`, [fx.user('lc2').id]);
+    await owner.query(`UPDATE users SET joined_on = $2::date WHERE id = $1`, [fx.user('lc2').id, today]);
+    try {
+      const grid = row(await api.call('GET', `/reports/attendance-days?month=${MONTH}`, t.admin!), 'name', 'lc2')!;
+      const day = Number(today.slice(8));
+      for (let d = 1; d < day; d++) expect(grid[`d${d}`], `day ${d}`).toBe('');
+      const sum = row(await api.call('GET', `/reports/attendance?month=${MONTH}`, t.admin!), 'name', 'lc2')!;
+      expect(Number(sum.workingDays)).toBeLessThanOrEqual(1);
+      expect(Number(sum.absent)).toBeLessThanOrEqual(1);
+    } finally {
+      await owner.query(`UPDATE users SET joined_on = $2 WHERE id = $1`, [fx.user('lc2').id, before.rows[0].joined_on]);
+    }
+  });
 });
 
 describe('dates, files and permissions', () => {

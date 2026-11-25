@@ -280,8 +280,8 @@ export class ReportsService {
     if (!month) throw AppError.badRequest('MONTH_INVALID', 'Give the month as YYYY-MM', [{ field: 'month', message: 'Give the month as YYYY-MM' }]);
     return this.db.withTenant(auth.tenantId, async (trx) => {
       const scoped = scopeCondition(auth, 'u.id');
-      const { rows: people } = await sql<{ id: string; name: string; role: string }>`
-        SELECT u.id, u.name, r.name AS role FROM users u JOIN roles r ON r.id = u.role_id
+      const { rows: people } = await sql<{ id: string; name: string; role: string; joined_on: string | null }>`
+        SELECT u.id, u.name, r.name AS role, u.joined_on::text AS joined_on FROM users u JOIN roles r ON r.id = u.role_id
         WHERE u.status = 'active' AND r.tracks_attendance ${scoped ? sql`AND ${scoped}` : sql``} ORDER BY u.name`.execute(trx);
       const ids = people.map((p) => p.id);
 
@@ -308,6 +308,8 @@ export class ReportsService {
           const row: Record<string, string | number | null> = { name: p.name, role: p.role };
           for (const d of days) {
             const late = present.get(`${p.id}|${d.day}`);
+            // Before the person joined there is nothing to show (not "absent"), unless they somehow have a record.
+            if (late === undefined && p.joined_on && d.day < p.joined_on) { row[`d${label(d.day)}`] = ''; continue; }
             const onLeave = leaves.some((l) => l.user_id === p.id && l.from_date <= d.day && l.to_date >= d.day);
             row[`d${label(d.day)}`] = late !== undefined ? (late > 0 ? 'L' : 'P') : d.future ? '' : d.off ? 'O' : onLeave ? 'V' : 'A';
           }

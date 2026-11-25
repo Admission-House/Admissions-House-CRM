@@ -39,12 +39,13 @@ export class AttendanceSummaryService {
           AND NOT EXISTS (SELECT 1 FROM holidays h WHERE h.holiday_date = d.day)
       )
       SELECT u.id AS user_id,
-             (SELECT count(*) FROM working)::int AS working,
+             (SELECT count(*) FROM working w WHERE u.joined_on IS NULL OR w.day >= u.joined_on)::int AS working,
              (SELECT count(*) FROM attendance_records a WHERE a.user_id = u.id AND a.work_date IN (SELECT day FROM days))::int AS present,
              (SELECT count(*) FROM attendance_records a WHERE a.user_id = u.id AND a.work_date IN (SELECT day FROM days) AND a.late_minutes > 0)::int AS late,
              (SELECT coalesce(sum(a.late_minutes), 0) FROM attendance_records a WHERE a.user_id = u.id AND a.work_date IN (SELECT day FROM days))::int AS late_min,
              (SELECT count(*) FROM leave_requests r, working w
                WHERE r.user_id = u.id AND r.status = 'approved' AND w.day BETWEEN r.from_date AND r.to_date
+                 AND (u.joined_on IS NULL OR w.day >= u.joined_on)
                  AND NOT EXISTS (SELECT 1 FROM attendance_records a WHERE a.user_id = u.id AND a.work_date = w.day))::int AS leave_days
       FROM users u WHERE u.id = ANY(${userIds as string[]}::uuid[])`.execute(trx);
     for (const r of rows) {
