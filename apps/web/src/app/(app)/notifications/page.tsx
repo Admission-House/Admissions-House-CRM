@@ -4,7 +4,7 @@ import { CheckCheck } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { Button, Card, Empty, Notice, PageHeader, Spinner, Tabs, cx } from '@/components/ui';
-import { describeNotification, type Notification } from '@/components/shell/notifications';
+import { describeNotification, RemoteSigninActions, type Notification } from '@/components/shell/notifications';
 import { api, ApiError } from '@/lib/api';
 import { fmtDateTime, fromNow } from '@/lib/format';
 import type { Page } from '@/lib/types';
@@ -53,6 +53,7 @@ export default function NotificationsPage() {
                     <span className="min-w-0 flex-1"><span className="block text-[15px] font-medium text-ink">{t.title}</span>{t.detail && <span className="block text-sm text-muted">{t.detail}</span>}</span>
                     <span className="shrink-0 text-right text-xs text-subtle" title={fmtDateTime(n.createdAt)}>{fromNow(n.createdAt)}</span>
                   </button>
+                  {n.payload.event === 'remote_signin_request' && typeof n.payload.requestId === 'string' && <RemoteSigninActions requestId={n.payload.requestId} expiresAt={typeof n.payload.expiresAt === 'string' ? n.payload.expiresAt : undefined} />}
                 </li>
               );
             })}

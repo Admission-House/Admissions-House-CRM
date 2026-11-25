@@ -8,17 +8,20 @@ import { AuthService } from './auth.service.js';
 import { MfaController } from './mfa.controller.js';
 import { MfaService } from './mfa.service.js';
 import { OfficeComputersService } from './office-computers.service.js';
+import { RemoteSigninService } from './remote-signin.service.js';
+import { RemoteSigninController } from './remote-signin.controller.js';
 import { PasswordResetService } from './password-reset.service.js';
 import { PasswordService } from './password.service.js';
 import { TokenService } from './token.service.js';
 
 @Module({
   imports: [AttendanceModule],
-  controllers: [AuthController, MfaController],
+  controllers: [AuthController, MfaController, RemoteSigninController],
   providers: [
     AuthService,
     MfaService,
     OfficeComputersService,
+    RemoteSigninService,
     AuthRepository,
     PasswordService,
     PasswordResetService,

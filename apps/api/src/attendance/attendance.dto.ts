@@ -30,7 +30,7 @@ export const listAttendanceSchema = pageQuerySchema.extend({
   to: calendarDate.optional(),
   userId: z.uuid().optional(),
   branchId: z.uuid().optional(),
-  method: z.enum(['office_check', 'exception']).optional(),
+  method: z.enum(['office_check', 'exception', 'remote_approved']).optional(),
   lateOnly: yesNo.optional(),
 });
 export class ListAttendanceDto extends createZodDto(listAttendanceSchema) {}

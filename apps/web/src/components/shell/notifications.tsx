@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Spinner, cx } from '@/components/ui';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import { fromNow } from '@/lib/format';
 import { useRealtime, useRealtimeStatus } from '@/lib/realtime';
 import type { Page } from '@/lib/types';
@@ -48,6 +49,10 @@ export function describeNotification(n: Notification): { title: string; detail?:
     case 'break_limit_signout': return { title: `${String(p.userName ?? 'Someone')} was signed out: break time reached the limit`, detail: `${String(p.usedMinutes ?? '')} min taken, limit ${String(p.limitMinutes ?? '')} min`, href: '/attendance' };
     case 'idle_logout': return { title: `${String(p.userName ?? 'Someone')} was signed out for inactivity`, detail: `No activity for ${String(p.idleMinutes ?? 30)} minutes`, href: '/attendance' };
     case 'login_ok': return { title: `${String(p.userName ?? 'Someone')} signed in`, detail: [typeof p.role === 'string' ? p.role : '', p.clientType === 'mobile' ? 'Phone' : 'Web'].filter(Boolean).join(' · '), href: '/settings/sessions' };
+    case 'remote_signin_request': {
+      const km = typeof p.distanceM === 'number' ? (p.distanceM >= 1000 ? `${(p.distanceM / 1000).toFixed(1)} km from the office` : `${p.distanceM} m from the office`) : 'location not shared';
+      return { title: `${String(p.userName ?? 'Someone')} wants to sign in from outside the office`, detail: [typeof p.reason === 'string' ? `"${p.reason}"` : '', km].filter(Boolean).join(' · ') };
+    }
     case 'login_refused': return { title: `${String(p.userName ?? 'Someone')} was refused at sign-in`, detail: p.reason === 'device_rooted' ? 'This phone is rooted or jailbroken' : `Not at the office (${REFUSED_REASON[String(p.reason)] ?? String(p.reason ?? 'outside the office')})`, href: '/attendance' };
     case 'computer_request': return { title: `${String(p.userName ?? 'Someone')} is waiting to sign in from a new computer`, detail: [typeof p.label === 'string' ? p.label : '', typeof p.ip === 'string' ? `from ${p.ip}` : ''].filter(Boolean).join(' · ') + '. Approve it in Settings, Devices.', href: '/settings/devices' };
     case 'forced_logout': return { title: `${String(p.userName ?? 'Someone')} was signed out by an admin`, href: '/settings/sessions' };
@@ -75,6 +80,35 @@ function subscribeMute(onChange: () => void): () => void {
     window.removeEventListener(MUTE_EVENT, onChange);
     window.removeEventListener('storage', onChange);
   };
+}
+
+/** Approve or reject a request to sign in from outside the office, right from the notification. */
+export function RemoteSigninActions({ requestId, expiresAt }: { requestId: string; expiresAt?: string }) {
+  const { can } = useAuth();
+  const [busy, setBusy] = useState<'approve' | 'reject' | null>(null);
+  const [done, setDone] = useState<string | null>(null);
+  const [shownAt] = useState(() => Date.now());
+  if (!can('attendance.exception')) return null;
+  if (done) return <p className="px-4 pb-3 pl-9 text-xs font-medium text-muted">{done}</p>;
+  // Shown only while it can still be answered: a request expires after a few minutes.
+  if (expiresAt && new Date(expiresAt).getTime() < shownAt) return <p className="px-4 pb-3 pl-9 text-xs text-subtle">Expired</p>;
+  async function act(what: 'approve' | 'reject') {
+    setBusy(what);
+    try {
+      await api(`/remote-signins/${requestId}/${what}`, { method: 'POST', body: {} });
+      setDone(what === 'approve' ? 'Approved. They are being signed in.' : 'Rejected.');
+    } catch (e) {
+      setDone(e instanceof ApiError ? e.message : 'Cannot reach the server. Try again.');
+    } finally {
+      setBusy(null);
+    }
+  }
+  return (
+    <div className="flex gap-2 px-4 pb-3 pl-9">
+      <button type="button" disabled={!!busy} onClick={() => void act('approve')} className="h-8 rounded-md bg-brand px-3 text-xs font-semibold text-white hover:bg-brand-600 disabled:opacity-60">{busy === 'approve' ? 'Approving…' : 'Approve'}</button>
+      <button type="button" disabled={!!busy} onClick={() => void act('reject')} className="h-8 rounded-md border border-line-strong px-3 text-xs font-semibold text-ink hover:bg-head disabled:opacity-60">{busy === 'reject' ? 'Rejecting…' : 'Reject'}</button>
+    </div>
+  );
 }
 
 export function NotificationBell() {
@@ -152,7 +186,7 @@ export function NotificationBell() {
                   const t = describeNotification(n);
                   return (
                     <li key={n.id}>
-                      <button onClick={() => void openOne(n)} className={cx('flex w-full gap-3 px-4 py-3 text-left hover:bg-head', !n.readAt && 'bg-mint-50')}>
+                      <button onClick={() => void openOne(n)} className={cx('flex w-full gap-3 px-4 py-3 text-left hover:bg-head', !n.readAt && 'bg-mint-50', n.payload.event === 'remote_signin_request' && 'pb-2')}>
                         <span className={cx('mt-1.5 h-2 w-2 shrink-0 rounded-full', n.readAt ? 'bg-transparent' : 'bg-teal-600')} aria-hidden />
                         <span className="min-w-0">
                           <span className="block text-sm font-medium text-ink">{t.title}</span>
@@ -160,6 +194,7 @@ export function NotificationBell() {
                           <span className="mt-0.5 block text-xs text-subtle">{fromNow(n.createdAt)}</span>
                         </span>
                       </button>
+                      {n.payload.event === 'remote_signin_request' && typeof n.payload.requestId === 'string' && <RemoteSigninActions requestId={n.payload.requestId} expiresAt={typeof n.payload.expiresAt === 'string' ? n.payload.expiresAt : undefined} />}
                     </li>
                   );
                 })}

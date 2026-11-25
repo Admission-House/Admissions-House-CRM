@@ -19,7 +19,7 @@ interface Record_ {
   checkOutAt: string | null;
   checkOutReason: string | null;
   lateMinutes: number;
-  method: 'office_check' | 'exception';
+  method: 'office_check' | 'exception' | 'remote_approved';
   presentMinutes: number;
   breakMinutes: number;
   workedMinutes: number;
@@ -50,7 +50,7 @@ function RecordsTable({ rows, showPerson }: { rows: Record_[]; showPerson?: bool
               <td className="px-3 py-3">{r.lateMinutes > 0 ? <Badge tone="warn">{fmtMinutes(r.lateMinutes)} late</Badge> : <span className="text-muted">On time</span>}</td>
               <td className="tabular px-3 py-3">{r.breakMinutes} min</td>
               <td className="tabular px-3 py-3">{hm(r.workedMinutes)}</td>
-              <td className="px-3 py-3">{r.method === 'exception' ? <Badge tone="info">Marked by an admin</Badge> : <Badge tone="ok">Office sign-in</Badge>}</td>
+              <td className="px-3 py-3">{r.method === 'exception' ? <Badge tone="info">Marked by an admin</Badge> : r.method === 'remote_approved' ? <Badge tone="warn">Outside office, approved</Badge> : <Badge tone="ok">Office sign-in</Badge>}</td>
             </tr>
           ))}
         </tbody>
@@ -174,7 +174,7 @@ function TeamLog() {
           <label className="flex items-center gap-2 text-sm text-muted">From<Input type="date" value={from} max={to} onChange={(e) => e.target.value && setFrom(e.target.value)} className="w-40" /></label>
           <label className="flex items-center gap-2 text-sm text-muted">To<Input type="date" value={to} min={from} max={ymd(new Date())} onChange={(e) => e.target.value && setTo(e.target.value)} className="w-40" /></label>
           <Select aria-label="Person" value={userId} onChange={(e) => setUserId(e.target.value)} className="w-48"><option value="">Everyone</option>{people.data?.items.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</Select>
-          <Select aria-label="How" value={method} onChange={(e) => setMethod(e.target.value)} className="w-52"><option value="">Every entry</option><option value="office_check">Office sign-in</option><option value="exception">Marked by an admin</option></Select>
+          <Select aria-label="How" value={method} onChange={(e) => setMethod(e.target.value)} className="w-52"><option value="">Every entry</option><option value="office_check">Office sign-in</option><option value="exception">Marked by an admin</option><option value="remote_approved">Outside office, approved</option></Select>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={lateOnly} onChange={(e) => setLateOnly(e.target.checked)} className="h-4 w-4 accent-[#0f625e]" /> Late only</label>
         </div>
         {notice && <div className="p-3 pb-0"><Notice tone="ok">{notice}</Notice></div>}

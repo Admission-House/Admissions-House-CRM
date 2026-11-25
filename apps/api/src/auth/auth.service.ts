@@ -17,6 +17,7 @@ import { MfaService } from './mfa.service.js';
 import { parseTwoStepPolicy, twoStepRequired } from './two-step-policy.js';
 import { evaluateOffice, normalizeIp, OfficeFailure } from './office-rules.js';
 import { computerLabel, hashComputerToken, OfficeComputersService } from './office-computers.service.js';
+import { canAskForApproval, RemoteSigninService } from './remote-signin.service.js';
 import { passwordProblem, PasswordService } from './password.service.js';
 import { hashToken, safeEqualHex, TokenService } from './token.service.js';
 
@@ -94,6 +95,7 @@ export class AuthService {
     private readonly notifications: NotificationsService,
     private readonly mfa: MfaService,
     private readonly computers: OfficeComputersService,
+    private readonly remote: RemoteSigninService,
   ) {
     // A cheap first gate in front of password hashing. It counts every request, so it is far looser than the limit on
     // failed attempts, which is the real protection (together with the lock on each account).
@@ -181,9 +183,30 @@ export class AuthService {
     }
 
     let deviceId: string | null = null;
+    // Set when the person signs in from outside the office with today's approval (see RemoteSigninService).
+    let remoteApproval: string | null = null;
     if (user.requires_office) {
       const office = await this.checkOffice(trx, tenant.id, user, input, ip, meta);
-      if (!office.ok) {
+      const officeReason = office.ok ? null : String(office.error.details?.reason ?? 'outside_office');
+      // Outside the office: an approval for today lets the person in, from the web; without one they may ask for it.
+      const remoteRoute = !office.ok && input.clientType === 'web' && canAskForApproval(officeReason!);
+      if (remoteRoute) remoteApproval = await this.remote.approvedToday(trx, user.id);
+      // The approvers see where the person is: a request goes ahead with a position, or when the browser says it cannot give one.
+      if (!office.ok && remoteRoute && !remoteApproval && input.remoteReason && (input.location || input.locationUnavailable)) {
+        await attempt(user.id, 'outside_office');
+        const asked = await this.remote.request(trx, {
+          tenantId: tenant.id, userId: user.id, branchId: user.branch_id, reason: input.remoteReason, officeReason: officeReason!, ip, location: input.location,
+        });
+        if (asked.created) {
+          await this.notifications.notifyOversight(trx, {
+            tenantId: tenant.id,
+            payload: { event: 'remote_signin_request', requestId: asked.id, userId: user.id, userName: user.name, reason: input.remoteReason, distanceM: asked.distanceM, officeReason, ip, expiresAt: asked.expiresAt.toISOString() },
+          });
+        }
+        return fail(new AppError('REMOTE_APPROVAL_PENDING', 'Your request has been sent. You will be signed in as soon as it is approved.', 403, undefined, undefined,
+          { requestId: asked.id, pollToken: asked.pollToken, expiresAt: asked.expiresAt.toISOString() }));
+      }
+      if (!office.ok && !remoteApproval) {
         await attempt(user.id, 'outside_office');
         // The Super Admin hears about it (once in ten minutes for the same person). A computer waiting for approval is its own kind of news.
         const reason = office.error.details?.reason ?? 'outside_office';
@@ -195,7 +218,8 @@ export class AuthService {
             ? { event: 'computer_request', userId: user.id, userName: user.name, ip, label: computerLabel(meta.userAgent) }
             : { event: 'login_refused', userId: user.id, userName: user.name, reason, ip },
         });
-        return fail(office.error);
+        // The browser may offer "ask for approval" instead (the password and code were right).
+        return fail(remoteRoute ? new AppError(office.error.code, office.error.message, office.error.status, undefined, undefined, { ...office.error.details, canRequestApproval: true }) : office.error);
       }
       if (input.clientType === 'mobile') {
         const device = await this.checkDevice(trx, tenant.id, user.id, input);
@@ -244,7 +268,12 @@ export class AuthService {
         lat: input.location?.lat,
         lng: input.location?.lng,
         accuracy: input.location?.accuracy,
+        method: remoteApproval ? 'remote_approved' : 'office_check',
       });
+    }
+    if (remoteApproval) {
+      await this.remote.markUsed(trx, remoteApproval);
+      await this.audit.write(trx, { tenantId: tenant.id, actorId: user.id, action: 'auth.remote_signin', entity: 'user', entityId: user.id, after: { requestId: remoteApproval }, ip });
     }
 
     const access = await this.tokens.signAccess({ userId: user.id, tenantId: tenant.id, sessionId });

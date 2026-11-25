@@ -57,6 +57,8 @@ export class AttendanceRepository {
       lat?: number;
       lng?: number;
       accuracy?: number;
+      /** How the day was started: a sign-in at the office, or one from outside it with approval. */
+      method?: 'office_check' | 'remote_approved';
     },
   ): Promise<void> {
     await sql`
@@ -69,7 +71,7 @@ export class AttendanceRepository {
         (tenant_id, user_id, work_date, branch_id, check_in_at, check_in_lat, check_in_lng,
          check_in_accuracy_m, check_in_ip, method, late_minutes)
       SELECT ${p.tenantId}, ${p.userId}, l.ts::date, ${p.branchId}, now(), ${p.lat ?? null}, ${p.lng ?? null},
-             ${p.accuracy ?? null}, ${p.ip}::inet, 'office_check',
+             ${p.accuracy ?? null}, ${p.ip}::inet, ${p.method ?? 'office_check'},
              COALESCE(CASE WHEN l.ts > (l.ts::date + s.shift_start) + make_interval(mins => s.grace_minutes)
                            THEN floor(EXTRACT(EPOCH FROM l.ts - (l.ts::date + s.shift_start)) / 60)::int END, 0)
       FROM l LEFT JOIN s ON true

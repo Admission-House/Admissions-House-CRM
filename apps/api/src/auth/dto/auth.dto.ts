@@ -36,6 +36,13 @@ export const loginSchema = z.object({
   mfaCode: z.string().trim().min(6).max(16).optional(),
   /** A WiFi identifier the mobile app can read where the operating system allows it. */
   wifiId: z.string().trim().min(1).max(64).optional(),
+  /**
+   * Office staff outside the office: ask for approval to sign in today, with the reason (a college visit, working from home...).
+   * Only after the password and code are right, and only from the web.
+   */
+  remoteReason: z.string().trim().min(2).max(300).optional(),
+  /** The browser could not give a position (the person said no, or it failed): a request for approval may go ahead without one. */
+  locationUnavailable: z.boolean().optional(),
 });
 export class LoginDto extends createZodDto(loginSchema) {}
 

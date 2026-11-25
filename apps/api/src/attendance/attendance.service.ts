@@ -22,7 +22,7 @@ export interface AttendanceView {
   checkOutAt: Date | null;
   checkOutReason: string | null;
   lateMinutes: number;
-  method: 'office_check' | 'exception';
+  method: 'office_check' | 'exception' | 'remote_approved';
   /** Minutes between check-in and check-out (or now, if still in). */
   presentMinutes: number;
   breakMinutes: number;
@@ -38,7 +38,7 @@ interface ListRow {
   check_out_at: Date | null;
   check_out_reason: string | null;
   late_minutes: number;
-  method: 'office_check' | 'exception';
+  method: 'office_check' | 'exception' | 'remote_approved';
   present_minutes: number;
   break_minutes: number;
 }

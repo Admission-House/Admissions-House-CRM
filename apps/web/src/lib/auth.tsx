@@ -17,7 +17,8 @@ interface AuthState {
   me: Me | null;
   can: (...permissions: string[]) => boolean;
   canAny: (...permissions: string[]) => boolean;
-  login: (input: { tenant: string; email: string; password: string; mfaCode?: string }) => Promise<{ mustChangePassword: boolean; home: string }>;
+  /** With `remoteReason`, office staff outside the office ask for approval to sign in today (see the login page). */
+  login: (input: { tenant: string; email: string; password: string; mfaCode?: string; remoteReason?: string }) => Promise<{ mustChangePassword: boolean; home: string }>;
   logout: () => Promise<void>;
   reload: () => Promise<Me>;
 }
@@ -88,7 +89,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
       let res;
       try {
-        res = await attempt();
+        if (input.remoteReason) {
+          // A request for approval shows the approvers where the person is: ask for the position first, and say so if there is none.
+          const location = await position();
+          res = await api<{ accessToken: string; mustChangePassword: boolean }>('/auth/login', {
+            method: 'POST', anonymous: true, body: { ...input, clientType: 'web', ...(location ? { location } : { locationUnavailable: true }) },
+          });
+        } else {
+          res = await attempt();
+        }
       } catch (e) {
         // Office staff must also prove where they are. Ask the browser for the position only then, so
         // everyone else is not asked.

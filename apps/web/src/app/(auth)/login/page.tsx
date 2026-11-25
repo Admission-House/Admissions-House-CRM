@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Suspense, useEffect, useState, useSyncExternalStore } from 'react';
 import { AuthButton, AuthField, AuthHeading, AuthInput, AuthPassword } from '@/components/auth/auth-form';
 import { Notice } from '@/components/ui';
-import { ApiError } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { BRAND } from '@/lib/brand-config';
 import { useCompanySlug } from '@/lib/company-slug';
@@ -43,6 +43,7 @@ function friendly(err: unknown): string {
     case 'VALIDATION_FAILED': return err.fieldErrors.some((f) => f.field === 'tenant') ? 'This company address was not found. Please check the link you were given.' : 'Please check your email and password and try again.';
     case 'MFA_REQUIRED': return 'Enter the 6-digit code from your authenticator app to finish signing in.';
     case 'MFA_CODE_WRONG': return 'That code is not right. Use the newest code in your app, or a recovery code.';
+    case 'OUTSIDE_OFFICE': return err.details?.canRequestApproval ? 'You are outside the office. You can ask your Super Admin or Admin to let you sign in today.' : err.message;
     case 'NETWORK': return 'We could not reach the server. Check your internet connection and try again.';
     default: return err.message;
   }
@@ -66,6 +67,10 @@ function SignIn() {
   const [mfaCode, setMfaCode] = useState('');
   const [fields, setFields] = useState<{ email?: string; password?: string }>({});
   const email = emailTyped ?? savedEmail;
+  // Outside the office: ask for approval, then wait for the answer (see the panels below the form).
+  const [approval, setApproval] = useState<null | { stage: 'ask' } | { stage: 'waiting'; requestId: string; pollToken: string; expiresAt: string } | { stage: 'answered'; state: 'rejected' | 'expired'; by: string | null }>(null);
+  const [remoteReason, setRemoteReason] = useState('');
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
     if (status === 'authenticated') router.replace(homePath(me?.user.startPage));
@@ -80,6 +85,75 @@ function SignIn() {
     return problems;
   }
 
+  async function finish(mfa?: string) {
+    const res = await login({ tenant: company, email: email.trim(), password, ...(mfa && { mfaCode: mfa }) });
+    writeEmail(remember ? email.trim() : null);
+    rememberCompany(company);
+    router.replace(res.mustChangePassword ? '/change-password' : res.home);
+  }
+
+  async function askApproval() {
+    if (remoteReason.trim().length < 2) { setError('Write why you are outside the office, for example "College visit".'); return; }
+    setBusy(true);
+    setError(null);
+    try {
+      // Already approved earlier today: this simply signs in.
+      await finish(needsCode && mfaCode.trim() ? mfaCode.trim() : undefined);
+    } catch (first) {
+      if (!(first instanceof ApiError && first.code === 'OUTSIDE_OFFICE')) { setError(friendly(first)); setBusy(false); return; }
+      try {
+        await login({ tenant: company, email: email.trim(), password, remoteReason: remoteReason.trim(), ...(needsCode && mfaCode.trim() && { mfaCode: mfaCode.trim() }) });
+      } catch (err) {
+        if (err instanceof ApiError && err.code === 'REMOTE_APPROVAL_PENDING' && err.details) {
+          const d = err.details as { requestId: string; pollToken: string; expiresAt: string };
+          setNow(Date.now());
+          setApproval({ stage: 'waiting', requestId: d.requestId, pollToken: d.pollToken, expiresAt: d.expiresAt });
+        } else {
+          setError(friendly(err));
+        }
+      }
+      setBusy(false);
+    }
+  }
+
+  // While waiting, ask every few seconds how the request stands; once approved, sign in as usual.
+  const waiting = approval?.stage === 'waiting' ? approval : null;
+  const waitingId = waiting?.requestId;
+  useEffect(() => {
+    if (!waiting) return;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const tick = async () => {
+      setNow(Date.now());
+      try {
+        const r = await api<{ state: 'pending' | 'approved' | 'rejected' | 'expired'; decidedBy: string | null }>('/auth/remote-signin/status', {
+          method: 'POST', anonymous: true, body: { tenant: company, requestId: waiting.requestId, token: waiting.pollToken },
+        });
+        if (stopped) return;
+        if (r.state === 'approved') {
+          stopped = true;
+          setBusy(true);
+          try {
+            await finish(needsCode && mfaCode.trim() ? mfaCode.trim() : undefined);
+          } catch (err) {
+            setApproval(null);
+            setError(friendly(err));
+            setBusy(false);
+          }
+          return;
+        }
+        if (r.state === 'rejected' || r.state === 'expired') { setApproval({ stage: 'answered', state: r.state, by: r.decidedBy }); return; }
+      } catch {
+        /* a dropped connection: try again on the next tick */
+      }
+      if (!stopped) timer = setTimeout(() => void tick(), 3000);
+    };
+    timer = setTimeout(() => void tick(), 2000);
+    return () => { stopped = true; clearTimeout(timer); };
+    // One poll loop for each request; the values it reads stay the same while it waits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [waitingId]);
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -90,20 +164,21 @@ function SignIn() {
       return;
     }
     setBusy(true);
+    setApproval(null);
     try {
-      const res = await login({ tenant: company, email: email.trim(), password, ...(needsCode && mfaCode.trim() && { mfaCode: mfaCode.trim() }) });
-      writeEmail(remember ? email.trim() : null);
-      rememberCompany(company);
-      router.replace(res.mustChangePassword ? '/change-password' : res.home);
+      await finish(needsCode && mfaCode.trim() ? mfaCode.trim() : undefined);
     } catch (err) {
       if (err instanceof ApiError && (err.code === 'MFA_REQUIRED' || err.code === 'MFA_CODE_WRONG')) {
         setNeedsCode(true);
         document.getElementById('mfa-code')?.focus();
       }
+      if (err instanceof ApiError && err.code === 'OUTSIDE_OFFICE' && err.details?.canRequestApproval) setApproval({ stage: 'ask' });
       setError(friendly(err));
       setBusy(false);
     }
   }
+
+  const left = waiting ? Math.max(0, Math.round((new Date(waiting.expiresAt).getTime() - now) / 1000)) : 0;
 
   const forgot = `/forgot-password${company ? `?company=${encodeURIComponent(company)}` : ''}`;
   const links = [
@@ -142,8 +217,36 @@ function SignIn() {
           Remember me on this device
         </label>
 
-        <AuthButton type="submit" loading={busy}>Continue</AuthButton>
+        {!approval && <AuthButton type="submit" loading={busy}>Continue</AuthButton>}
       </form>
+
+      {approval?.stage === 'ask' && (
+        <div className="mt-6 space-y-4 rounded-lg border border-line bg-surface p-4">
+          <AuthField label="Why are you outside the office today?" htmlFor="remote-reason">
+            <AuthInput id="remote-reason" value={remoteReason} maxLength={300} onChange={(e) => { setRemoteReason(e.target.value); setError(null); }} placeholder="For example: College visit, working from home" autoFocus />
+          </AuthField>
+          <AuthButton type="button" loading={busy} onClick={() => void askApproval()}>Request approval</AuthButton>
+          <button type="button" onClick={() => { setApproval(null); setError(null); }} className="w-full text-center text-sm font-medium text-muted hover:text-ink">Cancel</button>
+        </div>
+      )}
+
+      {waiting && (
+        <div className="mt-6 space-y-3 rounded-lg border border-line bg-surface p-5 text-center" role="status" aria-live="polite">
+          <span className="mx-auto block h-8 w-8 animate-spin rounded-full border-[3px] border-line border-t-brand" aria-hidden />
+          <p className="text-base font-semibold text-brand">Waiting for approval…</p>
+          <p className="text-sm text-muted">Your Super Admin and Admin have been told. Keep this page open: you will be signed in as soon as someone approves.</p>
+          <p className="tabular text-xs text-subtle">The request expires in {Math.floor(left / 60)}:{String(left % 60).padStart(2, '0')}</p>
+          <button type="button" onClick={() => setApproval(null)} className="text-sm font-medium text-muted hover:text-ink">Cancel</button>
+        </div>
+      )}
+
+      {approval?.stage === 'answered' && (
+        <div className="mt-6 space-y-3 rounded-lg border border-line bg-surface p-5 text-center">
+          <p className="text-base font-semibold text-brand">{approval.state === 'rejected' ? `Not approved${approval.by ? ` by ${approval.by}` : ''}` : 'Nobody answered in time'}</p>
+          <p className="text-sm text-muted">{approval.state === 'rejected' ? 'Please speak to your Super Admin or Admin.' : 'You can ask again.'}</p>
+          <AuthButton type="button" onClick={() => setApproval({ stage: 'ask' })}>Ask again</AuthButton>
+        </div>
+      )}
 
       <div className="mt-8 space-y-1.5 text-center text-[15px] text-brand">
         {links.map((l) => (
