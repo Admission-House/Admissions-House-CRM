@@ -35,6 +35,16 @@ interface Row {
   id: string; user_id: string; user_name: string; state: RemoteSigninView['state']; reason: string; office_reason: string | null;
   distance_m: number | null; ip: string | null; decider: string | null; expires_at: Date; created_at: Date;
 }
+/** One request as the approvers see it (add the WHERE). */
+const VIEW_SELECT = sql`
+  SELECT r.id, r.user_id, u.name AS user_name, r.state, r.reason, r.office_reason, r.distance_m, host(r.ip) AS ip,
+         d.name AS decider, r.expires_at, r.created_at
+  FROM remote_signin_requests r JOIN users u ON u.id = r.user_id LEFT JOIN users d ON d.id = r.decided_by`;
+
+/** A request nobody answered in time is expired (for one person, one request, or all). */
+const expirePending = (trx: Trx, where: ReturnType<typeof sql>) =>
+  sql`UPDATE remote_signin_requests SET state = 'expired' WHERE state = 'pending' AND expires_at <= now() AND ${where}`.execute(trx);
+
 const toView = (r: Row): RemoteSigninView => ({
   id: r.id, user: { id: r.user_id, name: r.user_name }, state: r.state, reason: r.reason, officeReason: r.office_reason,
   distanceM: r.distance_m, ip: r.ip, decidedBy: r.decider, expiresAt: r.expires_at, createdAt: r.created_at,
@@ -75,7 +85,7 @@ export class RemoteSigninService {
     tenantId: string; userId: string; branchId: string | null; reason: string; officeReason: string; ip: string;
     location?: { lat: number; lng: number; accuracy?: number };
   }): Promise<{ id: string; pollToken: string; created: boolean; distanceM: number | null; expiresAt: Date }> {
-    await sql`UPDATE remote_signin_requests SET state = 'expired' WHERE user_id = ${a.userId} AND state = 'pending' AND expires_at <= now()`.execute(trx);
+    await expirePending(trx, sql`user_id = ${a.userId}`);
     const token = newPollToken();
     const hash = hashPollToken(token);
     const { rows: waiting } = await sql<{ id: string; distance_m: number | null; expires_at: Date }>`
@@ -104,7 +114,7 @@ export class RemoteSigninService {
 
   /** How a request stands, for the browser that holds its token. Anything else is "not found". */
   async status(trx: Trx, id: string, token: string): Promise<{ state: RemoteSigninView['state']; decidedBy: string | null }> {
-    await sql`UPDATE remote_signin_requests SET state = 'expired' WHERE id = ${id} AND state = 'pending' AND expires_at <= now()`.execute(trx);
+    await expirePending(trx, sql`id = ${id}`);
     const { rows } = await sql<{ state: RemoteSigninView['state']; decider: string | null; poll_hash: string }>`
       SELECT r.state, d.name AS decider, r.poll_hash FROM remote_signin_requests r LEFT JOIN users d ON d.id = r.decided_by WHERE r.id = ${id}`.execute(trx);
     const r = rows[0];
@@ -116,11 +126,10 @@ export class RemoteSigninService {
 
   list(auth: AuthContext, state: 'pending' | 'decided'): Promise<RemoteSigninView[]> {
     return this.db.withTenant(auth.tenantId, async (trx) => {
-      await sql`UPDATE remote_signin_requests SET state = 'expired' WHERE state = 'pending' AND expires_at <= now()`.execute(trx);
+      await expirePending(trx, sql`true`);
       const scoped = scopeCondition(auth, 'r.user_id');
       const { rows } = await sql<Row>`
-        SELECT r.id, r.user_id, u.name AS user_name, r.state, r.reason, r.office_reason, r.distance_m, host(r.ip) AS ip, d.name AS decider, r.expires_at, r.created_at
-        FROM remote_signin_requests r JOIN users u ON u.id = r.user_id LEFT JOIN users d ON d.id = r.decided_by
+        ${VIEW_SELECT}
         WHERE ${state === 'pending' ? sql`r.state = 'pending'` : sql`r.state <> 'pending' AND r.created_at > now() - interval '30 days'`}
           ${scoped ? sql`AND ${scoped}` : sql``}
         ORDER BY r.created_at DESC LIMIT 100`.execute(trx);
@@ -138,7 +147,7 @@ export class RemoteSigninService {
       if (!r) throw AppError.notFound('Request');
       if (r.user_id === auth.userId) throw new AppError('SELF_APPROVAL', 'Another person must answer your own request', 403);
       if (r.state === 'pending' && r.expired) {
-        await sql`UPDATE remote_signin_requests SET state = 'expired' WHERE id = ${id}`.execute(trx);
+        await expirePending(trx, sql`id = ${id}`);
         throw new AppError('REQUEST_EXPIRED', `This request has expired (requests wait ${REQUEST_MINUTES} minutes). The person can ask again.`, 409);
       }
       if (r.state !== 'pending') throw new AppError('REQUEST_DECIDED', r.state === 'expired' ? 'This request has expired. The person can ask again.' : `This request was already ${r.state}.`, 409);
@@ -147,9 +156,7 @@ export class RemoteSigninService {
         tenantId: auth.tenantId, actorId: auth.userId, action: decision === 'approved' ? 'remote_signin.approve' : 'remote_signin.reject',
         entity: 'user', entityId: r.user_id, after: { requestId: id }, ip: auth.ip, requestId: auth.requestId,
       });
-      const { rows: view } = await sql<Row>`
-        SELECT r.id, r.user_id, u.name AS user_name, r.state, r.reason, r.office_reason, r.distance_m, host(r.ip) AS ip, d.name AS decider, r.expires_at, r.created_at
-        FROM remote_signin_requests r JOIN users u ON u.id = r.user_id LEFT JOIN users d ON d.id = r.decided_by WHERE r.id = ${id}`.execute(trx);
+      const { rows: view } = await sql<Row>`${VIEW_SELECT} WHERE r.id = ${id}`.execute(trx);
       return toView(view[0]!);
     });
   }

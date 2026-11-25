@@ -3,7 +3,7 @@
 import { ArrowLeft, Mail, MessageCircle, MessageSquareText, PhoneCall, Video } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useState, useSyncExternalStore } from 'react';
+import { Suspense, useState } from 'react';
 import { RecommendedTab, ShortlistTab } from '@/components/leads/admissions-tabs';
 import { CallsTab } from '@/components/leads/calls-tab';
 import { CustomFieldsPanel } from '@/components/leads/custom-fields-panel';
@@ -21,7 +21,7 @@ import { whatsappLink } from '@/lib/communications';
 import { usePhoneReady } from '@/lib/use-phone';
 import { fmtDate, fmtDateTime, fmtPhone, fromNow } from '@/lib/format';
 import { useApi } from '@/lib/use-api';
-import { backToListUrl } from '@/lib/lead-list-context';
+import { useBackToList } from '@/lib/lead-list-context';
 
 const INTENT_TONE = { hot: 'bad', warm: 'warn', cold: 'info' } as const;
 
@@ -69,7 +69,7 @@ function Workspace() {
   const setTab = (key: TabKey) => router.replace(`/leads/${id}${key === 'activity' ? '' : `?tab=${key}`}`, { scroll: false });
 
   // Back to the list the lead was opened from: same section, filters, sort and page (see lead-list-context).
-  const back = useSyncExternalStore(noSubscribe, () => backToListUrl(id), () => '/leads');
+  const back = useBackToList(id);
 
   const changed = () => {
     lead.reload();
@@ -179,8 +179,6 @@ function Workspace() {
     </>
   );
 }
-
-const noSubscribe = () => () => undefined;
 
 export default function LeadPage() {
   return (

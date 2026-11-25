@@ -53,7 +53,7 @@ export default function NotificationsPage() {
                     <span className="min-w-0 flex-1"><span className="block text-[15px] font-medium text-ink">{t.title}</span>{t.detail && <span className="block text-sm text-muted">{t.detail}</span>}</span>
                     <span className="shrink-0 text-right text-xs text-subtle" title={fmtDateTime(n.createdAt)}>{fromNow(n.createdAt)}</span>
                   </button>
-                  {n.payload.event === 'remote_signin_request' && typeof n.payload.requestId === 'string' && <RemoteSigninActions requestId={n.payload.requestId} expiresAt={typeof n.payload.expiresAt === 'string' ? n.payload.expiresAt : undefined} />}
+                  <RemoteSigninActions n={n} />
                 </li>
               );
             })}

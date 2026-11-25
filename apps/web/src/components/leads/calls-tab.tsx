@@ -7,6 +7,7 @@ import { DateTimePicker } from '@/components/ui/date-time-picker';
 import { Modal } from '@/components/ui/modal';
 import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import { localToIso, minFollowUp } from '@/lib/date-picker';
 import { fmtDateTime } from '@/lib/format';
 import type { Page, StatusOption } from '@/lib/types';
 import { useApi } from '@/lib/use-api';
@@ -34,11 +35,6 @@ export const OUTCOME: Record<string, { label: string; tone: 'ok' | 'bad' | 'warn
 };
 const errorText = (e: unknown) => (e instanceof ApiError ? e.message : 'Cannot reach the server. Try again.');
 export const length = (s: number | null) => (s ? `${Math.floor(s / 60)}m ${s % 60}s` : '—');
-const minLocal = () => {
-  const d = new Date(Date.now() + 5 * 60_000);
-  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-  return d.toISOString().slice(0, 16);
-};
 
 /** The after-call form: what the lead's status is now, a remark, and when to follow up. */
 export function WrapUp({ call, onClose, onDone }: { call: Call; onClose: () => void; onDone: () => void }) {
@@ -57,7 +53,7 @@ export function WrapUp({ call, onClose, onDone }: { call: Call; onClose: () => v
     setBusy(true);
     setError(null);
     try {
-      await api(`/calls/${call.id}/wrap-up`, { method: 'POST', body: { statusId, ...(remark.trim() && { remark: remark.trim() }), ...(due && { followUp: { dueAt: new Date(due).toISOString() } }) } });
+      await api(`/calls/${call.id}/wrap-up`, { method: 'POST', body: { statusId, ...(remark.trim() && { remark: remark.trim() }), ...(due && { followUp: { dueAt: localToIso(due) } }) } });
       onDone();
     } catch (err) {
       setError(errorText(err));
@@ -77,7 +73,7 @@ export function WrapUp({ call, onClose, onDone }: { call: Call; onClose: () => v
         </Field>
         {can('followup.manage') && chosen?.isOpen && (
           <Field label={chosen.requiresFollowup ? 'Next follow-up (required)' : 'Next follow-up'} htmlFor="wd">
-            <DateTimePicker id="wd" min={minLocal()} value={due} onChange={setDue} required={!!chosen.requiresFollowup} />
+            <DateTimePicker id="wd" min={minFollowUp()} value={due} onChange={setDue} required={!!chosen.requiresFollowup} />
           </Field>
         )}
         <Field label="Remark" htmlFor="wr"><Textarea id="wr" value={remark} onChange={(e) => setRemark(e.target.value)} maxLength={1000} placeholder="What was discussed?" /></Field>

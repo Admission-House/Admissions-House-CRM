@@ -83,12 +83,14 @@ function subscribeMute(onChange: () => void): () => void {
 }
 
 /** Approve or reject a request to sign in from outside the office, right from the notification. */
-export function RemoteSigninActions({ requestId, expiresAt }: { requestId: string; expiresAt?: string }) {
+export function RemoteSigninActions({ n }: { n: Notification }) {
   const { can } = useAuth();
+  const requestId = n.payload.event === 'remote_signin_request' && typeof n.payload.requestId === 'string' ? n.payload.requestId : null;
+  const expiresAt = typeof n.payload.expiresAt === 'string' ? n.payload.expiresAt : undefined;
   const [busy, setBusy] = useState<'approve' | 'reject' | null>(null);
   const [done, setDone] = useState<string | null>(null);
   const [shownAt] = useState(() => Date.now());
-  if (!can('attendance.exception')) return null;
+  if (!requestId || !can('attendance.exception')) return null;
   if (done) return <p className="px-4 pb-3 pl-9 text-xs font-medium text-muted">{done}</p>;
   // Shown only while it can still be answered: a request expires after a few minutes.
   if (expiresAt && new Date(expiresAt).getTime() < shownAt) return <p className="px-4 pb-3 pl-9 text-xs text-subtle">Expired</p>;
@@ -194,7 +196,7 @@ export function NotificationBell() {
                           <span className="mt-0.5 block text-xs text-subtle">{fromNow(n.createdAt)}</span>
                         </span>
                       </button>
-                      {n.payload.event === 'remote_signin_request' && typeof n.payload.requestId === 'string' && <RemoteSigninActions requestId={n.payload.requestId} expiresAt={typeof n.payload.expiresAt === 'string' ? n.payload.expiresAt : undefined} />}
+                      <RemoteSigninActions n={n} />
                     </li>
                   );
                 })}

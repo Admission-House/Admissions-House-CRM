@@ -18,6 +18,12 @@ export function fromLocalValue(v: string): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+/** The earliest follow-up time a form offers: five minutes from now. */
+export const minFollowUp = (): string => toLocalValue(new Date(Date.now() + 5 * 60_000));
+
+/** A "yyyy-mm-ddThh:mm" local value as the full timestamp the API wants. */
+export const localToIso = (local: string): string => new Date(local).toISOString();
+
 export const dayKey = (d: Date): string => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
 /** The days to show for a month, Monday first: whole weeks, with the days of the months around it to fill them. */

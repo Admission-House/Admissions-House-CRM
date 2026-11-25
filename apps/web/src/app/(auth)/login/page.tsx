@@ -67,6 +67,8 @@ function SignIn() {
   const [mfaCode, setMfaCode] = useState('');
   const [fields, setFields] = useState<{ email?: string; password?: string }>({});
   const email = emailTyped ?? savedEmail;
+  // The two-step code, once it has been asked for and typed.
+  const code = needsCode ? mfaCode.trim() || undefined : undefined;
   // Outside the office: ask for approval, then wait for the answer (see the panels below the form).
   const [approval, setApproval] = useState<null | { stage: 'ask' } | { stage: 'waiting'; requestId: string; pollToken: string; expiresAt: string } | { stage: 'answered'; state: 'rejected' | 'expired'; by: string | null }>(null);
   const [remoteReason, setRemoteReason] = useState('');
@@ -98,11 +100,11 @@ function SignIn() {
     setError(null);
     try {
       // Already approved earlier today: this simply signs in.
-      await finish(needsCode && mfaCode.trim() ? mfaCode.trim() : undefined);
+      await finish(code);
     } catch (first) {
       if (!(first instanceof ApiError && first.code === 'OUTSIDE_OFFICE')) { setError(friendly(first)); setBusy(false); return; }
       try {
-        await login({ tenant: company, email: email.trim(), password, remoteReason: remoteReason.trim(), ...(needsCode && mfaCode.trim() && { mfaCode: mfaCode.trim() }) });
+        await login({ tenant: company, email: email.trim(), password, remoteReason: remoteReason.trim(), ...(code && { mfaCode: code }) });
       } catch (err) {
         if (err instanceof ApiError && err.code === 'REMOTE_APPROVAL_PENDING' && err.details) {
           const d = err.details as { requestId: string; pollToken: string; expiresAt: string };
@@ -134,7 +136,7 @@ function SignIn() {
           stopped = true;
           setBusy(true);
           try {
-            await finish(needsCode && mfaCode.trim() ? mfaCode.trim() : undefined);
+            await finish(code);
           } catch (err) {
             setApproval(null);
             setError(friendly(err));
@@ -166,7 +168,7 @@ function SignIn() {
     setBusy(true);
     setApproval(null);
     try {
-      await finish(needsCode && mfaCode.trim() ? mfaCode.trim() : undefined);
+      await finish(code);
     } catch (err) {
       if (err instanceof ApiError && (err.code === 'MFA_REQUIRED' || err.code === 'MFA_CODE_WRONG')) {
         setNeedsCode(true);

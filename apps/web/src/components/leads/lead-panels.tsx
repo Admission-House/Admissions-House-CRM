@@ -1,7 +1,7 @@
 'use client';
 
 import { Check, CircleDot, FileText, MessageSquare, PhoneCall, RefreshCw, Repeat, UserCheck, CalendarClock, Clock } from 'lucide-react';
-import { useState, useSyncExternalStore } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Badge, Button, Card, Empty, Field, Input, Notice, Select, Spinner, Textarea, cx } from '@/components/ui';
 import { Modal } from '@/components/ui/modal';
@@ -11,7 +11,8 @@ import { useAuth } from '@/lib/auth';
 import { fmtDateTime, fromNow } from '@/lib/format';
 import type { Page, StatusOption, UserOption } from '@/lib/types';
 import { useApi } from '@/lib/use-api';
-import { backToListUrl, inListContext, nextLeadId } from '@/lib/lead-list-context';
+import { localToIso, minFollowUp } from '@/lib/date-picker';
+import { backToListUrl, nextLeadId, useInListContext } from '@/lib/lead-list-context';
 
 export interface LeadDetail {
   id: string;
@@ -40,16 +41,9 @@ export interface LeadDetail {
 const errorText = (e: unknown) => (e instanceof ApiError ? e.message : 'Cannot reach the server. Try again.');
 
 /** datetime-local gives "2026-11-03T15:30" in the viewer's zone; the API wants a full timestamp with offset. */
-const toIso = (local: string) => new Date(local).toISOString();
-const minLocal = () => {
-  const d = new Date(Date.now() + 5 * 60_000);
-  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-  return d.toISOString().slice(0, 16);
-};
 
 // ---------------------------------------------------------------- status
 
-const noSubscribe = () => () => undefined;
 
 export function StatusPanel({ lead, onChanged }: { lead: LeadDetail; onChanged: () => void }) {
   const { can } = useAuth();
@@ -64,7 +58,7 @@ export function StatusPanel({ lead, onChanged }: { lead: LeadDetail; onChanged: 
   const [map, setMap] = useState(false);
   const router = useRouter();
   // "Save & next" is offered when the lead was opened from the leads list: the next lead of that list opens after saving.
-  const fromList = useSyncExternalStore(noSubscribe, () => inListContext(lead.id), () => false);
+  const fromList = useInListContext(lead.id);
   const [goNext, setGoNext] = useState(false);
 
   // The company's own list to choose from, plus the status the lead already has (so it still shows, even if it is no longer offered).
@@ -73,9 +67,7 @@ export function StatusPanel({ lead, onChanged }: { lead: LeadDetail; onChanged: 
   // one), a reason is chosen when the status has reasons, a comment is always written, and an open status always gets the
   // next follow-up date and time. A closed status has no date: the lead is finished.
   const chosen = options.find((s) => s.id === statusId);
-  const hasReasons = !!chosen?.substatuses && chosen.substatuses.length > 0;
-  const reasonNeeded = hasReasons;
-  const commentNeeded = true;
+  const hasReasons = !!chosen?.substatuses?.length;
   const needsDate = !!chosen && chosen.isOpen && can('followup.manage');
 
   if (!can('lead.update')) return null;
@@ -86,8 +78,8 @@ export function StatusPanel({ lead, onChanged }: { lead: LeadDetail; onChanged: 
     setGoNext(false);
     // Say what is missing, here, in words. The browser's own "fill this in" bubble is easy to miss, and then Save looks as if it does nothing.
     const missing = !statusId ? 'Choose the lead status.'
-      : reasonNeeded && !substatusId ? 'Choose a reason in "Lead sub-status" for this status.'
-      : commentNeeded && !remark.trim() ? 'Write what was discussed in "Comments".'
+      : hasReasons && !substatusId ? 'Choose a reason in "Lead sub-status" for this status.'
+      : !remark.trim() ? 'Write what was discussed in "Comments".'
       : needsDate && !due ? 'Choose the next follow-up date and time.'
       : null;
     if (missing) { setSaved(null); setError(missing); return; }
@@ -101,7 +93,7 @@ export function StatusPanel({ lead, onChanged }: { lead: LeadDetail; onChanged: 
           statusId,
           ...(substatusId && { substatusId }),
           ...(remark.trim() && { remark: remark.trim() }),
-          ...(due && chosen?.isOpen && can('followup.manage') && { followUp: { dueAt: toIso(due) } }),
+          ...(due && chosen?.isOpen && can('followup.manage') && { followUp: { dueAt: localToIso(due) } }),
         },
       });
       if (thenNext) {
@@ -142,8 +134,8 @@ export function StatusPanel({ lead, onChanged }: { lead: LeadDetail; onChanged: 
             {options.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </Select>
         </Field>
-        <Field label="Lead sub-status" htmlFor="sub" required={reasonNeeded}>
-          <Select id="sub" value={substatusId} onChange={(e) => setSubstatusId(e.target.value)} required={reasonNeeded} disabled={!(chosen?.substatuses && chosen.substatuses.length > 0)}>
+        <Field label="Lead sub-status" htmlFor="sub" required={hasReasons}>
+          <Select id="sub" value={substatusId} onChange={(e) => setSubstatusId(e.target.value)} required={hasReasons} disabled={!(chosen?.substatuses && chosen.substatuses.length > 0)}>
             <option value="">{!chosen ? 'Choose a status first' : !hasReasons ? 'No reasons for this status' : 'Select a reason'}</option>
             {(chosen?.substatuses ?? []).map((s) => <option key={s.id} value={s.id}>{s.name}{s.requiresComment ? ' (comments required)' : ''}</option>)}
           </Select>
@@ -151,11 +143,11 @@ export function StatusPanel({ lead, onChanged }: { lead: LeadDetail; onChanged: 
         <button type="button" onClick={() => setMap(true)} className="-mt-2 text-xs font-medium text-info hover:underline">View all dependencies</button>
         {can('followup.manage') && chosen?.isOpen && (
           <Field label="Next follow-up" htmlFor="due" required>
-            <DateTimePicker id="due" min={minLocal()} value={due} onChange={setDue} required={needsDate} />
+            <DateTimePicker id="due" min={minFollowUp()} value={due} onChange={setDue} required={needsDate} />
           </Field>
         )}
         <Field label="Comments" htmlFor="rm" required>
-          <Textarea id="rm" value={remark} onChange={(e) => setRemark(e.target.value)} maxLength={1000} required={commentNeeded} placeholder="What was discussed?" />
+          <Textarea id="rm" value={remark} onChange={(e) => setRemark(e.target.value)} maxLength={1000} required placeholder="What was discussed?" />
         </Field>
         {fromList ? (
           <div className="grid grid-cols-2 gap-2">
@@ -271,7 +263,7 @@ export function FollowUpsPanel({ lead, onChanged }: { lead: LeadDetail; onChange
     setBusy(true);
     setError(null);
     try {
-      await api(`/leads/${lead.id}/followups`, { method: 'POST', body: { dueAt: toIso(due), ...(note.trim() && { note: note.trim() }) } });
+      await api(`/leads/${lead.id}/followups`, { method: 'POST', body: { dueAt: localToIso(due), ...(note.trim() && { note: note.trim() }) } });
       setDue('');
       setNote('');
       list.reload();
@@ -299,7 +291,7 @@ export function FollowUpsPanel({ lead, onChanged }: { lead: LeadDetail; onChange
       <div className="border-b border-line px-4 py-3"><h2 className="text-sm font-semibold text-ink">Follow-ups</h2></div>
       {can('followup.manage') && lead.status.isOpen && (
         <form onSubmit={add} className="grid gap-3 border-b border-line p-5 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)_auto]">
-          <DateTimePicker min={minLocal()} value={due} onChange={setDue} required placeholder="When to follow up" />
+          <DateTimePicker min={minFollowUp()} value={due} onChange={setDue} required placeholder="When to follow up" />
           <Input aria-label="Note" placeholder="What to do (optional)" value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} />
           <Button type="submit" loading={busy}>Add</Button>
         </form>

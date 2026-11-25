@@ -200,11 +200,14 @@ export class AuthService {
         if (asked.created) {
           await this.notifications.notifyOversight(trx, {
             tenantId: tenant.id,
-            payload: { event: 'remote_signin_request', requestId: asked.id, userId: user.id, userName: user.name, reason: input.remoteReason, distanceM: asked.distanceM, officeReason, ip, expiresAt: asked.expiresAt.toISOString() },
+            payload: {
+              event: 'remote_signin_request', requestId: asked.id, userId: user.id, userName: user.name, reason: input.remoteReason,
+              distanceM: asked.distanceM, officeReason, ip, expiresAt: asked.expiresAt.toISOString(),
+            },
           });
         }
-        return fail(new AppError('REMOTE_APPROVAL_PENDING', 'Your request has been sent. You will be signed in as soon as it is approved.', 403, undefined, undefined,
-          { requestId: asked.id, pollToken: asked.pollToken, expiresAt: asked.expiresAt.toISOString() }));
+        const details = { requestId: asked.id, pollToken: asked.pollToken, expiresAt: asked.expiresAt.toISOString() };
+        return fail(new AppError('REMOTE_APPROVAL_PENDING', 'Your request has been sent. You will be signed in as soon as it is approved.', 403, undefined, undefined, details));
       }
       if (!office.ok && !remoteApproval) {
         await attempt(user.id, 'outside_office');
@@ -219,7 +222,9 @@ export class AuthService {
             : { event: 'login_refused', userId: user.id, userName: user.name, reason, ip },
         });
         // The browser may offer "ask for approval" instead (the password and code were right).
-        return fail(remoteRoute ? new AppError(office.error.code, office.error.message, office.error.status, undefined, undefined, { ...office.error.details, canRequestApproval: true }) : office.error);
+        if (!remoteRoute) return fail(office.error);
+        const { code, message, status, details } = office.error;
+        return fail(new AppError(code, message, status, undefined, undefined, { ...details, canRequestApproval: true }));
       }
       if (input.clientType === 'mobile') {
         const device = await this.checkDevice(trx, tenant.id, user.id, input);
@@ -273,7 +278,9 @@ export class AuthService {
     }
     if (remoteApproval) {
       await this.remote.markUsed(trx, remoteApproval);
-      await this.audit.write(trx, { tenantId: tenant.id, actorId: user.id, action: 'auth.remote_signin', entity: 'user', entityId: user.id, after: { requestId: remoteApproval }, ip });
+      await this.audit.write(trx, {
+        tenantId: tenant.id, actorId: user.id, action: 'auth.remote_signin', entity: 'user', entityId: user.id, after: { requestId: remoteApproval }, ip,
+      });
     }
 
     const access = await this.tokens.signAccess({ userId: user.id, tenantId: tenant.id, sessionId });

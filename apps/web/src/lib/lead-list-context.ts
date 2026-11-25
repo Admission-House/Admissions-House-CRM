@@ -4,6 +4,7 @@
  * (localStorage, so a lead opened in a new tab knows it too); only the last list is kept. A lead that is not in the
  * remembered list (opened from a notification or search) simply goes back to the leads page, with no "next".
  */
+import { useSyncExternalStore } from 'react';
 import { api } from './api';
 import type { LeadListItem, Page } from './types';
 
@@ -51,6 +52,15 @@ export function backToListUrl(leadId: string): string {
 export function inListContext(leadId: string): boolean {
   return !!readListContext()?.ids.includes(leadId);
 }
+
+// localStorage has no change event for the same tab; the value is read when the page renders, which is all these need.
+const noSubscribe = () => () => undefined;
+
+/** Where "Back to leads" goes from this lead (the plain leads page on the server and in a new browser). */
+export const useBackToList = (leadId: string): string => useSyncExternalStore(noSubscribe, () => backToListUrl(leadId), () => '/leads');
+
+/** Whether this lead came from the remembered list, so "Save & next" and "Save, back to the list" apply. */
+export const useInListContext = (leadId: string): boolean => useSyncExternalStore(noSubscribe, () => inListContext(leadId), () => false);
 
 /**
  * The lead after this one in the remembered list, fetching the next page of the list when this was the last one shown.

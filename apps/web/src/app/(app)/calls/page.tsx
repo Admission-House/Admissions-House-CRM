@@ -60,6 +60,16 @@ function Calls() {
   );
   const calls = useApi<Page<CallRow>>('/calls', query);
   const items = calls.data?.items ?? [];
+  // Listen to the recording, and the after-call form for a connected phone call still waiting for it.
+  const actions = (c: CallRow) => (
+    <>
+      {c.recording === 'stored' && can('call.listen') && <Recording callId={c.id} />}
+      {c.recording === 'pending' && <span className="text-xs text-subtle">Recording on its way</span>}
+      {c.outcome === 'connected' && c.via !== 'app' && !c.wrappedUp && c.lead && can('lead.update') && (
+        <Button size="sm" onClick={() => setWrapping(c)}><ClipboardCheck className="h-3.5 w-3.5" aria-hidden /> After-call form</Button>
+      )}
+    </>
+  );
 
   return (
     <>
@@ -92,12 +102,7 @@ function Calls() {
                   {c.durationSec != null && <span className="tabular">{length(c.durationSec)}</span>}
                 </div>
                 {c.remark && <p className="text-xs text-muted">{c.remark}</p>}
-                {(c.recording === 'stored' && can('call.listen')) || (c.outcome === 'connected' && c.via !== 'app' && !c.wrappedUp && c.lead && can('lead.update')) ? (
-                  <div className="flex flex-wrap items-center gap-2 pt-1">
-                    {c.recording === 'stored' && can('call.listen') && <Recording callId={c.id} />}
-                    {c.outcome === 'connected' && c.via !== 'app' && !c.wrappedUp && c.lead && can('lead.update') && <Button size="sm" onClick={() => setWrapping(c)}><ClipboardCheck className="h-3.5 w-3.5" aria-hidden /> After-call form</Button>}
-                  </div>
-                ) : null}
+                <div className="flex flex-wrap items-center gap-2 empty:hidden">{actions(c)}</div>
               </li>
             ))}
           </ul>
@@ -114,9 +119,7 @@ function Calls() {
                       {columns.order.map((id) => { const col = COLUMNS[id as ColId]; return <td key={id} className={col.td} title={col.title?.(c)}>{col.cell(c)}</td>; })}
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-2">
-                          {c.recording === 'stored' && can('call.listen') && <Recording callId={c.id} />}
-                          {c.recording === 'pending' && <span className="text-xs text-subtle">Recording on its way</span>}
-                          {c.outcome === 'connected' && c.via !== 'app' && !c.wrappedUp && c.lead && can('lead.update') && <Button size="sm" onClick={() => setWrapping(c)}><ClipboardCheck className="h-3.5 w-3.5" aria-hidden /> After-call form</Button>}
+                          {actions(c)}
                         </div>
                       </td>
                     </tr>
