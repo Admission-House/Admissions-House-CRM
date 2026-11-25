@@ -417,7 +417,7 @@ ${this.leaveLink()}
     const { rows } = await sql<{ days: number[] }>`
       SELECT weekly_off_days::int[] AS days FROM attendance_settings
       WHERE effective_from <= ${date}::date ORDER BY effective_from DESC LIMIT 1`.execute(trx);
-    return rows[0]?.days ?? [];
+    return rows[0]?.days ?? [0];
   }
 
   private async holidaysBetween(trx: Trx, from: string, to: string): Promise<Set<string>> {

@@ -546,3 +546,45 @@ describe('notifications', () => {
     }
   });
 });
+
+// ================================================================== holidays added later
+
+describe('a holiday added or removed inside a leave', () => {
+  const decide = (id: string) => api.call('POST', `/leave/requests/${id}/decision`, admin, { decision: 'approved' }, OFFICE_IP);
+  const days = async (id: string) => (await owner.query(`SELECT days::float8 AS d, status FROM leave_requests WHERE id = $1`, [id])).rows[0] as { d: number; status: string };
+
+  it('gives the holiday back to the balance of an approved leave, and takes it again if the holiday is removed', async () => {
+    const token = await asOffice('in1');
+    const monday = await plusDays(await nextSunday(24), 1); // a week no other test uses
+    const made = await request(token, { leaveTypeId: await typeId('Casual Leave'), fromDate: monday, toDate: await plusDays(monday, 2) }, OFFICE_IP);
+    expect(made.statusCode, made.body).toBe(201);
+    const id = made.json().id as string;
+    expect((await decide(id)).statusCode).toBe(200);
+    const before = (await balanceOf(token, 'Casual Leave', `?year=${monday.slice(0, 4)}`)).remaining as number;
+
+    const holiday = await api.call('POST', '/holidays', sa, { date: await plusDays(monday, 1), name: 'Added later' });
+    expect(holiday.statusCode, holiday.body).toBe(201);
+    expect(await days(id)).toEqual({ d: 2, status: 'approved' });
+    expect((await balanceOf(token, 'Casual Leave', `?year=${monday.slice(0, 4)}`)).remaining).toBe(before + 1);
+
+    expect((await api.call('DELETE', `/holidays/${holiday.json().id}`, sa)).statusCode).toBe(204);
+    expect(await days(id)).toEqual({ d: 3, status: 'approved' });
+    expect((await balanceOf(token, 'Casual Leave', `?year=${monday.slice(0, 4)}`)).remaining).toBe(before);
+  });
+
+  it('cancels a request whose only working day becomes a holiday, and recounts waiting requests too', async () => {
+    const token = await asOffice('in2');
+    const tuesday = await plusDays(await nextSunday(17), 2);
+    const one = await request(token, { leaveTypeId: await typeId('Casual Leave'), fromDate: tuesday }, OFFICE_IP);
+    expect((await decide(one.json().id)).statusCode).toBe(200);
+    const waiting = await request(token, { leaveTypeId: await typeId('Sick Leave'), fromDate: await plusDays(tuesday, 1), toDate: await plusDays(tuesday, 2) }, OFFICE_IP);
+    expect(waiting.statusCode, waiting.body).toBe(201);
+    const before = (await balanceOf(token, 'Casual Leave', `?year=${tuesday.slice(0, 4)}`)).remaining as number;
+
+    const many = await api.call('POST', '/holidays/bulk', sa, { items: [{ date: tuesday, name: 'Festival' }, { date: await plusDays(tuesday, 2), name: 'Festival 2' }] });
+    expect(many.statusCode, many.body).toBe(201);
+    expect(await days(one.json().id)).toEqual({ d: 1, status: 'cancelled' });
+    expect((await balanceOf(token, 'Casual Leave', `?year=${tuesday.slice(0, 4)}`)).remaining).toBe(before + 1);
+    expect(await days(waiting.json().id)).toEqual({ d: 1, status: 'pending' });
+  });
+});
