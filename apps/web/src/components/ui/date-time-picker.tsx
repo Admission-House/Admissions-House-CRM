@@ -29,6 +29,7 @@ export function DateTimePicker({
   min,
   required,
   placeholder = 'Choose date and time',
+  disabled,
 }: {
   id?: string;
   value: string;
@@ -37,6 +38,8 @@ export function DateTimePicker({
   min?: string;
   required?: boolean;
   placeholder?: string;
+  /** Shown but not usable (the placeholder says why). */
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [place, setPlace] = useState({ up: false, right: false });
@@ -111,6 +114,7 @@ export function DateTimePicker({
       <button
         id={id}
         type="button"
+        disabled={disabled}
         onClick={() => {
           const r = box.current?.getBoundingClientRect();
           if (r && !open) {
@@ -126,12 +130,13 @@ export function DateTimePicker({
         aria-expanded={open}
         className={cx(
           'flex h-9 w-full items-center gap-2 rounded-md border border-line-strong bg-surface px-3 text-left text-sm outline-none focus-visible:border-brand',
+          disabled && 'cursor-not-allowed bg-head',
           !value && 'text-subtle',
         )}
       >
         <CalendarClock className="h-4 w-4 shrink-0 text-muted" aria-hidden />
         <span className="min-w-0 flex-1 truncate">{value ? valueLabel(value) : placeholder}</span>
-        {value && (
+        {value && !disabled && (
           <span
             role="button"
             tabIndex={0}
@@ -155,7 +160,7 @@ export function DateTimePicker({
         )}
       </button>
 
-      {open && (
+      {open && !disabled && (
         <div
           role="dialog"
           aria-label="Choose date and time"

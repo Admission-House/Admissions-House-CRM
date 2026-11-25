@@ -213,14 +213,22 @@ export function StatusPanel({ lead, onChanged }: { lead: LeadDetail; onChanged: 
         >
           View all dependencies
         </button>
-        {can('followup.manage') && chosen?.isOpen && (
-          <Field label="Next follow-up" htmlFor="due" required>
+        {can('followup.manage') && (
+          <Field label="Next follow-up" htmlFor="due" required={!chosen || chosen.isOpen}>
             <DateTimePicker
               id="due"
               min={minFollowUp()}
-              value={due}
+              value={chosen?.isOpen ? due : ''}
               onChange={setDue}
               required={needsDate}
+              disabled={!chosen?.isOpen}
+              placeholder={
+                !chosen
+                  ? 'Choose a status first'
+                  : chosen.isOpen
+                    ? 'Choose date and time'
+                    : 'Not needed for a closed status'
+              }
             />
           </Field>
         )}
