@@ -1,8 +1,10 @@
 'use client';
 
 import { PhoneCall } from 'lucide-react';
-import { useState } from 'react';
+import QRCode from 'qrcode';
+import { useEffect, useState } from 'react';
 import { Button, Field, Input, Notice, cx } from '@/components/ui';
+import { CopyButton } from '@/components/ui/copy-button';
 import { Modal } from '@/components/ui/modal';
 import { api, errorText } from '@/lib/api';
 import { fmtPhone } from '@/lib/format';
@@ -73,13 +75,33 @@ export function LogCallModal({
     }
   }
 
+  // On a computer there is no dialer: a QR code of the number lets the counsellor scan it with their phone and call.
+  const [qr, setQr] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    void QRCode.toDataURL(telHref(phone), { margin: 1, width: 160 }).then((url) => {
+      if (live) setQr(url);
+    });
+    return () => {
+      live = false;
+    };
+  }, [phone]);
+
   return (
     <Modal title="How did the call go?" onClose={onClose}>
       <div className="space-y-4">
         <div className="flex items-center justify-between gap-3 rounded-md border border-line bg-head px-3 py-2.5">
           <div className="min-w-0">
             <p className="truncate text-sm font-medium text-ink">{leadName}</p>
-            <p className="tabular text-base font-semibold text-ink">{fmtPhone(phone)}</p>
+            <p className="inline-flex items-center gap-0.5">
+              <span className="tabular select-all text-base font-semibold text-ink">
+                {fmtPhone(phone)}
+              </span>
+              <CopyButton
+                value={phone.length === 12 && phone.startsWith('91') ? phone.slice(2) : phone}
+                label="phone number"
+              />
+            </p>
           </div>
           <a
             href={telHref(phone)}
@@ -88,6 +110,23 @@ export function LogCallModal({
             <PhoneCall className="h-4 w-4" aria-hidden /> Dial
           </a>
         </div>
+        {qr && (
+          // Shown on a computer screen only: a phone dials with the button above.
+          <div className="hidden items-center gap-4 rounded-md border border-line px-3 py-3 md:flex">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={qr}
+              alt={`QR code to call ${fmtPhone(phone)}`}
+              width={112}
+              height={112}
+              className="shrink-0 rounded"
+            />
+            <p className="text-sm text-muted">
+              On a computer? Scan this with your phone&apos;s camera: the dialer opens with the
+              number. After the call, save the result below.
+            </p>
+          </div>
+        )}
 
         <div
           role="radiogroup"
