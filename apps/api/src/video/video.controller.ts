@@ -1,10 +1,32 @@
-import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Query, Req } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+  Req,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { FastifyRequest } from 'fastify';
 import { createZodDto } from 'nestjs-zod';
 import type { AuthContext } from '../auth/auth-context.js';
 import { Background, CurrentAuth, Public, RequirePermissions } from '../auth/decorators.js';
-import { callSchema, guestInfoSchema, guestJoinSchema, guestPresenceSchema, historyQuerySchema, inviteSchema, leadSessionSchema, meetingSchema, presenceSchema, respondSchema, staffJoinSchema } from './video.dto.js';
+import {
+  callSchema,
+  guestInfoSchema,
+  guestJoinSchema,
+  guestPresenceSchema,
+  historyQuerySchema,
+  inviteSchema,
+  leadSessionSchema,
+  meetingSchema,
+  presenceSchema,
+  respondSchema,
+  staffJoinSchema,
+} from './video.dto.js';
 import { VideoAccessService } from './video-access.service.js';
 import { VideoService } from './video.service.js';
 
@@ -94,7 +116,11 @@ export class VideoController {
   @RequirePermissions('video.host')
   @Post('communications/:id/join')
   @HttpCode(200)
-  join(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: StaffJoinDto) {
+  join(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: StaffJoinDto,
+  ) {
     return this.access.join(auth, id, body.consent);
   }
 
@@ -102,7 +128,11 @@ export class VideoController {
   @RequirePermissions('video.host')
   @Post('communications/:id/presence')
   @HttpCode(200)
-  presence(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: PresenceDto) {
+  presence(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: PresenceDto,
+  ) {
     return this.access.presence(auth, id, body.event);
   }
 
@@ -110,7 +140,11 @@ export class VideoController {
   @RequirePermissions('video.host')
   @Post('communications/:id/respond')
   @HttpCode(200)
-  respond(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: RespondDto) {
+  respond(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: RespondDto,
+  ) {
     return this.access.respond(auth, id, body.action);
   }
 
@@ -124,21 +158,33 @@ export class VideoController {
   @RequirePermissions('video.host')
   @Post('communications/:id/invites')
   @HttpCode(201)
-  invite(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: InviteDto) {
+  invite(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: InviteDto,
+  ) {
     return this.sessions.addInvite(auth, id, body);
   }
 
   @RequirePermissions('video.host')
   @Post('communications/:id/invites/:inviteId/remove')
   @HttpCode(200)
-  remove(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Param('inviteId', ParseUUIDPipe) inviteId: string) {
+  remove(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('inviteId', ParseUUIDPipe) inviteId: string,
+  ) {
     return this.sessions.removeInvite(auth, id, inviteId);
   }
 
   @RequirePermissions('video.host')
   @Post('communications/:id/invites/:inviteId/reset-device')
   @HttpCode(200)
-  resetDevice(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Param('inviteId', ParseUUIDPipe) inviteId: string) {
+  resetDevice(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('inviteId', ParseUUIDPipe) inviteId: string,
+  ) {
     return this.sessions.resetDevice(auth, id, inviteId);
   }
 
@@ -146,7 +192,11 @@ export class VideoController {
   @RequirePermissions('video.host')
   @Post('leads/:id/communications')
   @HttpCode(201)
-  startForLead(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: LeadSessionDto) {
+  startForLead(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: LeadSessionDto,
+  ) {
     return this.sessions.startForLead(auth, id, body);
   }
 

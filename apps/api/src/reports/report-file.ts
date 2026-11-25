@@ -18,7 +18,11 @@ export interface Report {
 export type ReportFormat = 'json' | 'csv' | 'xlsx';
 
 export function toCsv(r: Report): string {
-  return CSV_BOM + csvRow(r.columns.map((c) => c.label)) + r.rows.map((row) => csvRow(r.columns.map((c) => row[c.key] ?? ''))).join('');
+  return (
+    CSV_BOM +
+    csvRow(r.columns.map((c) => c.label)) +
+    r.rows.map((row) => csvRow(r.columns.map((c) => row[c.key] ?? ''))).join('')
+  );
 }
 
 export async function toXlsx(r: Report): Promise<Buffer> {
@@ -33,4 +37,8 @@ export async function toXlsx(r: Report): Promise<Buffer> {
   return writeXlsxFile([header, ...body] as never).toBuffer();
 }
 
-export const fileName = (r: Report, ext: string) => `${r.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}${r.from ? `-${r.from}-to-${r.to}` : ''}.${ext}`;
+export const fileName = (r: Report, ext: string) =>
+  `${r.title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')}${r.from ? `-${r.from}-to-${r.to}` : ''}.${ext}`;

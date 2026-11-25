@@ -50,13 +50,18 @@ export interface FieldChange {
   newValue: string | null;
 }
 
-const show = (v: unknown): string | null => (v === null || v === undefined || v === '' ? null : String(v));
+const show = (v: unknown): string | null =>
+  v === null || v === undefined || v === '' ? null : String(v);
 
 /**
  * What changed between two versions of a record, as history entries. Only fields that differ are
  * listed, and an empty value and a missing value count as the same thing.
  */
-export function diffFields(before: Record<string, unknown>, after: Record<string, unknown>, fields: readonly string[]): FieldChange[] {
+export function diffFields(
+  before: Record<string, unknown>,
+  after: Record<string, unknown>,
+  fields: readonly string[],
+): FieldChange[] {
   const changes: FieldChange[] = [];
   for (const field of fields) {
     if (!(field in after)) continue;
@@ -79,11 +84,17 @@ export interface StatusRule {
  * A status that needs a follow-up cannot be set without one: either the request brings a date, or
  * the lead already has an open follow-up still to come.
  */
-export function assertFollowUpForStatus(status: StatusRule, hasNewFollowUp: boolean, hasUpcomingFollowUp: boolean): void {
+export function assertFollowUpForStatus(
+  status: StatusRule,
+  hasNewFollowUp: boolean,
+  hasUpcomingFollowUp: boolean,
+): void {
   if (status.requiresFollowup && status.isOpen && !hasNewFollowUp && !hasUpcomingFollowUp) {
-    throw AppError.badRequest('FOLLOWUP_REQUIRED', `"${status.name}" needs the date and time of the next follow-up`, [
-      { field: 'followUp', message: 'Give the date and time of the next follow-up' },
-    ]);
+    throw AppError.badRequest(
+      'FOLLOWUP_REQUIRED',
+      `"${status.name}" needs the date and time of the next follow-up`,
+      [{ field: 'followUp', message: 'Give the date and time of the next follow-up' }],
+    );
   }
 }
 

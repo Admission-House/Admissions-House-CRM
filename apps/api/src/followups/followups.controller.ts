@@ -1,4 +1,15 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
@@ -23,7 +34,11 @@ export class FollowUpsController {
 
   @RequirePermissions('followup.manage')
   @Post('leads/:id/followups')
-  create(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: CreateFollowUpDto) {
+  create(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: CreateFollowUpDto,
+  ) {
     return this.followUps.create(auth, id, body);
   }
 
@@ -42,14 +57,22 @@ export class FollowUpsController {
 
   @RequirePermissions('followup.manage')
   @Patch('followups/:id')
-  reschedule(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: RescheduleDto) {
+  reschedule(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: RescheduleDto,
+  ) {
     return this.followUps.reschedule(auth, id, body);
   }
 
   @RequirePermissions('followup.manage')
   @Post('followups/:id/done')
   @HttpCode(200)
-  done(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: DoneDto) {
+  done(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: DoneDto,
+  ) {
     return this.followUps.done(auth, id, body.note);
   }
 

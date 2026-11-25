@@ -14,7 +14,9 @@ export class LiveBus {
   /** Returns a function that stops listening. */
   on(listener: (event: LiveEvent) => void): () => void {
     this.listeners.add(listener);
-    return () => { this.listeners.delete(listener); };
+    return () => {
+      this.listeners.delete(listener);
+    };
   }
 
   emit(event: LiveEvent): void {

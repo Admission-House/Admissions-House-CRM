@@ -9,16 +9,36 @@ import { cx } from '@/components/ui';
 const box =
   'h-14 w-full rounded-lg border border-line-strong bg-white/85 px-5 text-base text-ink placeholder:text-subtle transition focus:border-teal-600 focus:outline-none focus:ring-0 aria-[invalid=true]:border-bad disabled:bg-head';
 
-export function AuthField({ label, htmlFor, error, hint, action, children }: { label: string; htmlFor: string; error?: string; hint?: string; action?: ReactNode; children: ReactNode }) {
+export function AuthField({
+  label,
+  htmlFor,
+  error,
+  hint,
+  action,
+  children,
+}: {
+  label: string;
+  htmlFor: string;
+  error?: string;
+  hint?: string;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
   return (
     <div>
       <div className="mb-2 flex items-center justify-between gap-3">
-        <label htmlFor={htmlFor} className="text-base font-medium text-brand">{label}</label>
+        <label htmlFor={htmlFor} className="text-base font-medium text-brand">
+          {label}
+        </label>
         {action}
       </div>
       {children}
       {hint && !error && <p className="mt-1.5 text-sm text-muted">{hint}</p>}
-      {error && <p role="alert" className="mt-1.5 text-sm text-bad">{error}</p>}
+      {error && (
+        <p role="alert" className="mt-1.5 text-sm text-bad">
+          {error}
+        </p>
+      )}
     </div>
   );
 }
@@ -27,7 +47,10 @@ export function AuthInput({ className, ...rest }: InputHTMLAttributes<HTMLInputE
   return <input {...rest} className={cx(box, className)} />;
 }
 
-export function AuthPassword({ className, ...rest }: Omit<InputHTMLAttributes<HTMLInputElement>, 'type'>) {
+export function AuthPassword({
+  className,
+  ...rest
+}: Omit<InputHTMLAttributes<HTMLInputElement>, 'type'>) {
   const [shown, setShown] = useState(false);
   return (
     <div className="relative">
@@ -39,18 +62,31 @@ export function AuthPassword({ className, ...rest }: Omit<InputHTMLAttributes<HT
         aria-pressed={shown}
         className="absolute inset-y-0 right-0 grid w-14 place-items-center rounded-r-lg text-muted transition hover:text-brand"
       >
-        {shown ? <EyeOff className="h-5 w-5" aria-hidden /> : <Eye className="h-5 w-5" aria-hidden />}
+        {shown ? (
+          <EyeOff className="h-5 w-5" aria-hidden />
+        ) : (
+          <Eye className="h-5 w-5" aria-hidden />
+        )}
       </button>
     </div>
   );
 }
 
-export function AuthButton({ loading, children, className, disabled, ...rest }: ButtonHTMLAttributes<HTMLButtonElement> & { loading?: boolean }) {
+export function AuthButton({
+  loading,
+  children,
+  className,
+  disabled,
+  ...rest
+}: ButtonHTMLAttributes<HTMLButtonElement> & { loading?: boolean }) {
   return (
     <button
       {...rest}
       disabled={disabled || loading}
-      className={cx('flex h-14 w-full items-center justify-center gap-2 rounded-lg bg-brand text-base font-semibold text-white transition hover:bg-brand-700 focus-visible:ring-4 focus-visible:ring-teal/30 disabled:cursor-not-allowed disabled:opacity-60', className)}
+      className={cx(
+        'flex h-14 w-full items-center justify-center gap-2 rounded-lg bg-brand text-base font-semibold text-white transition hover:bg-brand-700 focus-visible:ring-4 focus-visible:ring-teal/30 disabled:cursor-not-allowed disabled:opacity-60',
+        className,
+      )}
     >
       {loading && <Loader2 className="h-5 w-5 animate-spin" aria-hidden />}
       {children}

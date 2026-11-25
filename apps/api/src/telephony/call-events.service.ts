@@ -37,7 +37,11 @@ export class CallEventsService {
     private readonly notifications: NotificationsService,
   ) {}
 
-  async apply(trx: Trx, tenantId: string, e: CallEvent): Promise<{ callId: string; outcome: Outcome }> {
+  async apply(
+    trx: Trx,
+    tenantId: string,
+    e: CallEvent,
+  ): Promise<{ callId: string; outcome: Outcome }> {
     let call = await this.find(trx, e.providerCallId);
     if (!call) call = await this.create(trx, tenantId, e);
 
@@ -54,7 +58,8 @@ export class CallEventsService {
     const before = call.outcome;
     const next = await this.advance(trx, call, e);
 
-    if (next.outcome === 'missed' && before !== 'missed' && call.direction === 'incoming') await this.missedCall(trx, tenantId, next);
+    if (next.outcome === 'missed' && before !== 'missed' && call.direction === 'incoming')
+      await this.missedCall(trx, tenantId, next);
     if (next.ended_at && !call.ended_at) await this.logOnLead(trx, tenantId, next);
     return { callId: next.id, outcome: next.outcome };
   }
@@ -75,7 +80,9 @@ export class CallEventsService {
     const { rows } = await sql<CallRow>`
       INSERT INTO calls (tenant_id, lead_id, user_id, direction, provider_call_id, counterparty, started_at, outcome)
       VALUES (${tenantId}, ${leadId}, ${userId}, ${e.direction}, ${e.providerCallId}, ${e.customerNumber}, ${e.at}, 'ringing')
-      RETURNING id, started_at, started_at::text AS started_text, lead_id, user_id, direction, counterparty, answered_at, ended_at, outcome`.execute(trx);
+      RETURNING id, started_at, started_at::text AS started_text, lead_id, user_id, direction, counterparty, answered_at, ended_at, outcome`.execute(
+      trx,
+    );
     return rows[0]!;
   }
 
@@ -99,8 +106,15 @@ export class CallEventsService {
         endedAt ??= at;
         // Talk time means someone answered, even if the "answered" event has not arrived yet.
         if ((e.durationSec ?? 0) > 0) outcome = 'connected';
-        else if (outcome !== 'connected') outcome = e.outcome ?? (call.direction === 'incoming' ? 'missed' : 'not_picked');
-        duration = outcome === 'connected' ? (e.durationSec ?? (answeredAt ? Math.max(0, Math.round((endedAt.getTime() - answeredAt.getTime()) / 1000)) : 0)) : 0;
+        else if (outcome !== 'connected')
+          outcome = e.outcome ?? (call.direction === 'incoming' ? 'missed' : 'not_picked');
+        duration =
+          outcome === 'connected'
+            ? (e.durationSec ??
+              (answeredAt
+                ? Math.max(0, Math.round((endedAt.getTime() - answeredAt.getTime()) / 1000))
+                : 0))
+            : 0;
         break;
       case 'missed':
         endedAt ??= at;
@@ -116,7 +130,9 @@ export class CallEventsService {
       UPDATE calls SET outcome = ${outcome}, answered_at = ${answeredAt}, ended_at = ${endedAt},
                        duration_sec = coalesce(${duration}, duration_sec)
       WHERE id = ${call.id} AND started_at = ${call.started_text}::timestamptz
-      RETURNING id, started_at, started_at::text AS started_text, lead_id, user_id, direction, counterparty, answered_at, ended_at, outcome`.execute(trx);
+      RETURNING id, started_at, started_at::text AS started_text, lead_id, user_id, direction, counterparty, answered_at, ended_at, outcome`.execute(
+      trx,
+    );
     return rows[0]!;
   }
 
@@ -128,16 +144,33 @@ export class CallEventsService {
     if (!leadId) {
       const sourceId = await this.incomingCallsSource(trx, tenantId);
       const res = await this.ingest.ingest(trx, {
-        tenantId, sourceId, eventId: null,
-        lead: { name: `Missed call ${call.counterparty.slice(-4)}`, phone: call.counterparty, formName: 'missed call', utm: {} },
+        tenantId,
+        sourceId,
+        eventId: null,
+        lead: {
+          name: `Missed call ${call.counterparty.slice(-4)}`,
+          phone: call.counterparty,
+          formName: 'missed call',
+          utm: {},
+        },
       });
       leadId = res.leadId ?? null;
       assignedTo = res.assignedTo ?? null;
     }
     if (!leadId) return;
-    await sql`UPDATE calls SET lead_id = ${leadId} WHERE id = ${call.id} AND started_at = ${call.started_text}::timestamptz`.execute(trx);
+    await sql`UPDATE calls SET lead_id = ${leadId} WHERE id = ${call.id} AND started_at = ${call.started_text}::timestamptz`.execute(
+      trx,
+    );
 
-    const { rows } = await sql<{ assigned_to: string | null; lead_no: string; name: string; status_id: string; status: string; is_open: boolean; queue: string }>`
+    const { rows } = await sql<{
+      assigned_to: string | null;
+      lead_no: string;
+      name: string;
+      status_id: string;
+      status: string;
+      is_open: boolean;
+      queue: string;
+    }>`
       SELECT l.assigned_to, l.lead_no::text AS lead_no, l.name, l.status_id, s.name AS status, s.is_open, s.queue
       FROM leads l JOIN lead_statuses s ON s.id = l.status_id WHERE l.id = ${leadId}`.execute(trx);
     const lead = rows[0]!;
@@ -145,17 +178,42 @@ export class CallEventsService {
 
     if (lead.is_open && lead.queue !== 'missed') {
       const target = await sql<{ id: string; name: string }>`
-        SELECT id, name FROM lead_statuses WHERE queue = 'missed' AND is_open AND is_active ORDER BY sort_order LIMIT 1`.execute(trx);
+        SELECT id, name FROM lead_statuses WHERE queue = 'missed' AND is_open AND is_active ORDER BY sort_order LIMIT 1`.execute(
+        trx,
+      );
       if (target.rows[0]) {
-        await sql`UPDATE leads SET status_id = ${target.rows[0].id}, updated_at = now() WHERE id = ${leadId}`.execute(trx);
-        await this.writer.activity(trx, { tenantId, leadId, type: 'status_change', field: 'status', oldValue: lead.status, newValue: target.rows[0].name, remark: 'Missed call' });
+        await sql`UPDATE leads SET status_id = ${target.rows[0].id}, updated_at = now() WHERE id = ${leadId}`.execute(
+          trx,
+        );
+        await this.writer.activity(trx, {
+          tenantId,
+          leadId,
+          type: 'status_change',
+          field: 'status',
+          oldValue: lead.status,
+          newValue: target.rows[0].name,
+          remark: 'Missed call',
+        });
       }
     }
-    await this.writer.activity(trx, { tenantId, leadId, type: 'call', remark: `Missed call from ${call.counterparty}` });
+    await this.writer.activity(trx, {
+      tenantId,
+      leadId,
+      type: 'call',
+      remark: `Missed call from ${call.counterparty}`,
+    });
     if (assignedTo) {
       await this.notifications.notify(trx, {
-        tenantId, userIds: [assignedTo], type: 'lead_new',
-        payload: { event: 'missed_call', leadId, leadNo: lead.lead_no, name: lead.name, phone: call.counterparty },
+        tenantId,
+        userIds: [assignedTo],
+        type: 'lead_new',
+        payload: {
+          event: 'missed_call',
+          leadId,
+          leadNo: lead.lead_no,
+          name: lead.name,
+          phone: call.counterparty,
+        },
       });
     }
   }
@@ -163,10 +221,23 @@ export class CallEventsService {
   /** One line in the lead's history when a call that was answered or tried comes to an end. */
   private async logOnLead(trx: Trx, tenantId: string, call: CallRow): Promise<void> {
     if (!call.lead_id || (call.outcome === 'missed' && call.direction === 'incoming')) return; // a missed call is logged above
-    const { rows } = await sql<{ duration_sec: number | null }>`SELECT duration_sec FROM calls WHERE id = ${call.id} AND started_at = ${call.started_text}::timestamptz`.execute(trx);
+    const { rows } = await sql<{
+      duration_sec: number | null;
+    }>`SELECT duration_sec FROM calls WHERE id = ${call.id} AND started_at = ${call.started_text}::timestamptz`.execute(
+      trx,
+    );
     const secs = rows[0]?.duration_sec ?? 0;
-    const label = call.outcome === 'connected' ? `connected, ${Math.floor(secs / 60)} min ${secs % 60} s` : call.outcome.replace('_', ' ');
-    await this.writer.activity(trx, { tenantId, leadId: call.lead_id, userId: call.user_id, type: 'call', remark: `${call.direction === 'incoming' ? 'Incoming' : 'Outgoing'} call ${label}` });
+    const label =
+      call.outcome === 'connected'
+        ? `connected, ${Math.floor(secs / 60)} min ${secs % 60} s`
+        : call.outcome.replace('_', ' ');
+    await this.writer.activity(trx, {
+      tenantId,
+      leadId: call.lead_id,
+      userId: call.user_id,
+      type: 'call',
+      remark: `${call.direction === 'incoming' ? 'Incoming' : 'Outgoing'} call ${label}`,
+    });
   }
 
   // ---------------------------------------------------------------- lookups
@@ -182,7 +253,9 @@ export class CallEventsService {
   /** An active user whose own number this is. Matched on the last ten digits so +91 or a leading 0 do not matter. */
   private async userByPhone(trx: Trx, phone: string): Promise<string | null> {
     const { rows } = await sql<{ id: string }>`
-      SELECT u.id FROM users u WHERE u.status = 'active' AND u.phone IS NOT NULL AND right(u.phone, 10) = ${phone.slice(-10)} LIMIT 2`.execute(trx);
+      SELECT u.id FROM users u WHERE u.status = 'active' AND u.phone IS NOT NULL AND right(u.phone, 10) = ${phone.slice(-10)} LIMIT 2`.execute(
+      trx,
+    );
     return rows.length === 1 ? rows[0]!.id : null;
   }
 

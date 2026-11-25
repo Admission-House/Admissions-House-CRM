@@ -8,14 +8,30 @@ function fake() {
   let stored: Buffer | null = null;
   let failDelete: Error | null = null;
   const client: BlobLike = {
-    put: async (key, data, options) => { calls.push({ op: 'put', key, options }); stored = data; },
+    put: async (key, data, options) => {
+      calls.push({ op: 'put', key, options });
+      stored = data;
+    },
     get: async (key, options) => {
       calls.push({ op: 'get', key, options });
       if (!stored) return null;
       const body = stored;
-      return { statusCode: 200, stream: new ReadableStream({ start: (c) => { c.enqueue(new Uint8Array(body)); c.close(); } }), blob: { size: body.length } };
+      return {
+        statusCode: 200,
+        stream: new ReadableStream({
+          start: (c) => {
+            c.enqueue(new Uint8Array(body));
+            c.close();
+          },
+        }),
+        blob: { size: body.length },
+      };
     },
-    del: async (key, options) => { calls.push({ op: 'del', key, options }); if (failDelete) throw failDelete; stored = null; },
+    del: async (key, options) => {
+      calls.push({ op: 'del', key, options });
+      if (failDelete) throw failDelete;
+      stored = null;
+    },
   };
   return { client, calls, failDeleteWith: (e: Error) => (failDelete = e) };
 }
@@ -25,7 +41,16 @@ describe('BlobStorage', () => {
     const f = fake();
     const s = new BlobStorage(f.client);
     await s.put(KEY, Buffer.from('hello'));
-    expect(f.calls[0]).toMatchObject({ op: 'put', key: KEY, options: { access: 'private', addRandomSuffix: false, allowOverwrite: false, contentType: 'application/pdf' } });
+    expect(f.calls[0]).toMatchObject({
+      op: 'put',
+      key: KEY,
+      options: {
+        access: 'private',
+        addRandomSuffix: false,
+        allowOverwrite: false,
+        contentType: 'application/pdf',
+      },
+    });
     const got = await s.get(KEY);
     expect(got!.size).toBe(5);
     const chunks: Buffer[] = [];

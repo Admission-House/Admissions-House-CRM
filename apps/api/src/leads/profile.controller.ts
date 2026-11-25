@@ -22,12 +22,18 @@ export class ProfileController {
   /** Changes the sections sent: personal, preferences, guardians, education, exams. */
   @RequirePermissions('lead.update')
   @Patch()
-  update(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: UpdateProfileDto) {
+  update(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: UpdateProfileDto,
+  ) {
     return this.profile.update(auth, id, body);
   }
 }
 
-class SuggestDto extends createZodDto(z.object({ field: z.enum(['board', 'institution', 'occupation', 'exam']) })) {}
+class SuggestDto extends createZodDto(
+  z.object({ field: z.enum(['board', 'institution', 'occupation', 'exam']) }),
+) {}
 
 @ApiTags('lead profile')
 @ApiBearerAuth()

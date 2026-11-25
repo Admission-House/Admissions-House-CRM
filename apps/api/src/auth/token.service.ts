@@ -66,7 +66,8 @@ export class TokenService {
         clockTolerance: 5,
       });
       const { sub, tid, sid } = payload as { sub?: string; tid?: unknown; sid?: unknown };
-      if (!sub || typeof tid !== 'string' || typeof sid !== 'string') throw new Error('claims missing');
+      if (!sub || typeof tid !== 'string' || typeof sid !== 'string')
+        throw new Error('claims missing');
       return { userId: sub, tenantId: tid, sessionId: sid };
     } catch {
       throw new AppError('TOKEN_INVALID', 'Your sign-in is not valid. Please sign in again.', 401);

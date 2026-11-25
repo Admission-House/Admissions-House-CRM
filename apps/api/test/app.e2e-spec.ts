@@ -28,12 +28,20 @@ describe('HTTP layer', () => {
 
   describe('request id', () => {
     it('keeps a sane id sent by the caller and returns it', async () => {
-      const res = await app.inject({ method: 'GET', url: '/api/v1/health/live', headers: { 'x-request-id': 'client-id-12345' } });
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/v1/health/live',
+        headers: { 'x-request-id': 'client-id-12345' },
+      });
       expect(res.headers['x-request-id']).toBe('client-id-12345');
     });
 
     it('replaces an id that could be used to forge log lines', async () => {
-      const res = await app.inject({ method: 'GET', url: '/api/v1/health/live', headers: { 'x-request-id': 'bad id <script>' } });
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/v1/health/live',
+        headers: { 'x-request-id': 'bad id <script>' },
+      });
       expect(res.headers['x-request-id']).toMatch(/^[0-9a-f-]{36}$/);
     });
   });
@@ -43,14 +51,26 @@ describe('HTTP layer', () => {
       const res = await app.inject({ method: 'GET', url: '/api/v1/nope' });
       expect(res.statusCode).toBe(404);
       expect(res.json()).toEqual({
-        error: { code: 'NOT_FOUND', message: expect.any(String), requestId: res.headers['x-request-id'] },
+        error: {
+          code: 'NOT_FOUND',
+          message: expect.any(String),
+          requestId: res.headers['x-request-id'],
+        },
       });
     });
 
     it('invalid JSON', async () => {
-      const res = await app.inject({ method: 'POST', url: '/api/v1/health/live', headers: { 'content-type': 'application/json' }, payload: '{bad' });
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/health/live',
+        headers: { 'content-type': 'application/json' },
+        payload: '{bad',
+      });
       expect(res.statusCode).toBe(400);
-      expect(res.json().error).toMatchObject({ code: 'BAD_REQUEST', requestId: res.headers['x-request-id'] });
+      expect(res.json().error).toMatchObject({
+        code: 'BAD_REQUEST',
+        requestId: res.headers['x-request-id'],
+      });
     });
 
     it('a body over the limit', async () => {
@@ -67,12 +87,20 @@ describe('HTTP layer', () => {
 
   describe('CORS', () => {
     it('allows a configured origin', async () => {
-      const res = await app.inject({ method: 'GET', url: '/api/v1/health/live', headers: { origin: 'https://crm.example' } });
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/v1/health/live',
+        headers: { origin: 'https://crm.example' },
+      });
       expect(res.headers['access-control-allow-origin']).toBe('https://crm.example');
     });
 
     it('does not allow any other origin', async () => {
-      const res = await app.inject({ method: 'GET', url: '/api/v1/health/live', headers: { origin: 'https://evil.example' } });
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/v1/health/live',
+        headers: { origin: 'https://evil.example' },
+      });
       expect(res.headers['access-control-allow-origin']).toBeUndefined();
     });
   });
@@ -83,7 +111,12 @@ describe('client IP (the office check depends on it)', () => {
 
   it('ignores X-Forwarded-For when no proxy is configured', async () => {
     const app = await startApp({ TRUST_PROXY_HOPS: '0' });
-    const res = await app.inject({ method: 'GET', url: '/api/v1/test/ip', headers: forwarded, remoteAddress: '10.0.0.1' });
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/test/ip',
+      headers: forwarded,
+      remoteAddress: '10.0.0.1',
+    });
     expect(res.json().ip).toBe('10.0.0.1');
     await app.close();
   });

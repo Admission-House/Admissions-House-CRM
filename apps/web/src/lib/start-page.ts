@@ -19,5 +19,7 @@ export const START_PAGE_LABELS: Record<StartPageKey, string> = {
 
 /** Where to go after signing in. Anything unknown (an old or edited value) falls back to the dashboard. */
 export function homePath(startPage: string | null | undefined): string {
-  return startPage && Object.prototype.hasOwnProperty.call(START_PAGE_PATHS, startPage) ? START_PAGE_PATHS[startPage as StartPageKey] : '/dashboard';
+  return startPage && Object.prototype.hasOwnProperty.call(START_PAGE_PATHS, startPage)
+    ? START_PAGE_PATHS[startPage as StartPageKey]
+    : '/dashboard';
 }

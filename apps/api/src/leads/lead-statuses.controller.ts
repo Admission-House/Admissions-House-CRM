@@ -1,4 +1,14 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
@@ -7,7 +17,17 @@ import { CurrentAuth, RequireAnyPermission, RequirePermissions } from '../auth/d
 import { LeadStatusesService } from './lead-statuses.service.js';
 import { CreateStatusDto, CreateSubstatusDto, UpdateStatusDto } from './leads.dto.js';
 
-class UpdateSubstatusDto extends createZodDto(z.object({ name: z.string().trim().min(2).max(60).optional(), requiresComment: z.boolean().optional() }).refine((v) => v.name !== undefined || v.requiresComment !== undefined, 'Send at least one field to change')) {}
+class UpdateSubstatusDto extends createZodDto(
+  z
+    .object({
+      name: z.string().trim().min(2).max(60).optional(),
+      requiresComment: z.boolean().optional(),
+    })
+    .refine(
+      (v) => v.name !== undefined || v.requiresComment !== undefined,
+      'Send at least one field to change',
+    ),
+) {}
 
 @ApiTags('lead statuses')
 @ApiBearerAuth()
@@ -30,26 +50,41 @@ export class LeadStatusesController {
 
   @RequirePermissions('settings.manage')
   @Patch('lead-statuses/:id')
-  update(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: UpdateStatusDto) {
+  update(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: UpdateStatusDto,
+  ) {
     return this.statuses.update(auth, id, body);
   }
 
   @RequirePermissions('settings.manage')
   @Post('lead-statuses/:id/substatuses')
-  createSubstatus(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: CreateSubstatusDto) {
+  createSubstatus(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: CreateSubstatusDto,
+  ) {
     return this.statuses.createSubstatus(auth, id, body);
   }
 
   @RequirePermissions('settings.manage')
   @Patch('lead-substatuses/:id')
-  updateSubstatus(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: UpdateSubstatusDto) {
+  updateSubstatus(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: UpdateSubstatusDto,
+  ) {
     return this.statuses.updateSubstatus(auth, id, body);
   }
 
   @RequirePermissions('settings.manage')
   @Delete('lead-substatuses/:id')
   @HttpCode(204)
-  removeSubstatus(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string): Promise<void> {
+  removeSubstatus(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<void> {
     return this.statuses.removeSubstatus(auth, id);
   }
 }

@@ -2,27 +2,63 @@
 
 import { Check, Copy, RotateCw } from 'lucide-react';
 import { useState } from 'react';
-import { Badge, Button, Field, Input, Notice, Panel, Select, Spinner, Textarea } from '@/components/ui';
-import { api, ApiError } from '@/lib/api';
+import {
+  Badge,
+  Button,
+  Field,
+  Input,
+  Notice,
+  Panel,
+  Select,
+  Spinner,
+  Textarea,
+} from '@/components/ui';
+import { api, errorText } from '@/lib/api';
 import { useApi } from '@/lib/use-api';
 
-interface Connection { provider: string; isEnabled: boolean; webhookKeyPrefix: string; hasCredentials: boolean; recordingHosts: string[]; providers: string[] }
-
-const errorText = (e: unknown) => (e instanceof ApiError ? e.message : 'Cannot reach the server. Try again.');
+interface Connection {
+  provider: string;
+  isEnabled: boolean;
+  webhookKeyPrefix: string;
+  hasCredentials: boolean;
+  recordingHosts: string[];
+  providers: string[];
+}
 
 function KeyBox({ value, onClose }: { value: string; onClose: () => void }) {
   const [copied, setCopied] = useState(false);
   async function copy() {
-    try { await navigator.clipboard.writeText(value); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { /* shown on screen */ }
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* shown on screen */
+    }
   }
   return (
     <div className="space-y-3">
-      <Notice tone="warn">This webhook key is shown only once. Give it to your calling provider now. If it is lost, make a new one (the old one stops working at once).</Notice>
+      <Notice tone="warn">
+        This webhook key is shown only once. Give it to your calling provider now. If it is lost,
+        make a new one (the old one stops working at once).
+      </Notice>
       <div className="flex items-center justify-between gap-3 rounded-lg border border-line-strong bg-head px-4 py-3">
         <code className="select-all break-all text-sm font-semibold text-ink">{value}</code>
-        <Button variant="secondary" size="sm" onClick={() => void copy()}>{copied ? <><Check className="h-3.5 w-3.5" aria-hidden /> Copied</> : <><Copy className="h-3.5 w-3.5" aria-hidden /> Copy</>}</Button>
+        <Button variant="secondary" size="sm" onClick={() => void copy()}>
+          {copied ? (
+            <>
+              <Check className="h-3.5 w-3.5" aria-hidden /> Copied
+            </>
+          ) : (
+            <>
+              <Copy className="h-3.5 w-3.5" aria-hidden /> Copy
+            </>
+          )}
+        </Button>
       </div>
-      <Button variant="secondary" size="sm" onClick={onClose}>I have saved it</Button>
+      <Button variant="secondary" size="sm" onClick={onClose}>
+        I have saved it
+      </Button>
     </div>
   );
 }
@@ -36,7 +72,16 @@ export default function TelephonyPage() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null);
   const [key, setKey] = useState<string | null>(null);
-  const [ex, setEx] = useState({ accountSid: '', apiKey: '', apiToken: '', callerId: '', host: 'api.exotel.com', apiAddress: '', webhookKey: '', record: true });
+  const [ex, setEx] = useState({
+    accountSid: '',
+    apiKey: '',
+    apiToken: '',
+    callerId: '',
+    host: 'api.exotel.com',
+    apiAddress: '',
+    webhookKey: '',
+    record: true,
+  });
 
   if (conn.error) return <Notice tone="bad">{conn.error.message}</Notice>;
   if (conn.data === undefined) return <Spinner />;
@@ -51,25 +96,40 @@ export default function TelephonyPage() {
     setMsg(null);
     let parsed: Record<string, unknown> | undefined;
     if (chosen === 'exotel') {
-      const filled = ex.accountSid || ex.apiKey || ex.apiToken || ex.callerId || ex.apiAddress || ex.webhookKey;
+      const filled =
+        ex.accountSid || ex.apiKey || ex.apiToken || ex.callerId || ex.apiAddress || ex.webhookKey;
       if (filled) {
         const base = ex.apiAddress.trim().replace(/\/+$/, '');
         parsed = {
-          accountSid: ex.accountSid.trim(), apiKey: ex.apiKey.trim(), apiToken: ex.apiToken.trim(), callerId: ex.callerId.trim(), host: ex.host, record: ex.record,
+          accountSid: ex.accountSid.trim(),
+          apiKey: ex.apiKey.trim(),
+          apiToken: ex.apiToken.trim(),
+          callerId: ex.callerId.trim(),
+          host: ex.host,
+          record: ex.record,
           callbackUrl: `${base}/telephony/hooks/exotel/${(ex.webhookKey || key || '').trim()}`,
         };
       }
     } else if (config.trim()) {
       try {
         parsed = JSON.parse(config) as Record<string, unknown>;
-        if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error();
+        if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed))
+          throw new Error();
       } catch {
         return setMsg({ tone: 'bad', text: 'The provider settings must be a JSON object.' });
       }
     }
     setBusy(true);
     try {
-      const r = await api<{ webhookKey?: string }>('/telephony/connection', { method: 'PUT', body: { provider: chosen, isEnabled: isOn, recordingHosts: hostText.split(/\s+/).filter(Boolean), ...(parsed && { config: parsed }) } });
+      const r = await api<{ webhookKey?: string }>('/telephony/connection', {
+        method: 'PUT',
+        body: {
+          provider: chosen,
+          isEnabled: isOn,
+          recordingHosts: hostText.split(/\s+/).filter(Boolean),
+          ...(parsed && { config: parsed }),
+        },
+      });
       if (r.webhookKey) setKey(r.webhookKey);
       setConfig('');
       setEx((v) => ({ ...v, apiKey: '', apiToken: '', webhookKey: '' }));
@@ -86,7 +146,10 @@ export default function TelephonyPage() {
   async function rotate() {
     setMsg(null);
     try {
-      const r = await api<{ webhookKey: string }>('/telephony/connection/rotate-key', { method: 'POST', body: {} });
+      const r = await api<{ webhookKey: string }>('/telephony/connection/rotate-key', {
+        method: 'POST',
+        body: {},
+      });
       setKey(r.webhookKey);
       conn.reload();
     } catch (err) {
@@ -99,49 +162,189 @@ export default function TelephonyPage() {
       <Panel title="Calling provider">
         <form onSubmit={save} className="max-w-2xl space-y-4">
           {msg && <Notice tone={msg.tone}>{msg.text}</Notice>}
-          {!c && <Notice tone="info">No calling provider is connected yet. Save this form to connect one. Calls and missed-call leads start working as soon as it is on.</Notice>}
+          {!c && (
+            <Notice tone="info">
+              No calling provider is connected yet. Save this form to connect one. Calls and
+              missed-call leads start working as soon as it is on.
+            </Notice>
+          )}
           <Field label="Provider" htmlFor="tp">
-            <Select id="tp" value={chosen} onChange={(e) => setProvider(e.target.value)}>{(providers.length ? providers : ['generic']).map((p) => <option key={p} value={p}>{p}</option>)}</Select>
+            <Select id="tp" value={chosen} onChange={(e) => setProvider(e.target.value)}>
+              {(providers.length ? providers : ['generic']).map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </Select>
           </Field>
-          <label className="flex items-center gap-2.5 text-sm"><input type="checkbox" checked={isOn} onChange={(e) => setEnabled(e.target.checked)} className="h-4 w-4 accent-[#0f625e]" /> Calling is on</label>
+          <label className="flex items-center gap-2.5 text-sm">
+            <input
+              type="checkbox"
+              checked={isOn}
+              onChange={(e) => setEnabled(e.target.checked)}
+              className="h-4 w-4 accent-[#0f625e]"
+            />{' '}
+            Calling is on
+          </label>
           {chosen === 'exotel' ? (
             <div className="space-y-4 rounded-lg border border-line p-4">
-              <p className="text-sm text-muted">{c?.hasCredentials ? 'Exotel details are saved and hidden. Fill all of these only to replace them.' : 'From your Exotel dashboard (API settings). Stored encrypted and never shown again.'}</p>
+              <p className="text-sm text-muted">
+                {c?.hasCredentials
+                  ? 'Exotel details are saved and hidden. Fill all of these only to replace them.'
+                  : 'From your Exotel dashboard (API settings). Stored encrypted and never shown again.'}
+              </p>
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Account SID" htmlFor="ex1"><Input id="ex1"  value={ex.accountSid} onChange={(e) => setEx({ ...ex, accountSid: e.target.value })} autoComplete="off" /></Field>
-                <Field label="ExoPhone (calling number)" htmlFor="ex4"><Input id="ex4"  value={ex.callerId} onChange={(e) => setEx({ ...ex, callerId: e.target.value })} autoComplete="off" /></Field>
-                <Field label="API key" htmlFor="ex2"><Input id="ex2"  value={ex.apiKey} onChange={(e) => setEx({ ...ex, apiKey: e.target.value })} autoComplete="off" /></Field>
-                <Field label="API token" htmlFor="ex3"><Input id="ex3" type="password"  value={ex.apiToken} onChange={(e) => setEx({ ...ex, apiToken: e.target.value })} autoComplete="new-password" /></Field>
+                <Field label="Account SID" htmlFor="ex1">
+                  <Input
+                    id="ex1"
+                    value={ex.accountSid}
+                    onChange={(e) => setEx({ ...ex, accountSid: e.target.value })}
+                    autoComplete="off"
+                  />
+                </Field>
+                <Field label="ExoPhone (calling number)" htmlFor="ex4">
+                  <Input
+                    id="ex4"
+                    value={ex.callerId}
+                    onChange={(e) => setEx({ ...ex, callerId: e.target.value })}
+                    autoComplete="off"
+                  />
+                </Field>
+                <Field label="API key" htmlFor="ex2">
+                  <Input
+                    id="ex2"
+                    value={ex.apiKey}
+                    onChange={(e) => setEx({ ...ex, apiKey: e.target.value })}
+                    autoComplete="off"
+                  />
+                </Field>
+                <Field label="API token" htmlFor="ex3">
+                  <Input
+                    id="ex3"
+                    type="password"
+                    value={ex.apiToken}
+                    onChange={(e) => setEx({ ...ex, apiToken: e.target.value })}
+                    autoComplete="new-password"
+                  />
+                </Field>
                 <Field label="Exotel region" htmlFor="ex5">
-                  <Select id="ex5" value={ex.host} onChange={(e) => setEx({ ...ex, host: e.target.value })}>
+                  <Select
+                    id="ex5"
+                    value={ex.host}
+                    onChange={(e) => setEx({ ...ex, host: e.target.value })}
+                  >
                     <option value="api.exotel.com">Singapore (api.exotel.com)</option>
                     <option value="api.in.exotel.com">Mumbai (api.in.exotel.com)</option>
                   </Select>
                 </Field>
-                <Field label="Webhook key" htmlFor="ex7" hint="The key from the Webhook key section. Right after making it, it is filled in for you."><Input id="ex7" className="font-mono text-xs" value={ex.webhookKey || key || ''} onChange={(e) => setEx({ ...ex, webhookKey: e.target.value })} autoComplete="off" /></Field>
+                <Field
+                  label="Webhook key"
+                  htmlFor="ex7"
+                  hint="The key from the Webhook key section. Right after making it, it is filled in for you."
+                >
+                  <Input
+                    id="ex7"
+                    className="font-mono text-xs"
+                    value={ex.webhookKey || key || ''}
+                    onChange={(e) => setEx({ ...ex, webhookKey: e.target.value })}
+                    autoComplete="off"
+                  />
+                </Field>
               </div>
-              <Field label="This CRM's public API address" htmlFor="ex6" hint="For example https://crm.yourcompany.com/api/v1. Exotel reports calls back to this address."><Input id="ex6"  value={ex.apiAddress} onChange={(e) => setEx({ ...ex, apiAddress: e.target.value })} placeholder="https://crm.yourcompany.com/api/v1" autoComplete="off" /></Field>
-              <label className="flex items-center gap-2.5 text-sm"><input type="checkbox" checked={ex.record} onChange={(e) => setEx({ ...ex, record: e.target.checked })} className="h-4 w-4 accent-[#0f625e]" /> Record calls</label>
-              <p className="text-xs text-muted">For incoming and missed calls, point your Exotel Passthru applet (GET) at <code>{(ex.apiAddress || '<API address>').replace(/\/+$/, '')}/telephony/hooks/exotel/&lt;webhook key&gt;</code>.</p>
+              <Field
+                label="This CRM's public API address"
+                htmlFor="ex6"
+                hint="For example https://crm.yourcompany.com/api/v1. Exotel reports calls back to this address."
+              >
+                <Input
+                  id="ex6"
+                  value={ex.apiAddress}
+                  onChange={(e) => setEx({ ...ex, apiAddress: e.target.value })}
+                  placeholder="https://crm.yourcompany.com/api/v1"
+                  autoComplete="off"
+                />
+              </Field>
+              <label className="flex items-center gap-2.5 text-sm">
+                <input
+                  type="checkbox"
+                  checked={ex.record}
+                  onChange={(e) => setEx({ ...ex, record: e.target.checked })}
+                  className="h-4 w-4 accent-[#0f625e]"
+                />{' '}
+                Record calls
+              </label>
+              <p className="text-xs text-muted">
+                For incoming and missed calls, point your Exotel Passthru applet (GET) at{' '}
+                <code>
+                  {(ex.apiAddress || '<API address>').replace(/\/+$/, '')}
+                  /telephony/hooks/exotel/&lt;webhook key&gt;
+                </code>
+                .
+              </p>
             </div>
           ) : (
-            <Field label="Provider settings and credentials" htmlFor="tc" hint={c?.hasCredentials ? 'Credentials are saved and hidden. Paste new JSON only to replace them.' : 'JSON given by your provider. It is stored encrypted and never shown again.'}>
-              <Textarea id="tc" value={config} onChange={(e) => setConfig(e.target.value)} placeholder={c?.hasCredentials ? 'Leave empty to keep what is saved' : 'Paste the JSON your provider gave you'} className="min-h-28 font-mono text-xs" autoComplete="off" spellCheck={false} />
+            <Field
+              label="Provider settings and credentials"
+              htmlFor="tc"
+              hint={
+                c?.hasCredentials
+                  ? 'Credentials are saved and hidden. Paste new JSON only to replace them.'
+                  : 'JSON given by your provider. It is stored encrypted and never shown again.'
+              }
+            >
+              <Textarea
+                id="tc"
+                value={config}
+                onChange={(e) => setConfig(e.target.value)}
+                placeholder={
+                  c?.hasCredentials
+                    ? 'Leave empty to keep what is saved'
+                    : 'Paste the JSON your provider gave you'
+                }
+                className="min-h-28 font-mono text-xs"
+                autoComplete="off"
+                spellCheck={false}
+              />
             </Field>
           )}
-          <Field label="Recording hosts" htmlFor="th" hint="One per line. Recordings are downloaded only from these hosts, for example recordings.provider.com.">
-            <Textarea id="th" value={hostText} onChange={(e) => setHosts(e.target.value)} className="min-h-20 font-mono text-xs" spellCheck={false} />
+          <Field
+            label="Recording hosts"
+            htmlFor="th"
+            hint="One per line. Recordings are downloaded only from these hosts, for example recordings.provider.com."
+          >
+            <Textarea
+              id="th"
+              value={hostText}
+              onChange={(e) => setHosts(e.target.value)}
+              className="min-h-20 font-mono text-xs"
+              spellCheck={false}
+            />
           </Field>
-          <Button type="submit" loading={busy}>Save</Button>
+          <Button type="submit" loading={busy}>
+            Save
+          </Button>
         </form>
       </Panel>
 
       {c && (
         <Panel title="Webhook key">
           <div className="max-w-2xl space-y-3">
-            <p className="text-sm text-muted">Your provider sends call events to <code>/api/v1/telephony/webhook</code> on your API address, with this key in the <code>Authorization: Bearer</code> or <code>X-Webhook-Key</code> header. Exotel cannot send headers, so it uses the address form instead (see above).</p>
-            <p className="flex items-center gap-2 text-sm">Current key starts with <Badge>{c.webhookKeyPrefix}…</Badge></p>
-            {key ? <KeyBox value={key} onClose={() => setKey(null)} /> : <Button variant="secondary" onClick={() => void rotate()}><RotateCw className="h-3.5 w-3.5" aria-hidden /> Make a new key</Button>}
+            <p className="text-sm text-muted">
+              Your provider sends call events to <code>/api/v1/telephony/webhook</code> on your API
+              address, with this key in the <code>Authorization: Bearer</code> or{' '}
+              <code>X-Webhook-Key</code> header. Exotel cannot send headers, so it uses the address
+              form instead (see above).
+            </p>
+            <p className="flex items-center gap-2 text-sm">
+              Current key starts with <Badge>{c.webhookKeyPrefix}…</Badge>
+            </p>
+            {key ? (
+              <KeyBox value={key} onClose={() => setKey(null)} />
+            ) : (
+              <Button variant="secondary" onClick={() => void rotate()}>
+                <RotateCw className="h-3.5 w-3.5" aria-hidden /> Make a new key
+              </Button>
+            )}
           </div>
         </Panel>
       )}

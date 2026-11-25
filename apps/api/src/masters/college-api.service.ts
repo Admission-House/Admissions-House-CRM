@@ -47,34 +47,70 @@ export class CollegeApiService {
 
   private async fetchTable() {
     const url = this.env.COLLEGE_API_URL;
-    if (!url) throw new AppError('COLLEGE_API_NOT_SET', 'The college data connection is not set up yet. Add COLLEGE_API_URL and COLLEGE_API_KEY to the environment.', 409);
+    if (!url)
+      throw new AppError(
+        'COLLEGE_API_NOT_SET',
+        'The college data connection is not set up yet. Add COLLEGE_API_URL and COLLEGE_API_KEY to the environment.',
+        409,
+      );
 
     const headers: Record<string, string> = { accept: 'application/json' };
     if (this.env.COLLEGE_API_KEY) {
       const scheme = this.env.COLLEGE_API_AUTH_SCHEME;
-      headers[this.env.COLLEGE_API_AUTH_HEADER] = scheme ? `${scheme} ${this.env.COLLEGE_API_KEY}` : this.env.COLLEGE_API_KEY;
+      headers[this.env.COLLEGE_API_AUTH_HEADER] = scheme
+        ? `${scheme} ${this.env.COLLEGE_API_KEY}`
+        : this.env.COLLEGE_API_KEY;
     }
 
     let res: Response;
     try {
-      res = await fetch(url, { headers, signal: AbortSignal.timeout(this.env.COLLEGE_API_TIMEOUT_SEC * 1000), redirect: 'error' });
+      res = await fetch(url, {
+        headers,
+        signal: AbortSignal.timeout(this.env.COLLEGE_API_TIMEOUT_SEC * 1000),
+        redirect: 'error',
+      });
     } catch {
-      throw new AppError('COLLEGE_API_UNREACHABLE', 'Could not reach the college data provider. Try again in a moment.', 502);
+      throw new AppError(
+        'COLLEGE_API_UNREACHABLE',
+        'Could not reach the college data provider. Try again in a moment.',
+        502,
+      );
     }
-    if (res.status === 401 || res.status === 403) throw new AppError('COLLEGE_API_REFUSED', 'The college data provider refused the key. Check COLLEGE_API_KEY.', 502);
-    if (!res.ok) throw new AppError('COLLEGE_API_FAILED', `The college data provider answered with an error (${res.status}).`, 502);
+    if (res.status === 401 || res.status === 403)
+      throw new AppError(
+        'COLLEGE_API_REFUSED',
+        'The college data provider refused the key. Check COLLEGE_API_KEY.',
+        502,
+      );
+    if (!res.ok)
+      throw new AppError(
+        'COLLEGE_API_FAILED',
+        `The college data provider answered with an error (${res.status}).`,
+        502,
+      );
 
     const text = await this.readLimited(res);
     let body: unknown;
     try {
       body = JSON.parse(text);
     } catch {
-      throw new AppError('COLLEGE_API_BAD_RESPONSE', 'The college data provider did not send JSON.', 502);
+      throw new AppError(
+        'COLLEGE_API_BAD_RESPONSE',
+        'The college data provider did not send JSON.',
+        502,
+      );
     }
     try {
-      return tableFromJson(body, { itemsPath: this.env.COLLEGE_API_ITEMS_PATH, fieldMap: parseFieldMap(this.env.COLLEGE_API_FIELD_MAP) });
+      return tableFromJson(body, {
+        itemsPath: this.env.COLLEGE_API_ITEMS_PATH,
+        fieldMap: parseFieldMap(this.env.COLLEGE_API_FIELD_MAP),
+      });
     } catch (err) {
-      throw new AppError('COLLEGE_API_BAD_RESPONSE', err instanceof Error ? err.message : 'The response could not be read.', 502);
+      throw new AppError(
+        'COLLEGE_API_BAD_RESPONSE',
+        err instanceof Error ? err.message : 'The response could not be read.',
+        502,
+      );
     }
   }
 
@@ -91,7 +127,11 @@ export class CollegeApiService {
       size += value.byteLength;
       if (size > max) {
         await reader.cancel();
-        throw new AppError('COLLEGE_API_TOO_BIG', 'The college data provider sent more data than is allowed.', 502);
+        throw new AppError(
+          'COLLEGE_API_TOO_BIG',
+          'The college data provider sent more data than is allowed.',
+          502,
+        );
       }
       chunks.push(value);
     }

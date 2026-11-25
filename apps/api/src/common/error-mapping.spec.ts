@@ -5,16 +5,23 @@ import { AppError } from './app-error.js';
 import { mapError } from './error-mapping.js';
 
 const pgError = (code: string, constraint = 'some_constraint') =>
-  Object.assign(new Error('internal detail: table leads, constraint some_constraint'), { code, constraint });
+  Object.assign(new Error('internal detail: table leads, constraint some_constraint'), {
+    code,
+    constraint,
+  });
 
 describe('mapError', () => {
   it('passes an AppError through unchanged', () => {
-    const mapped = mapError(AppError.conflict('LEAD_EXISTS', 'This phone number already has a lead'));
+    const mapped = mapError(
+      AppError.conflict('LEAD_EXISTS', 'This phone number already has a lead'),
+    );
     expect(mapped).toMatchObject({ status: 409, code: 'LEAD_EXISTS', unexpected: false });
   });
 
   it('turns a failed validation into field errors', () => {
-    class Dto extends createZodDto(z.object({ name: z.string().min(2), phone: z.string().regex(/^\d{10}$/) })) {}
+    class Dto extends createZodDto(
+      z.object({ name: z.string().min(2), phone: z.string().regex(/^\d{10}$/) }),
+    ) {}
     const result = Dto.schema.safeParse({ name: 'A', phone: 'abc' });
     expect(result.success).toBe(false);
     const mapped = mapError(new ZodValidationException(result.error!));
@@ -24,7 +31,10 @@ describe('mapError', () => {
   });
 
   it('keeps the status of Nest HTTP exceptions', () => {
-    expect(mapError(new NotFoundException('gone'))).toMatchObject({ status: 404, code: 'NOT_FOUND' });
+    expect(mapError(new NotFoundException('gone'))).toMatchObject({
+      status: 404,
+      code: 'NOT_FOUND',
+    });
     expect(mapError(new BadRequestException(['a is wrong', 'b is wrong']))).toMatchObject({
       status: 400,
       message: 'a is wrong; b is wrong',
@@ -48,23 +58,35 @@ describe('mapError', () => {
     });
 
     it('deadlocks and timeouts ask the client to retry', () => {
-      expect(mapError(pgError('40P01'))).toMatchObject({ status: 503, code: 'RETRY', headers: { 'retry-after': '1' } });
+      expect(mapError(pgError('40P01'))).toMatchObject({
+        status: 503,
+        code: 'RETRY',
+        headers: { 'retry-after': '1' },
+      });
       expect(mapError(pgError('57014'))).toMatchObject({ status: 503, code: 'TIMEOUT' });
     });
 
     it('a lost connection is reported as unavailable', () => {
       expect(mapError(pgError('08006')).status).toBe(503);
-      expect(mapError(Object.assign(new Error('connect'), { code: 'ECONNREFUSED' })).status).toBe(503);
+      expect(mapError(Object.assign(new Error('connect'), { code: 'ECONNREFUSED' })).status).toBe(
+        503,
+      );
     });
   });
 
   it('a full database pool is a 503 with a retry hint, not a 500', () => {
-    expect(mapError(new Error('timeout exceeded when trying to connect'))).toMatchObject({ status: 503, code: 'BUSY', headers: { 'retry-after': '2' } });
+    expect(mapError(new Error('timeout exceeded when trying to connect'))).toMatchObject({
+      status: 503,
+      code: 'BUSY',
+      headers: { 'retry-after': '2' },
+    });
     expect(mapError(new Error('Connection terminated due to connection timeout')).status).toBe(503);
   });
 
   it('hides the details of an unexpected error', () => {
-    const mapped = mapError(new TypeError("Cannot read properties of undefined (reading 'password_hash')"));
+    const mapped = mapError(
+      new TypeError("Cannot read properties of undefined (reading 'password_hash')"),
+    );
     expect(mapped).toMatchObject({ status: 500, code: 'INTERNAL', unexpected: true });
     expect(mapped.message).not.toMatch(/password_hash|undefined/);
   });

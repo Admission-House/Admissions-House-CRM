@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { splitCsv } from './split-csv';
 
-const sheet = (n: number) => ['Name,Phone', ...Array.from({ length: n }, (_v, i) => `Student ${i},98${String(10000000 + i)}`)].join('\n') + '\n';
+const sheet = (n: number) =>
+  [
+    'Name,Phone',
+    ...Array.from({ length: n }, (_v, i) => `Student ${i},98${String(10000000 + i)}`),
+  ].join('\n') + '\n';
 
 describe('splitCsv', () => {
   it('keeps a small file as one part', () => {
@@ -23,7 +27,10 @@ describe('splitCsv', () => {
   });
 
   it('also cuts by size so a part always fits in one request', () => {
-    const wide = ['Name,Notes', ...Array.from({ length: 20 }, (_v, i) => `S${i},${'x'.repeat(1000)}`)].join('\n');
+    const wide = [
+      'Name,Notes',
+      ...Array.from({ length: 20 }, (_v, i) => `S${i},${'x'.repeat(1000)}`),
+    ].join('\n');
     const r = splitCsv(wide, 5000, 5000);
     expect(r.parts.length).toBeGreaterThan(3);
     for (const p of r.parts) expect(p.length).toBeLessThan(6500);

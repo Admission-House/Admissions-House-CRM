@@ -1,6 +1,12 @@
 import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
-import { Inject, Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  OnApplicationBootstrap,
+  OnModuleDestroy,
+} from '@nestjs/common';
 import { HttpAdapterHost } from '@nestjs/core';
 import { sql } from 'kysely';
 import { WebSocket, WebSocketServer } from 'ws';
@@ -25,7 +31,14 @@ const MAX_MESSAGES_PER_10S = 20;
 const HEARTBEAT_MS = 30_000;
 
 /** Close codes the browser understands (4xxx is for applications). */
-export const CLOSE = { badRequest: 4400, signIn: 4401, timeout: 4408, replaced: 4409, tooMany: 4429, stopping: 1001 } as const;
+export const CLOSE = {
+  badRequest: 4400,
+  signIn: 4401,
+  timeout: 4408,
+  replaced: 4409,
+  tooMany: 4429,
+  stopping: 1001,
+} as const;
 
 /** A browser sends its origin; one that is not on the list is refused. A tool with no origin is not a browser and passes to the sign-in. */
 export function originAllowed(origin: string | undefined, allowed: readonly string[]): boolean {
@@ -33,11 +46,17 @@ export function originAllowed(origin: string | undefined, allowed: readonly stri
 }
 
 /** The address of the person, trusting only as many proxies as are configured. */
-export function clientIp(req: Pick<IncomingMessage, 'socket' | 'headers'>, proxyHops: number): string {
+export function clientIp(
+  req: Pick<IncomingMessage, 'socket' | 'headers'>,
+  proxyHops: number,
+): string {
   const direct = req.socket.remoteAddress ?? 'unknown';
   const forwarded = req.headers['x-forwarded-for'];
   if (proxyHops <= 0 || typeof forwarded !== 'string') return direct;
-  const chain = forwarded.split(',').map((s) => s.trim()).filter(Boolean);
+  const chain = forwarded
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
   return chain[Math.max(0, chain.length - proxyHops)] ?? direct;
 }
 
@@ -74,7 +93,10 @@ export class RealtimeGateway implements OnApplicationBootstrap, OnModuleDestroy 
     server.on('upgrade', this.upgradeHandler);
     this.stopListening = this.bus.on((event) => this.hub.dispatch(event));
 
-    this.timers.push(setInterval(() => this.heartbeat(), HEARTBEAT_MS), setInterval(() => void this.recheck(), this.env.REALTIME_RECHECK_SEC * 1000));
+    this.timers.push(
+      setInterval(() => this.heartbeat(), HEARTBEAT_MS),
+      setInterval(() => void this.recheck(), this.env.REALTIME_RECHECK_SEC * 1000),
+    );
     for (const t of this.timers) t.unref();
   }
 
@@ -82,7 +104,8 @@ export class RealtimeGateway implements OnApplicationBootstrap, OnModuleDestroy 
     for (const t of this.timers) clearInterval(t);
     this.timers.length = 0;
     this.stopListening?.();
-    if (this.upgradeHandler) this.adapter.httpAdapter.getHttpServer().off('upgrade', this.upgradeHandler);
+    if (this.upgradeHandler)
+      this.adapter.httpAdapter.getHttpServer().off('upgrade', this.upgradeHandler);
     this.hub.closeAll(CLOSE.stopping, 'server stopping');
     for (const c of this.wss?.clients ?? []) c.terminate();
     this.wss?.close();
@@ -96,12 +119,16 @@ export class RealtimeGateway implements OnApplicationBootstrap, OnModuleDestroy 
   private onUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer): void {
     const path = (req.url ?? '').split('?')[0];
     if (path !== WS_PATH || !this.wss) return void socket.destroy();
-    if (!originAllowed(req.headers.origin, this.env.CORS_ORIGINS)) return this.refuse(socket, '403 Forbidden');
+    if (!originAllowed(req.headers.origin, this.env.CORS_ORIGINS))
+      return this.refuse(socket, '403 Forbidden');
 
     const ip = clientIp(req, this.env.TRUST_PROXY_HOPS);
-    if ((this.unsigned.get(ip) ?? 0) >= MAX_UNSIGNED_PER_IP) return this.refuse(socket, '429 Too Many Requests');
+    if ((this.unsigned.get(ip) ?? 0) >= MAX_UNSIGNED_PER_IP)
+      return this.refuse(socket, '429 Too Many Requests');
 
-    this.wss.handleUpgrade(req, socket, head, (ws) => this.accept(ws as Live, ip, req.headers['user-agent'] ?? null));
+    this.wss.handleUpgrade(req, socket, head, (ws) =>
+      this.accept(ws as Live, ip, req.headers['user-agent'] ?? null),
+    );
   }
 
   private accept(ws: Live, ip: string, userAgent: string | null): void {
@@ -122,7 +149,9 @@ export class RealtimeGateway implements OnApplicationBootstrap, OnModuleDestroy 
     let messages = 0;
     const authTimer = setTimeout(() => ws.close(CLOSE.timeout, 'sign-in timeout'), AUTH_TIMEOUT_MS);
 
-    ws.on('pong', () => { ws.isAlive = true; });
+    ws.on('pong', () => {
+      ws.isAlive = true;
+    });
     ws.on('error', () => ws.terminate());
     ws.on('close', () => {
       clearTimeout(authTimer);
@@ -132,7 +161,10 @@ export class RealtimeGateway implements OnApplicationBootstrap, OnModuleDestroy 
 
     ws.on('message', (data) => {
       const now = Date.now();
-      if (now - windowStart > 10_000) { windowStart = now; messages = 0; }
+      if (now - windowStart > 10_000) {
+        windowStart = now;
+        messages = 0;
+      }
       if (++messages > MAX_MESSAGES_PER_10S) return ws.close(CLOSE.tooMany, 'too many messages');
 
       let msg: { type?: unknown; token?: unknown };
@@ -147,16 +179,19 @@ export class RealtimeGateway implements OnApplicationBootstrap, OnModuleDestroy 
         return;
       }
       if (signingIn) return;
-      if (msg.type !== 'auth' || typeof msg.token !== 'string') return ws.close(CLOSE.badRequest, 'sign in first');
+      if (msg.type !== 'auth' || typeof msg.token !== 'string')
+        return ws.close(CLOSE.badRequest, 'sign in first');
 
       signingIn = true;
       // Not counted as activity: a connection that keeps reconnecting must not keep an idle session open.
-      this.auth.authenticate(msg.token, { ip, userAgent, requestId: 'ws' }, { touch: false })
+      this.auth
+        .authenticate(msg.token, { ip, userAgent, requestId: 'ws' }, { touch: false })
         .then((auth) => {
           if (ws.readyState !== WebSocket.OPEN) return;
           clearTimeout(authTimer);
           sub = this.subscriberFor(ws, auth);
-          for (const old of this.hub.add(sub, MAX_PER_USER)) old.socket.close(CLOSE.replaced, 'another window was opened');
+          for (const old of this.hub.add(sub, MAX_PER_USER))
+            old.socket.close(CLOSE.replaced, 'another window was opened');
           signedOrGone();
           ws.send('{"type":"ready"}');
         })
@@ -177,7 +212,10 @@ export class RealtimeGateway implements OnApplicationBootstrap, OnModuleDestroy 
   /** Closes a connection that has stopped answering, so a closed laptop does not stay on the list. */
   private heartbeat(): void {
     for (const ws of (this.wss?.clients ?? []) as Set<Live>) {
-      if (ws.isAlive === false) { ws.terminate(); continue; }
+      if (ws.isAlive === false) {
+        ws.terminate();
+        continue;
+      }
       ws.isAlive = false;
       ws.ping();
     }
@@ -189,18 +227,24 @@ export class RealtimeGateway implements OnApplicationBootstrap, OnModuleDestroy 
    */
   async recheck(): Promise<void> {
     const byTenant = new Map<string, Subscriber[]>();
-    for (const s of this.hub.all()) byTenant.set(s.tenantId, [...(byTenant.get(s.tenantId) ?? []), s]);
+    for (const s of this.hub.all())
+      byTenant.set(s.tenantId, [...(byTenant.get(s.tenantId) ?? []), s]);
     for (const [tenantId, subs] of byTenant) {
       try {
         const live = await this.db.withTenant(tenantId, async (trx) => {
           const { rows } = await sql<{ id: string }>`
             SELECT s.id FROM user_sessions s JOIN users u ON u.id = s.user_id AND u.status = 'active'
-            WHERE s.id = ANY(${[...new Set(subs.map((x) => x.sessionId))]}::uuid[]) AND s.ended_at IS NULL AND s.expires_at > now()`.execute(trx);
+            WHERE s.id = ANY(${[...new Set(subs.map((x) => x.sessionId))]}::uuid[]) AND s.ended_at IS NULL AND s.expires_at > now()`.execute(
+            trx,
+          );
           return new Set(rows.map((r) => r.id));
         });
-        for (const s of subs) if (!live.has(s.sessionId)) s.socket.close(CLOSE.signIn, 'signed out');
+        for (const s of subs)
+          if (!live.has(s.sessionId)) s.socket.close(CLOSE.signIn, 'signed out');
       } catch (e) {
-        this.logger.warn(`could not check live sessions: ${e instanceof Error ? e.message : String(e)}`);
+        this.logger.warn(
+          `could not check live sessions: ${e instanceof Error ? e.message : String(e)}`,
+        );
       }
     }
   }

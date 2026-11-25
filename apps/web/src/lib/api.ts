@@ -37,22 +37,44 @@ export const onSessionLost = (fn: () => void) => {
 
 async function parseError(res: Response): Promise<ApiError> {
   try {
-    const body = (await res.json()) as { error?: { code?: string; message?: string; fieldErrors?: FieldError[]; details?: Record<string, unknown>; requestId?: string } };
+    const body = (await res.json()) as {
+      error?: {
+        code?: string;
+        message?: string;
+        fieldErrors?: FieldError[];
+        details?: Record<string, unknown>;
+        requestId?: string;
+      };
+    };
     const e = body.error;
     // The company began requiring two-step sign-in while this page was open: go and set it up. This is not a
     // component, so there is no router here; a full page load also starts the screens afresh.
-    if (e?.code === 'MFA_SETUP_REQUIRED' && typeof window !== 'undefined' && !window.location.pathname.startsWith('/two-step-setup')) {
+    if (
+      e?.code === 'MFA_SETUP_REQUIRED' &&
+      typeof window !== 'undefined' &&
+      !window.location.pathname.startsWith('/two-step-setup')
+    ) {
       // eslint-disable-next-line @next/next/no-location-assign-relative-destination
       window.location.assign('/two-step-setup');
     }
-    return new ApiError(res.status, e?.code ?? 'ERROR', e?.message ?? 'Something went wrong', e?.fieldErrors, e?.details, e?.requestId);
+    return new ApiError(
+      res.status,
+      e?.code ?? 'ERROR',
+      e?.message ?? 'Something went wrong',
+      e?.fieldErrors,
+      e?.details,
+      e?.requestId,
+    );
   } catch {
     // Not our own JSON answer: the hosting in front of the API answered (too big, too slow, not reachable).
     const message =
-      res.status === 413 ? 'This file is too large to upload. The limit is 4 MB.'
-      : res.status === 504 || res.status === 408 ? 'The server took too long to answer. Please try again in a moment.'
-      : res.status === 502 || res.status === 503 ? 'The server is not reachable right now. Please try again in a moment.'
-      : 'Something went wrong. Please try again.';
+      res.status === 413
+        ? 'This file is too large to upload. The limit is 4 MB.'
+        : res.status === 504 || res.status === 408
+          ? 'The server took too long to answer. Please try again in a moment.'
+          : res.status === 502 || res.status === 503
+            ? 'The server is not reachable right now. Please try again in a moment.'
+            : 'Something went wrong. Please try again.';
     return new ApiError(res.status, res.status === 413 ? 'TOO_LARGE' : 'ERROR', message);
   }
 }
@@ -65,7 +87,12 @@ async function parseError(res: Response): Promise<ApiError> {
 export function refreshSession(): Promise<boolean> {
   const renew = async (): Promise<boolean> => {
     try {
-      const res = await fetch(`${BASE}/auth/refresh`, { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: '{}' });
+      const res = await fetch(`${BASE}/auth/refresh`, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+      });
       if (!res.ok) return false;
       accessToken = ((await res.json()) as { accessToken: string }).accessToken;
       return true;
@@ -95,7 +122,8 @@ export interface RequestOptions {
 
 function url(path: string, query?: RequestOptions['query']): string {
   const q = new URLSearchParams();
-  for (const [k, v] of Object.entries(query ?? {})) if (v !== undefined && v !== null && v !== '') q.set(k, String(v));
+  for (const [k, v] of Object.entries(query ?? {}))
+    if (v !== undefined && v !== null && v !== '') q.set(k, String(v));
   const s = q.toString();
   return `${BASE}${path}${s ? `?${s}` : ''}`;
 }
@@ -127,9 +155,17 @@ export async function api<T = unknown>(path: string, opts: RequestOptions = {}):
 }
 
 /** For files (uploads and downloads) that are not JSON. */
-export async function apiRaw(path: string, init: { method?: string; body?: BodyInit; query?: RequestOptions['query'] } = {}): Promise<Response> {
+export async function apiRaw(
+  path: string,
+  init: { method?: string; body?: BodyInit; query?: RequestOptions['query'] } = {},
+): Promise<Response> {
   const send = () =>
-    fetch(url(path, init.query), { method: init.method ?? 'GET', credentials: 'same-origin', body: init.body, headers: accessToken ? { authorization: `Bearer ${accessToken}` } : {} });
+    fetch(url(path, init.query), {
+      method: init.method ?? 'GET',
+      credentials: 'same-origin',
+      body: init.body,
+      headers: accessToken ? { authorization: `Bearer ${accessToken}` } : {},
+    });
   let res = await send();
   if (res.status === 401 && (await refreshSession())) res = await send();
   if (!res.ok) throw await parseError(res);
@@ -139,7 +175,8 @@ export async function apiRaw(path: string, init: { method?: string; body?: BodyI
 /** Saves a file the API returned (a CSV, Excel sheet or PDF) through the browser's download. */
 export async function download(path: string, query?: RequestOptions['query']): Promise<void> {
   const res = await apiRaw(path, { query });
-  const name = /filename="([^"]+)"/.exec(res.headers.get('content-disposition') ?? '')?.[1] ?? 'download';
+  const name =
+    /filename="([^"]+)"/.exec(res.headers.get('content-disposition') ?? '')?.[1] ?? 'download';
   const href = URL.createObjectURL(await res.blob());
   const a = document.createElement('a');
   a.href = href;
@@ -147,3 +184,13 @@ export async function download(path: string, query?: RequestOptions['query']): P
   a.click();
   URL.revokeObjectURL(href);
 }
+
+/** The message to show for a failed request: the server's own words, or that it could not be reached. */
+export const errorText = (e: unknown, fallback = 'Cannot reach the server. Try again.'): string =>
+  e instanceof ApiError ? e.message : fallback;
+
+/** Any failure as an ApiError, for forms that show field errors: a network failure becomes a NETWORK error with the given text. */
+export const asApiError = (
+  e: unknown,
+  fallback = 'Cannot reach the server. Try again.',
+): ApiError => (e instanceof ApiError ? e : new ApiError(0, 'NETWORK', fallback));

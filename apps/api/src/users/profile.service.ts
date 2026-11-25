@@ -19,12 +19,28 @@ const selfFields = {
   emergencyContactName: text(80).nullable(),
   emergencyContactPhone: phone.nullable(),
   bankName: text(80).nullable(),
-  bankAccountNo: z.string().trim().regex(/^\d{6,20}$/, 'Account number is 6 to 20 digits').nullable(),
-  bankIfsc: z.string().trim().toUpperCase().regex(/^[A-Z]{4}0[A-Z0-9]{6}$/, 'IFSC looks like HDFC0001234').nullable(),
+  bankAccountNo: z
+    .string()
+    .trim()
+    .regex(/^\d{6,20}$/, 'Account number is 6 to 20 digits')
+    .nullable(),
+  bankIfsc: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^[A-Z]{4}0[A-Z0-9]{6}$/, 'IFSC looks like HDFC0001234')
+    .nullable(),
 };
-export const selfProfileSchema = z.object(selfFields).strict().partial().refine((v) => Object.keys(v).length > 0, 'Send at least one field to change');
+export const selfProfileSchema = z
+  .object(selfFields)
+  .strict()
+  .partial()
+  .refine((v) => Object.keys(v).length > 0, 'Send at least one field to change');
 /** What someone who manages people may change: the above and the HR details. */
-export const staffProfileSchema = z.object({ ...selfFields, designation: text(80).nullable(), dateOfBirth: calendarDate.nullable() }).partial().refine((v) => Object.keys(v).length > 0, 'Send at least one field to change');
+export const staffProfileSchema = z
+  .object({ ...selfFields, designation: text(80).nullable(), dateOfBirth: calendarDate.nullable() })
+  .partial()
+  .refine((v) => Object.keys(v).length > 0, 'Send at least one field to change');
 export type ProfileChange = z.infer<typeof staffProfileSchema>;
 
 export interface ProfileView {
@@ -45,12 +61,23 @@ export interface ProfileView {
 }
 
 interface Row {
-  id: string; name: string; email: string; phone: string | null; joined_on: string | null; designation: string | null; date_of_birth: string | null;
-  address: string | null; emergency_contact_name: string | null; emergency_contact_phone: string | null; bank_name: string | null;
-  bank_account_no_enc: string | null; bank_ifsc_enc: string | null;
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  joined_on: string | null;
+  designation: string | null;
+  date_of_birth: string | null;
+  address: string | null;
+  emergency_contact_name: string | null;
+  emergency_contact_phone: string | null;
+  bank_name: string | null;
+  bank_account_no_enc: string | null;
+  bank_ifsc_enc: string | null;
 }
 
-const context = (tenantId: string, userId: string, field: string) => `profile:${tenantId}:${userId}:${field}`;
+const context = (tenantId: string, userId: string, field: string) =>
+  `profile:${tenantId}:${userId}:${field}`;
 
 /**
  * Employee details beyond the login: HR details, an emergency contact and bank details. The account
@@ -72,7 +99,15 @@ export class ProfileService {
       const full = reveal && (userId === auth.userId || auth.permissions.has('salary.write'));
       if (reveal && !full) throw AppError.forbidden();
       if (reveal && row.bank_account_no_enc) {
-        await this.audit.write(trx, { tenantId: auth.tenantId, actorId: auth.userId, action: 'profile.reveal_bank', entity: 'user', entityId: userId, ip: auth.ip, requestId: auth.requestId });
+        await this.audit.write(trx, {
+          tenantId: auth.tenantId,
+          actorId: auth.userId,
+          action: 'profile.reveal_bank',
+          entity: 'user',
+          entityId: userId,
+          ip: auth.ip,
+          requestId: auth.requestId,
+        });
       }
       return this.toView(auth.tenantId, row, full);
     });
@@ -83,7 +118,8 @@ export class ProfileService {
       const own = userId === auth.userId;
       if (!own) await this.reachable(trx, auth, userId);
       const hrFields = ['designation', 'dateOfBirth'] as const;
-      if (hrFields.some((f) => f in change) && !auth.permissions.has('user.manage')) throw AppError.forbidden();
+      if (hrFields.some((f) => f in change) && !auth.permissions.has('user.manage'))
+        throw AppError.forbidden();
       if (!own && !auth.permissions.has('user.manage')) throw AppError.forbidden();
 
       const before = await this.row(trx, userId);
@@ -91,21 +127,44 @@ export class ProfileService {
       if ('designation' in change) set.designation = change.designation ?? null;
       if ('dateOfBirth' in change) set.date_of_birth = change.dateOfBirth ?? null;
       if ('address' in change) set.address = change.address ?? null;
-      if ('emergencyContactName' in change) set.emergency_contact_name = change.emergencyContactName ?? null;
-      if ('emergencyContactPhone' in change) set.emergency_contact_phone = change.emergencyContactPhone ?? null;
+      if ('emergencyContactName' in change)
+        set.emergency_contact_name = change.emergencyContactName ?? null;
+      if ('emergencyContactPhone' in change)
+        set.emergency_contact_phone = change.emergencyContactPhone ?? null;
       if ('bankName' in change) set.bank_name = change.bankName ?? null;
-      if ('bankAccountNo' in change) set.bank_account_no_enc = change.bankAccountNo ? this.box.seal(change.bankAccountNo, context(auth.tenantId, userId, 'account')) : null;
-      if ('bankIfsc' in change) set.bank_ifsc_enc = change.bankIfsc ? this.box.seal(change.bankIfsc, context(auth.tenantId, userId, 'ifsc')) : null;
+      if ('bankAccountNo' in change)
+        set.bank_account_no_enc = change.bankAccountNo
+          ? this.box.seal(change.bankAccountNo, context(auth.tenantId, userId, 'account'))
+          : null;
+      if ('bankIfsc' in change)
+        set.bank_ifsc_enc = change.bankIfsc
+          ? this.box.seal(change.bankIfsc, context(auth.tenantId, userId, 'ifsc'))
+          : null;
 
       await trx
         .insertInto('user_profiles')
         .values({ tenant_id: auth.tenantId, user_id: userId, ...set } as never)
-        .onConflict((oc) => oc.column('user_id').doUpdateSet({ ...set, updated_at: sql`now()` } as never))
+        .onConflict((oc) =>
+          oc.column('user_id').doUpdateSet({ ...set, updated_at: sql`now()` } as never),
+        )
         .execute();
       await this.audit.write(trx, {
-        tenantId: auth.tenantId, actorId: auth.userId, action: 'profile.update', entity: 'user', entityId: userId,
-        before: this.safe(before), after: Object.fromEntries(Object.keys(change).map((k) => [k, k.startsWith('bank') && k !== 'bankName' ? '(changed)' : (change as Record<string, unknown>)[k]])),
-        ip: auth.ip, requestId: auth.requestId,
+        tenantId: auth.tenantId,
+        actorId: auth.userId,
+        action: 'profile.update',
+        entity: 'user',
+        entityId: userId,
+        before: this.safe(before),
+        after: Object.fromEntries(
+          Object.keys(change).map((k) => [
+            k,
+            k.startsWith('bank') && k !== 'bankName'
+              ? '(changed)'
+              : (change as Record<string, unknown>)[k],
+          ]),
+        ),
+        ip: auth.ip,
+        requestId: auth.requestId,
       });
       return this.toView(auth.tenantId, await this.row(trx, userId), false);
     });
@@ -117,7 +176,11 @@ export class ProfileService {
     if (userId === auth.userId) return;
     if (!auth.permissions.has('user.read')) throw AppError.forbidden();
     const scoped = scopeCondition(auth, 'u.id');
-    const { rows } = await sql<{ id: string }>`SELECT u.id FROM users u WHERE u.id = ${userId}::uuid ${scoped ? sql`AND ${scoped}` : sql``}`.execute(trx);
+    const { rows } = await sql<{
+      id: string;
+    }>`SELECT u.id FROM users u WHERE u.id = ${userId}::uuid ${scoped ? sql`AND ${scoped}` : sql``}`.execute(
+      trx,
+    );
     if (!rows[0]) throw AppError.notFound('User');
   }
 
@@ -125,23 +188,48 @@ export class ProfileService {
     const { rows } = await sql<Row>`
       SELECT u.id, u.name, u.email::text AS email, u.phone, u.joined_on::text AS joined_on, p.designation, p.date_of_birth::text AS date_of_birth, p.address,
              p.emergency_contact_name, p.emergency_contact_phone, p.bank_name, p.bank_account_no_enc, p.bank_ifsc_enc
-      FROM users u LEFT JOIN user_profiles p ON p.user_id = u.id WHERE u.id = ${userId}::uuid`.execute(trx);
+      FROM users u LEFT JOIN user_profiles p ON p.user_id = u.id WHERE u.id = ${userId}::uuid`.execute(
+      trx,
+    );
     if (!rows[0]) throw AppError.notFound('User');
     return rows[0];
   }
 
   private toView(tenantId: string, r: Row, full: boolean): ProfileView {
-    const account = r.bank_account_no_enc ? this.box.open(r.bank_account_no_enc, context(tenantId, r.id, 'account')) : null;
+    const account = r.bank_account_no_enc
+      ? this.box.open(r.bank_account_no_enc, context(tenantId, r.id, 'account'))
+      : null;
     return {
-      userId: r.id, name: r.name, email: r.email, phone: r.phone, joinedOn: r.joined_on, designation: r.designation, dateOfBirth: r.date_of_birth, address: r.address,
-      emergencyContactName: r.emergency_contact_name, emergencyContactPhone: r.emergency_contact_phone, bankName: r.bank_name,
-      bankAccountNo: account && (full ? account : `${'*'.repeat(Math.max(0, account.length - 4))}${account.slice(-4)}`),
-      bankIfsc: r.bank_ifsc_enc ? this.box.open(r.bank_ifsc_enc, context(tenantId, r.id, 'ifsc')) : null,
+      userId: r.id,
+      name: r.name,
+      email: r.email,
+      phone: r.phone,
+      joinedOn: r.joined_on,
+      designation: r.designation,
+      dateOfBirth: r.date_of_birth,
+      address: r.address,
+      emergencyContactName: r.emergency_contact_name,
+      emergencyContactPhone: r.emergency_contact_phone,
+      bankName: r.bank_name,
+      bankAccountNo:
+        account &&
+        (full ? account : `${'*'.repeat(Math.max(0, account.length - 4))}${account.slice(-4)}`),
+      bankIfsc: r.bank_ifsc_enc
+        ? this.box.open(r.bank_ifsc_enc, context(tenantId, r.id, 'ifsc'))
+        : null,
     };
   }
 
   /** The profile as it is written to the audit log: no bank numbers. */
   private safe(r: Row) {
-    return { designation: r.designation, dateOfBirth: r.date_of_birth, address: r.address, emergencyContactName: r.emergency_contact_name, emergencyContactPhone: r.emergency_contact_phone, bankName: r.bank_name, hasBankAccount: !!r.bank_account_no_enc };
+    return {
+      designation: r.designation,
+      dateOfBirth: r.date_of_birth,
+      address: r.address,
+      emergencyContactName: r.emergency_contact_name,
+      emergencyContactPhone: r.emergency_contact_phone,
+      bankName: r.bank_name,
+      hasBankAccount: !!r.bank_account_no_enc,
+    };
   }
 }

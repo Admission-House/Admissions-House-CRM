@@ -21,7 +21,10 @@ export const personalSchema = z
   .object({
     alternateEmail: z.string().trim().toLowerCase().email().max(254).nullable(),
     dateOfBirth: calendarDate
-      .refine((d) => d <= new Date().toISOString().slice(0, 10), 'The date of birth cannot be in the future')
+      .refine(
+        (d) => d <= new Date().toISOString().slice(0, 10),
+        'The date of birth cannot be in the future',
+      )
       .refine((d) => d >= '1940-01-01', 'Check the year of birth')
       .nullable(),
     gender: z.enum(['male', 'female', 'other']).nullable(),
@@ -30,7 +33,12 @@ export const personalSchema = z
     currentLocationId: z.uuid().nullable(),
     /** Replaces the whole list of extra numbers. */
     extraPhones: z
-      .array(z.object({ phone, label: z.enum(['alternate', 'parent', 'whatsapp', 'other']).default('alternate') }))
+      .array(
+        z.object({
+          phone,
+          label: z.enum(['alternate', 'parent', 'whatsapp', 'other']).default('alternate'),
+        }),
+      )
       .max(5)
       .superRefine((list, ctx) => unique(list, (p) => p.phone, ctx, 'A phone number')),
   })
@@ -45,7 +53,10 @@ export const preferencesSchema = z
     budgetMax: z.number().min(0).max(100_000_000).nullable(),
     loanRequired: z.boolean().nullable(),
     /** Replaces the whole list of preferred states and cities. */
-    preferredLocationIds: z.array(z.uuid()).max(20).transform((ids) => [...new Set(ids)]),
+    preferredLocationIds: z
+      .array(z.uuid())
+      .max(20)
+      .transform((ids) => [...new Set(ids)]),
   })
   .partial();
 
@@ -66,8 +77,14 @@ export const educationSchema = z
     passingYear: z.number().int().min(1980).max(2100).nullable().default(null),
   })
   .superRefine((e, ctx) => {
-    if (e.marks !== null && e.marksType === null) ctx.addIssue({ code: 'custom', path: ['marksType'], message: 'Say whether the marks are a percentage or a CGPA' });
-    if (e.marksType === 'cgpa' && e.marks !== null && e.marks > 10) ctx.addIssue({ code: 'custom', path: ['marks'], message: 'A CGPA is out of 10' });
+    if (e.marks !== null && e.marksType === null)
+      ctx.addIssue({
+        code: 'custom',
+        path: ['marksType'],
+        message: 'Say whether the marks are a percentage or a CGPA',
+      });
+    if (e.marksType === 'cgpa' && e.marks !== null && e.marks > 10)
+      ctx.addIssue({ code: 'custom', path: ['marks'], message: 'A CGPA is out of 10' });
   });
 
 export const examSchema = z
@@ -78,7 +95,8 @@ export const examSchema = z
     examYear: z.number().int().min(2000).max(2100).nullable().default(null),
   })
   .superRefine((e, ctx) => {
-    if (e.marksType === 'percentile' && e.score !== null && e.score > 100) ctx.addIssue({ code: 'custom', path: ['score'], message: 'A percentile is out of 100' });
+    if (e.marksType === 'percentile' && e.score !== null && e.score > 100)
+      ctx.addIssue({ code: 'custom', path: ['score'], message: 'A percentile is out of 100' });
   });
 
 // ----------------------------------------------------------------- the update
@@ -91,9 +109,20 @@ export const updateProfileSchema = z
   .object({
     personal: personalSchema,
     preferences: preferencesSchema,
-    guardians: z.array(guardianSchema).max(4).superRefine((l, ctx) => unique(l, (g) => g.relation, ctx, 'A relation')),
-    education: z.array(educationSchema).max(5).superRefine((l, ctx) => unique(l, (e) => e.level, ctx, 'An education level')),
-    exams: z.array(examSchema).max(10).superRefine((l, ctx) => unique(l, (e) => `${e.examName.toLowerCase()}/${e.examYear ?? ''}`, ctx, 'An exam')),
+    guardians: z
+      .array(guardianSchema)
+      .max(4)
+      .superRefine((l, ctx) => unique(l, (g) => g.relation, ctx, 'A relation')),
+    education: z
+      .array(educationSchema)
+      .max(5)
+      .superRefine((l, ctx) => unique(l, (e) => e.level, ctx, 'An education level')),
+    exams: z
+      .array(examSchema)
+      .max(10)
+      .superRefine((l, ctx) =>
+        unique(l, (e) => `${e.examName.toLowerCase()}/${e.examYear ?? ''}`, ctx, 'An exam'),
+      ),
   })
   .partial()
   .refine((v) => Object.keys(v).length > 0, 'Send at least one section to change');

@@ -1,4 +1,13 @@
-import { Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
+import {
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
@@ -8,7 +17,9 @@ import { pageQuerySchema } from '../common/pagination.js';
 import { OfficeComputersService } from '../auth/office-computers.service.js';
 import { DevicesService } from './devices.service.js';
 
-class ListComputersDto extends createZodDto(z.object({ state: z.enum(['pending', 'approved']).default('pending') })) {}
+class ListComputersDto extends createZodDto(
+  z.object({ state: z.enum(['pending', 'approved']).default('pending') }),
+) {}
 
 class ListDevicesDto extends createZodDto(
   pageQuerySchema.extend({ status: z.enum(['pending', 'approved', 'all']).default('pending') }),

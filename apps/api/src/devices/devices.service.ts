@@ -42,7 +42,10 @@ export class DevicesService {
     private readonly audit: AuditService,
   ) {}
 
-  list(auth: AuthContext, query: { status: 'pending' | 'approved' | 'all'; limit: number; cursor?: string }): Promise<Page<DeviceView>> {
+  list(
+    auth: AuthContext,
+    query: { status: 'pending' | 'approved' | 'all'; limit: number; cursor?: string },
+  ): Promise<Page<DeviceView>> {
     return this.db.withTenant(auth.tenantId, async (trx) => {
       const after = decodeCursor(query.cursor, cursorShape);
       let qb = this.baseQuery(trx).select(sql<string>`d.created_at::text`.as('created_text'));
@@ -50,9 +53,16 @@ export class DevicesService {
       if (scoped) qb = qb.where(scoped);
       if (query.status === 'pending') qb = qb.where('d.approved_at', 'is', null);
       if (query.status === 'approved') qb = qb.where('d.approved_at', 'is not', null);
-      if (after) qb = qb.where(sql<SqlBool>`(d.created_at, d.id) < (${after.t}::timestamptz, ${after.i}::uuid)`);
+      if (after)
+        qb = qb.where(
+          sql<SqlBool>`(d.created_at, d.id) < (${after.t}::timestamptz, ${after.i}::uuid)`,
+        );
 
-      const rows = await qb.orderBy('d.created_at', 'desc').orderBy('d.id', 'desc').limit(query.limit + 1).execute();
+      const rows = await qb
+        .orderBy('d.created_at', 'desc')
+        .orderBy('d.id', 'desc')
+        .limit(query.limit + 1)
+        .execute();
       const page = toPage(rows, query.limit, (last) => ({ t: last.created_text, i: last.id }));
       return { items: page.items.map(toView), nextCursor: page.nextCursor };
     });
@@ -66,11 +76,20 @@ export class DevicesService {
         throw new AppError('SELF_APPROVAL', 'Another person must approve your own phone', 403);
       }
       if (device.approved_at === null) {
-        await trx.updateTable('user_devices').set({ approved_by: auth.userId, approved_at: sql`now()` }).where('id', '=', id).execute();
+        await trx
+          .updateTable('user_devices')
+          .set({ approved_by: auth.userId, approved_at: sql`now()` })
+          .where('id', '=', id)
+          .execute();
         await this.audit.write(trx, {
-          tenantId: auth.tenantId, actorId: auth.userId, action: 'device.approve', entity: 'device', entityId: id,
+          tenantId: auth.tenantId,
+          actorId: auth.userId,
+          action: 'device.approve',
+          entity: 'device',
+          entityId: id,
           after: { userId: device.user_id, platform: device.platform, label: device.label },
-          ip: auth.ip, requestId: auth.requestId,
+          ip: auth.ip,
+          requestId: auth.requestId,
         });
       }
       return toView(await this.loadScoped(trx, auth, id));
@@ -81,13 +100,23 @@ export class DevicesService {
   revoke(auth: AuthContext, id: string): Promise<DeviceView> {
     return this.db.withTenant(auth.tenantId, async (trx) => {
       const device = await this.loadScoped(trx, auth, id);
-      await trx.updateTable('user_devices').set({ approved_by: null, approved_at: null }).where('id', '=', id).execute();
+      await trx
+        .updateTable('user_devices')
+        .set({ approved_by: null, approved_at: null })
+        .where('id', '=', id)
+        .execute();
       const { numAffectedRows } = await sql`
         UPDATE user_sessions SET ended_at = now(), ended_reason = 'revoked'
         WHERE device_id = ${id} AND ended_at IS NULL`.execute(trx);
       await this.audit.write(trx, {
-        tenantId: auth.tenantId, actorId: auth.userId, action: 'device.revoke', entity: 'device', entityId: id,
-        after: { userId: device.user_id, sessionsEnded: Number(numAffectedRows ?? 0) }, ip: auth.ip, requestId: auth.requestId,
+        tenantId: auth.tenantId,
+        actorId: auth.userId,
+        action: 'device.revoke',
+        entity: 'device',
+        entityId: id,
+        after: { userId: device.user_id, sessionsEnded: Number(numAffectedRows ?? 0) },
+        ip: auth.ip,
+        requestId: auth.requestId,
       });
       return toView(await this.loadScoped(trx, auth, id));
     });
@@ -101,8 +130,15 @@ export class DevicesService {
       .innerJoin('users as u', 'u.id', 'd.user_id')
       .leftJoin('users as a', 'a.id', 'd.approved_by')
       .select([
-        'd.id', 'd.user_id', 'u.name as user_name', 'd.platform', 'd.label', 'd.device_fingerprint',
-        'd.approved_at', 'a.name as approver_name', 'd.created_at',
+        'd.id',
+        'd.user_id',
+        'u.name as user_name',
+        'd.platform',
+        'd.label',
+        'd.device_fingerprint',
+        'd.approved_at',
+        'a.name as approver_name',
+        'd.created_at',
       ]);
   }
 

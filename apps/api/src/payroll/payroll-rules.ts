@@ -21,11 +21,13 @@ export interface SalaryInput {
 
 /** The problem with a salary's amounts, if any. Net pay is base + allowances - deductions and cannot be negative. */
 export function amountProblem(s: SalaryInput): string | null {
-  if (paise(s.deductions) > paise(s.basePay) + paise(s.allowances)) return 'Deductions are more than base pay plus allowances';
+  if (paise(s.deductions) > paise(s.basePay) + paise(s.allowances))
+    return 'Deductions are more than base pay plus allowances';
   return null;
 }
 
-export const netPay = (s: SalaryInput): number => (paise(s.basePay) + paise(s.allowances) - paise(s.deductions)) / 100;
+export const netPay = (s: SalaryInput): number =>
+  (paise(s.basePay) + paise(s.allowances) - paise(s.deductions)) / 100;
 
 // ------------------------------------------------------------ spreadsheet
 
@@ -54,11 +56,17 @@ export interface SalaryProblem {
 }
 
 /** Reads a salary sheet: one row per employee, found by email. Amounts may be typed as ₹1,25,000. */
-export function parseSalarySheet(table: Table): { rows: SalaryRow[]; problems: SalaryProblem[]; missing: Field[] } {
+export function parseSalarySheet(table: Table): {
+  rows: SalaryRow[];
+  problems: SalaryProblem[];
+  missing: Field[];
+} {
   const at: Partial<Record<Field, number>> = {};
   for (const f of FIELDS) {
     const wanted = SYNONYMS[f].map(normalizeHeader);
-    const i = table.header.findIndex((h, idx) => !Object.values(at).includes(idx) && wanted.includes(normalizeHeader(h)));
+    const i = table.header.findIndex(
+      (h, idx) => !Object.values(at).includes(idx) && wanted.includes(normalizeHeader(h)),
+    );
     if (i >= 0) at[f] = i;
   }
   const missing = (['email', 'basePay'] as const).filter((f) => at[f] === undefined);

@@ -78,7 +78,8 @@ export interface PayslipResult {
 
 export const toPaise = (rupees: number): number => Math.round(rupees * 100);
 export const toRupees = (paise: number): number => paise / 100;
-const days = (n: number): string => `${Number.isInteger(n) ? n : n.toFixed(1)} ${n === 1 ? 'day' : 'days'}`;
+const days = (n: number): string =>
+  `${Number.isInteger(n) ? n : n.toFixed(1)} ${n === 1 ? 'day' : 'days'}`;
 
 /** The days of leave that fall on each date of a request: its days spread over its working dates. */
 export function leaveShare(requestDays: number, workingDatesInRequest: number): number {
@@ -86,7 +87,12 @@ export function leaveShare(requestDays: number, workingDatesInRequest: number): 
   return Math.min(1, requestDays / workingDatesInRequest);
 }
 
-export function calculatePayslip(input: { policy: PayrollPolicy; structure: Structure; days: readonly DayFacts[]; calendarDays: number }): PayslipResult {
+export function calculatePayslip(input: {
+  policy: PayrollPolicy;
+  structure: Structure;
+  days: readonly DayFacts[];
+  calendarDays: number;
+}): PayslipResult {
   const { policy, structure } = input;
   const month = input.days;
 
@@ -110,7 +116,11 @@ export function calculatePayslip(input: { policy: PayrollPolicy; structure: Stru
     if (d.attendance) {
       present += 1;
       if (d.attendance.lateMinutes > 0) late += 1;
-      if (d.attendance.workedMinutes !== null && d.attendance.workedMinutes < d.attendance.halfDayBelowMinutes) half += 1;
+      if (
+        d.attendance.workedMinutes !== null &&
+        d.attendance.workedMinutes < d.attendance.halfDayBelowMinutes
+      )
+        half += 1;
       breakOver += d.attendance.breakOverMinutes;
     } else if (d.leave) {
       const share = Math.min(1, Math.max(0, d.leave.share));
@@ -125,32 +135,80 @@ export function calculatePayslip(input: { policy: PayrollPolicy; structure: Stru
   const basisDays = policy.workingDaysBasis === 'calendar' ? input.calendarDays : workingDays;
   const basePaise = toPaise(structure.basePay);
   // The pay of a number of days, rounded to the paise.
-  const forDays = (n: number): number => (basisDays > 0 ? Math.round((basePaise * n) / basisDays) : 0);
+  const forDays = (n: number): number =>
+    basisDays > 0 ? Math.round((basePaise * n) / basisDays) : 0;
   const dailyRate = basisDays > 0 ? toRupees(Math.round(basePaise / basisDays)) : 0;
 
-  const lines: PayslipLine[] = [{ kind: 'earning', label: 'Base pay', amount: structure.basePay, source: 'structure' }];
-  for (const a of structure.allowances) lines.push({ kind: 'earning', label: a.label, amount: a.amount, source: 'structure' });
-  for (const f of structure.deductions) lines.push({ kind: 'deduction', label: f.label, amount: f.amount, source: 'structure' });
+  const lines: PayslipLine[] = [
+    { kind: 'earning', label: 'Base pay', amount: structure.basePay, source: 'structure' },
+  ];
+  for (const a of structure.allowances)
+    lines.push({ kind: 'earning', label: a.label, amount: a.amount, source: 'structure' });
+  for (const f of structure.deductions)
+    lines.push({ kind: 'deduction', label: f.label, amount: f.amount, source: 'structure' });
 
   const cut = (label: string, deductDays: number, detail: string): void => {
     const paise = forDays(deductDays);
-    if (paise > 0) lines.push({ kind: 'deduction', label, amount: toRupees(paise), source: 'attendance', detail });
+    if (paise > 0)
+      lines.push({
+        kind: 'deduction',
+        label,
+        amount: toRupees(paise),
+        source: 'attendance',
+        detail,
+      });
   };
-  cut('Absent without leave', absent * policy.absentDeductionDays, `${days(absent)} with no attendance and no approved leave`);
-  cut('Unpaid leave', unpaidLeave * policy.unpaidLeaveDeductionDays, `${days(unpaidLeave)} of leave that is not paid`);
-  cut('Half days', half * policy.halfDayDeductionDays, `${half} ${half === 1 ? 'day' : 'days'} worked for fewer hours than a full day`);
+  cut(
+    'Absent without leave',
+    absent * policy.absentDeductionDays,
+    `${days(absent)} with no attendance and no approved leave`,
+  );
+  cut(
+    'Unpaid leave',
+    unpaidLeave * policy.unpaidLeaveDeductionDays,
+    `${days(unpaidLeave)} of leave that is not paid`,
+  );
+  cut(
+    'Half days',
+    half * policy.halfDayDeductionDays,
+    `${half} ${half === 1 ? 'day' : 'days'} worked for fewer hours than a full day`,
+  );
   const lateBeyond = Math.max(0, late - policy.lateFreePerMonth);
-  cut('Late arrivals', lateBeyond * policy.latePenaltyDays, `${late} late ${late === 1 ? 'arrival' : 'arrivals'}, ${policy.lateFreePerMonth} free`);
+  cut(
+    'Late arrivals',
+    lateBeyond * policy.latePenaltyDays,
+    `${late} late ${late === 1 ? 'arrival' : 'arrivals'}, ${policy.lateFreePerMonth} free`,
+  );
   cut('Before joining date', notJoined, `${days(notJoined)} of the month before the person joined`);
   const breakPaise = toPaise(policy.breakOverrunPerMinute) * breakOver;
-  if (breakPaise > 0) lines.push({ kind: 'deduction', label: 'Break overrun', amount: toRupees(breakPaise), source: 'attendance', detail: `${breakOver} minutes beyond the allowed break time` });
+  if (breakPaise > 0)
+    lines.push({
+      kind: 'deduction',
+      label: 'Break overrun',
+      amount: toRupees(breakPaise),
+      source: 'attendance',
+      detail: `${breakOver} minutes beyond the allowed break time`,
+    });
 
-  const sum = (kind: PayslipLine['kind']): number => lines.filter((l) => l.kind === kind).reduce((s, l) => s + toPaise(l.amount), 0);
+  const sum = (kind: PayslipLine['kind']): number =>
+    lines.filter((l) => l.kind === kind).reduce((s, l) => s + toPaise(l.amount), 0);
   const gross = sum('earning');
   const deductions = sum('deduction');
   return {
-    basisDays, workingDays, presentDays: present, paidLeaveDays: paidLeave, unpaidLeaveDays: unpaidLeave, absentDays: absent, halfDays: half, lateCount: late,
-    breakOverMinutes: breakOver, dailyRate, lines, gross: toRupees(gross), deductions: toRupees(deductions), net: toRupees(gross - deductions),
+    basisDays,
+    workingDays,
+    presentDays: present,
+    paidLeaveDays: paidLeave,
+    unpaidLeaveDays: unpaidLeave,
+    absentDays: absent,
+    halfDays: half,
+    lateCount: late,
+    breakOverMinutes: breakOver,
+    dailyRate,
+    lines,
+    gross: toRupees(gross),
+    deductions: toRupees(deductions),
+    net: toRupees(gross - deductions),
   };
 }
 

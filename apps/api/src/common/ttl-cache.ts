@@ -34,7 +34,10 @@ export class TtlCache<T> {
         // An answer worked out before a change was reported is already out of date: use it once, do not keep it.
         if (generation === this.generation) {
           // Spread the expiry a little so entries made together do not all expire together.
-          this.entries.set(key, { value, expires: now + this.ttlMs + Math.floor(Math.random() * this.ttlMs * 0.2) });
+          this.entries.set(key, {
+            value,
+            expires: now + this.ttlMs + Math.floor(Math.random() * this.ttlMs * 0.2),
+          });
           if (this.entries.size > this.maxKeys) this.prune(now);
         }
         return value;
@@ -51,8 +54,10 @@ export class TtlCache<T> {
   /** Forgets every answer whose key starts with `prefix` (an empty prefix forgets all of them). */
   invalidate(prefix: string): void {
     this.generation += 1;
-    for (const key of [...this.entries.keys()]) if (key.startsWith(prefix)) this.entries.delete(key);
-    for (const key of [...this.pending.keys()]) if (key.startsWith(prefix)) this.pending.delete(key);
+    for (const key of [...this.entries.keys()])
+      if (key.startsWith(prefix)) this.entries.delete(key);
+    for (const key of [...this.pending.keys()])
+      if (key.startsWith(prefix)) this.pending.delete(key);
   }
 
   private prune(now: number): void {

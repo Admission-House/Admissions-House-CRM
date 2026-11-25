@@ -17,15 +17,31 @@ export function BrandMark({ variant }: { variant: 'panel' | 'strip' }) {
   const brand = loginBrandFor(useCompanySlug());
   if (brand) return <OtherBrand brand={brand} variant={variant} />;
   return variant === 'panel' ? (
-    <Image {...LOGO} alt={BRAND.product} priority sizes="(min-width: 1024px) 44vw, 0px" className="h-auto w-[76%] max-w-[44rem]" />
+    <Image
+      {...LOGO}
+      alt={BRAND.product}
+      priority
+      sizes="(min-width: 1024px) 44vw, 0px"
+      className="h-auto w-[76%] max-w-[44rem]"
+    />
   ) : (
-    <Image {...LOGO} alt={BRAND.product} priority sizes="320px" className="h-auto w-full max-w-[22rem]" />
+    <Image
+      {...LOGO}
+      alt={BRAND.product}
+      priority
+      sizes="320px"
+      className="h-auto w-full max-w-[22rem]"
+    />
   );
 }
 
 export function BrandCopyright() {
   const brand = loginBrandFor(useCompanySlug());
-  return <>© {new Date().getFullYear()} {brand?.copyright ?? 'Admissions House'}</>;
+  return (
+    <>
+      © {new Date().getFullYear()} {brand?.copyright ?? 'Admissions House'}
+    </>
+  );
 }
 
 function OtherBrand({ brand, variant }: { brand: LoginBrand; variant: 'panel' | 'strip' }) {
@@ -40,11 +56,19 @@ function OtherBrand({ brand, variant }: { brand: LoginBrand; variant: 'panel' | 
         className={big ? 'h-auto w-[clamp(6rem,9vw,9.5rem)]' : 'h-auto w-14'}
       />
       <div className="text-white">
-        <p className={`font-bold leading-none tracking-tight ${big ? 'text-[clamp(3rem,5.6vw,6rem)]' : 'text-4xl'}`}>{brand.name}</p>
-        <p className={`mt-2 flex items-center gap-3 font-normal leading-none ${big ? 'text-[clamp(2.25rem,4.2vw,4.5rem)]' : 'text-3xl'}`}>
+        <p
+          className={`font-bold leading-none tracking-tight ${big ? 'text-[clamp(3rem,5.6vw,6rem)]' : 'text-4xl'}`}
+        >
+          {brand.name}
+        </p>
+        <p
+          className={`mt-2 flex items-center gap-3 font-normal leading-none ${big ? 'text-[clamp(2.25rem,4.2vw,4.5rem)]' : 'text-3xl'}`}
+        >
           {brand.subline}
           {brand.tag && (
-            <span className={`rounded-full border border-white/50 font-semibold uppercase tracking-widest text-white/90 ${big ? 'px-3 py-1 text-sm' : 'px-2 py-0.5 text-[10px]'}`}>
+            <span
+              className={`rounded-full border border-white/50 font-semibold uppercase tracking-widest text-white/90 ${big ? 'px-3 py-1 text-sm' : 'px-2 py-0.5 text-[10px]'}`}
+            >
               {brand.tag}
             </span>
           )}

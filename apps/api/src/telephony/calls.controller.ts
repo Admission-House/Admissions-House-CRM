@@ -1,4 +1,14 @@
-import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Query, Res } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+  Res,
+} from '@nestjs/common';
 import type { FastifyReply } from 'fastify';
 import { sendFile } from '../documents/file-response.js';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
@@ -32,7 +42,11 @@ export class CallsController {
   @RequirePermissions('call.place', 'lead.read')
   @Post('leads/:id/call')
   @HttpCode(202)
-  place(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: PlaceCallDto) {
+  place(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: PlaceCallDto,
+  ) {
     return this.calls.place(auth, id, body);
   }
 
@@ -40,13 +54,21 @@ export class CallsController {
   @RequirePermissions('call.place', 'lead.read')
   @Post('leads/:id/calls/log')
   @HttpCode(201)
-  logManual(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: LogCallDto) {
+  logManual(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: LogCallDto,
+  ) {
     return this.calls.logManual(auth, id, body);
   }
 
   @RequirePermissions('call.read', 'lead.read')
   @Get('leads/:id/calls')
-  forLead(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Query() query: PageDto) {
+  forLead(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query() query: PageDto,
+  ) {
     return this.calls.forLead(auth, id, query);
   }
 
@@ -66,7 +88,11 @@ export class CallsController {
   @RequirePermissions('call.listen')
   @Heavy()
   @Get('calls/:id/recording')
-  async recording(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Res({ passthrough: true }) reply: FastifyReply) {
+  async recording(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
     const file = await this.calls.recording(auth, id);
     await this.downloads.record(auth, 'recording', 'a call recording', file.name);
     return sendFile(reply, file, file.type, file.name);
@@ -87,7 +113,11 @@ export class CallsController {
   @RequirePermissions('lead.update')
   @Post('calls/:id/wrap-up')
   @HttpCode(200)
-  wrapUp(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: WrapUpDto) {
+  wrapUp(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: WrapUpDto,
+  ) {
     return this.calls.wrapUp(auth, id, body);
   }
 }

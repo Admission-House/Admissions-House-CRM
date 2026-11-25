@@ -16,5 +16,9 @@ export default function SettingsHome() {
     if (first) router.replace(first.href);
   }, [first, router]);
 
-  return first ? <Spinner /> : <Notice tone="warn">Your role does not include any settings.</Notice>;
+  return first ? (
+    <Spinner />
+  ) : (
+    <Notice tone="warn">Your role does not include any settings.</Notice>
+  );
 }

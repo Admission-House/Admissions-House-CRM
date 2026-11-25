@@ -1,12 +1,22 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { api, getAccessToken, refreshSession } from './api';
 import { useAuth } from './auth';
 import { changedTopics, nextWaitMs, type Pulse } from './pulse-rules';
 
 /** What a hint can be about. `resync` means the connection was lost for a while, so ask for everything again. */
-export type Topic = 'notification' | 'team' | 'lead' | 'call' | 'calllog' | 'work' | 'admin' | 'resync';
+export type Topic =
+  'notification' | 'team' | 'lead' | 'call' | 'calllog' | 'work' | 'admin' | 'resync';
 type Listener = (topics: readonly string[]) => void;
 
 interface Live {
@@ -46,7 +56,6 @@ const POLL_MAX_BACKOFF_MS = 120_000;
 const QUIET_AFTER_MS = 120_000;
 const RESYNC_EVERY_MS = 300_000; // a safety net: now and then every screen looks again, in case a change was missed
 
-
 /**
  * Keeps one connection to the server while someone is signed in. The server only says that something
  * changed ("a notification came", "the team changed"); the screens then ask the normal API for the new
@@ -59,12 +68,15 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
 
   const subscribe = useCallback((listener: Listener) => {
     listeners.current.add(listener);
-    return () => { listeners.current.delete(listener); };
+    return () => {
+      listeners.current.delete(listener);
+    };
   }, []);
 
   useEffect(() => {
     if (status !== 'authenticated') return;
-    if (POLLING) return startPolling((topics) => listeners.current.forEach((l) => l(topics)), setConnected);
+    if (POLLING)
+      return startPolling((topics) => listeners.current.forEach((l) => l(topics)), setConnected);
     let stopped = false;
     let socket: WebSocket | null = null;
     let retry: ReturnType<typeof setTimeout> | undefined;
@@ -94,7 +106,10 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         if (msg.type === 'ready') {
           setConnected(true);
           delay = 1_000;
-          keepalive = setInterval(() => ws.readyState === WebSocket.OPEN && ws.send('{"type":"ping"}'), KEEPALIVE_MS);
+          keepalive = setInterval(
+            () => ws.readyState === WebSocket.OPEN && ws.send('{"type":"ping"}'),
+            KEEPALIVE_MS,
+          );
           // Whatever changed before this connection was ready was missed (the screens loaded first), so every screen asks again.
           emit(['resync']);
         } else if (msg.type === 'event' && msg.topics) {
@@ -134,7 +149,10 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
  * per screen. It slows down when the tab is hidden or untouched, speeds up while a call is ringing, backs off when
  * the server does not answer, and stops with the returned function.
  */
-function startPolling(emit: (topics: readonly string[]) => void, setConnected: (on: boolean) => void): () => void {
+function startPolling(
+  emit: (topics: readonly string[]) => void,
+  setConnected: (on: boolean) => void,
+): () => void {
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let last: Pulse | null = null;
@@ -142,10 +160,23 @@ function startPolling(emit: (topics: readonly string[]) => void, setConnected: (
   let touched = Date.now();
   let lastResync = Date.now();
 
-  const touch = () => { touched = Date.now(); };
+  const touch = () => {
+    touched = Date.now();
+  };
   const wait = (ringing: boolean): number =>
-    nextWaitMs({ activeMs: POLL_ACTIVE_MS, quietMs: POLL_QUIET_MS, ringingMs: POLL_RINGING_MS, maxBackoffMs: POLL_MAX_BACKOFF_MS }, { failures, ringing, hidden: document.hidden, untouchedMs: Date.now() - touched }, QUIET_AFTER_MS);
-  const schedule = (ms: number) => { if (!stopped) timer = setTimeout(() => void tick(), ms); };
+    nextWaitMs(
+      {
+        activeMs: POLL_ACTIVE_MS,
+        quietMs: POLL_QUIET_MS,
+        ringingMs: POLL_RINGING_MS,
+        maxBackoffMs: POLL_MAX_BACKOFF_MS,
+      },
+      { failures, ringing, hidden: document.hidden, untouchedMs: Date.now() - touched },
+      QUIET_AFTER_MS,
+    );
+  const schedule = (ms: number) => {
+    if (!stopped) timer = setTimeout(() => void tick(), ms);
+  };
 
   async function tick() {
     try {
@@ -165,7 +196,12 @@ function startPolling(emit: (topics: readonly string[]) => void, setConnected: (
     }
   }
 
-  const visible = () => { if (!document.hidden) { clearTimeout(timer); void tick(); } };
+  const visible = () => {
+    if (!document.hidden) {
+      clearTimeout(timer);
+      void tick();
+    }
+  };
   const events = ['pointerdown', 'keydown', 'scroll'] as const;
   events.forEach((e) => window.addEventListener(e, touch, { passive: true }));
   document.addEventListener('visibilitychange', visible);
@@ -186,10 +222,16 @@ export const useRealtimeStatus = (): boolean => useContext(Ctx).connected;
  * Runs `onChange` when the server says one of these topics changed (or the connection was lost and came
  * back). It runs at most once every `minGapMs`, so a busy minute does not make a screen reload over and over.
  */
-export function useRealtime(topics: readonly Topic[], onChange: () => void, minGapMs = 3_000): void {
+export function useRealtime(
+  topics: readonly Topic[],
+  onChange: () => void,
+  minGapMs = 3_000,
+): void {
   const { subscribe } = useContext(Ctx);
   const handler = useRef(onChange);
-  useEffect(() => { handler.current = onChange; });
+  useEffect(() => {
+    handler.current = onChange;
+  });
   const wanted = topics.join(',');
 
   useEffect(() => {
@@ -197,13 +239,20 @@ export function useRealtime(topics: readonly Topic[], onChange: () => void, minG
     const mine = new Set(wanted.split(','));
     let last = 0;
     let trailing: ReturnType<typeof setTimeout> | undefined;
-    const run = () => { last = Date.now(); trailing = undefined; handler.current(); };
+    const run = () => {
+      last = Date.now();
+      trailing = undefined;
+      handler.current();
+    };
     const off = subscribe((got) => {
       if (!got.some((t) => t === 'resync' || mine.has(t))) return;
       const wait = last + minGapMs - Date.now();
       if (wait <= 0) run();
       else trailing ??= setTimeout(run, wait);
     });
-    return () => { off(); clearTimeout(trailing); };
+    return () => {
+      off();
+      clearTimeout(trailing);
+    };
   }, [subscribe, wanted, minGapMs]);
 }

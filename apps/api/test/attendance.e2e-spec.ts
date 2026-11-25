@@ -15,11 +15,17 @@ let admin: string;
 
 /** Runs `fn` while the Super Admin role does not record attendance, then puts the setting back. */
 async function withoutAttendanceForSuper<T>(fn: () => Promise<T>): Promise<T> {
-  await owner.query(`UPDATE roles SET tracks_attendance = false WHERE tenant_id = $1 AND system_key = 'super_admin'`, [fx.tenantId]);
+  await owner.query(
+    `UPDATE roles SET tracks_attendance = false WHERE tenant_id = $1 AND system_key = 'super_admin'`,
+    [fx.tenantId],
+  );
   try {
     return await fn();
   } finally {
-    await owner.query(`UPDATE roles SET tracks_attendance = true WHERE tenant_id = $1 AND system_key = 'super_admin'`, [fx.tenantId]);
+    await owner.query(
+      `UPDATE roles SET tracks_attendance = true WHERE tenant_id = $1 AND system_key = 'super_admin'`,
+      [fx.tenantId],
+    );
   }
 }
 
@@ -46,11 +52,20 @@ const errorCode = (res: { json: () => { error?: { code?: string } } }) => res.js
 
 /** The company's own date, as the code sees it. */
 const localDate = async (offsetDays = 0) =>
-  (await owner.query(`SELECT ((now() AT TIME ZONE 'Asia/Kolkata')::date + $1::int)::text AS d`, [offsetDays])).rows[0].d as string;
+  (
+    await owner.query(`SELECT ((now() AT TIME ZONE 'Asia/Kolkata')::date + $1::int)::text AS d`, [
+      offsetDays,
+    ])
+  ).rows[0].d as string;
 
 /** Sets the working rules for today, replacing any rows the tests added. */
-async function useSettings(opts: { start?: string; end?: string; grace?: number; idle?: number } = {}) {
-  await owner.query(`DELETE FROM attendance_settings WHERE tenant_id = $1 AND effective_from > CURRENT_DATE - 20`, [fx.tenantId]);
+async function useSettings(
+  opts: { start?: string; end?: string; grace?: number; idle?: number } = {},
+) {
+  await owner.query(
+    `DELETE FROM attendance_settings WHERE tenant_id = $1 AND effective_from > CURRENT_DATE - 20`,
+    [fx.tenantId],
+  );
   await owner.query(
     `UPDATE attendance_settings SET shift_start = $2, shift_end = $3, grace_minutes = $4, idle_timeout_min = $5, weekly_off_days = '{0}'
      WHERE tenant_id = $1`,
@@ -58,7 +73,8 @@ async function useSettings(opts: { start?: string; end?: string; grace?: number;
   );
 }
 
-const officeLogin = (name: string) => api.login({ ...api.credentials(name), location: inOffice }, OFFICE_IP);
+const officeLogin = (name: string) =>
+  api.login({ ...api.credentials(name), location: inOffice }, OFFICE_IP);
 async function checkIn(name: string): Promise<string> {
   const res = await officeLogin(name);
   expect(res.statusCode, `${name}: ${res.body}`).toBe(200);
@@ -76,7 +92,10 @@ const records = async (name: string) =>
   ).rows;
 
 const ageSession = (name: string, minutes: number) =>
-  owner.query(`UPDATE user_sessions SET last_active_at = now() - make_interval(mins => $2) WHERE user_id = $1 AND ended_at IS NULL`, [fx.user(name).id, minutes]);
+  owner.query(
+    `UPDATE user_sessions SET last_active_at = now() - make_interval(mins => $2) WHERE user_id = $1 AND ended_at IS NULL`,
+    [fx.user(name).id, minutes],
+  );
 
 // ------------------------------------------------------------ checking in
 
@@ -87,14 +106,26 @@ describe('attendance starts when someone signs in from the office', () => {
     await checkIn('att1');
     const [r, ...rest] = await records('att1');
     expect(rest).toHaveLength(0);
-    expect(r).toMatchObject({ work_date: await localDate(), method: 'office_check', branch_id: fx.branchId, ip: `${OFFICE_IP}/32`, lat: inOffice.lat, lng: inOffice.lng, check_out_at: null });
+    expect(r).toMatchObject({
+      work_date: await localDate(),
+      method: 'office_check',
+      branch_id: fx.branchId,
+      ip: `${OFFICE_IP}/32`,
+      lat: inOffice.lat,
+      lng: inOffice.lng,
+      check_out_at: null,
+    });
   });
 
   it('marks someone late after the shift start plus the grace period, counting from the shift start', async () => {
     await useSettings({ start: '00:00', grace: 0 });
     await checkIn('att2');
     const minutesSinceMidnight = Number(
-      (await owner.query(`SELECT floor(EXTRACT(EPOCH FROM (now() AT TIME ZONE 'Asia/Kolkata')::time) / 60)::int AS m`)).rows[0].m,
+      (
+        await owner.query(
+          `SELECT floor(EXTRACT(EPOCH FROM (now() AT TIME ZONE 'Asia/Kolkata')::time) / 60)::int AS m`,
+        )
+      ).rows[0].m,
     );
     const [r] = await records('att2');
     expect(Math.abs(r.late_minutes - minutesSinceMidnight)).toBeLessThanOrEqual(2);
@@ -119,7 +150,12 @@ describe('attendance starts when someone signs in from the office', () => {
     await checkIn('att4');
     const all = await records('att4');
     expect(all).toHaveLength(1);
-    expect(all[0]).toMatchObject({ id: first.id, check_out_at: null, check_out_reason: null, late_minutes: first.late_minutes });
+    expect(all[0]).toMatchObject({
+      id: first.id,
+      check_out_at: null,
+      check_out_reason: null,
+      late_minutes: first.late_minutes,
+    });
     expect(all[0].check_in_at).toEqual(first.check_in_at);
   });
 
@@ -137,12 +173,16 @@ describe('attendance starts when someone signs in from the office', () => {
     expect(row.away_minutes).toBeGreaterThanOrEqual(89);
     expect(row.away_minutes).toBeLessThanOrEqual(91);
     // Worked so far: about 60 minutes, not 150.
-    const mine = (await api.call('GET', '/attendance/me', again, undefined, OFFICE_IP)).json().items[0];
+    const mine = (await api.call('GET', '/attendance/me', again, undefined, OFFICE_IP)).json()
+      .items[0];
     expect(mine.workedMinutes).toBeGreaterThanOrEqual(59);
     expect(mine.workedMinutes).toBeLessThanOrEqual(61);
     // A second time away adds up.
     await api.call('POST', '/auth/logout', again, undefined, OFFICE_IP);
-    await owner.query(`UPDATE attendance_records SET check_out_at = now() - interval '30 minutes' WHERE user_id = $1`, [fx.user('in1').id]);
+    await owner.query(
+      `UPDATE attendance_records SET check_out_at = now() - interval '30 minutes' WHERE user_id = $1`,
+      [fx.user('in1').id],
+    );
     await checkIn('in1');
     const twice = (await records('in1'))[0];
     expect(twice.away_minutes - row.away_minutes).toBeGreaterThanOrEqual(29);
@@ -152,7 +192,11 @@ describe('attendance starts when someone signs in from the office', () => {
   it('records attendance for a Super Admin too, who can sign in from anywhere, without asking for the office', async () => {
     const res = await api.call('GET', '/attendance/me/today', sa);
     expect(res.json()).toMatchObject({ tracked: true, checkedIn: true });
-    const rows = (await owner.query(`SELECT method, check_in_lat FROM attendance_records WHERE user_id = $1`, [fx.user('super').id])).rows;
+    const rows = (
+      await owner.query(`SELECT method, check_in_lat FROM attendance_records WHERE user_id = $1`, [
+        fx.user('super').id,
+      ])
+    ).rows;
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ method: 'office_check', check_in_lat: null });
   });
@@ -170,8 +214,21 @@ describe('attendance starts when someone signs in from the office', () => {
     expect(pressed.json()).toMatchObject({ checkedIn: true, canCheckIn: false });
     const again = await api.call('POST', '/attendance/me/check-in', token);
     expect(again.statusCode).toBe(200);
-    expect((await owner.query(`SELECT count(*)::int AS n FROM attendance_records WHERE user_id = $1`, [user])).rows[0].n).toBe(1);
-    expect((await owner.query(`SELECT count(*)::int AS n FROM audit_logs WHERE tenant_id = $1 AND actor_id = $2 AND action = 'attendance.self_check_in'`, [fx.tenantId, user])).rows[0].n).toBe(2);
+    expect(
+      (
+        await owner.query(`SELECT count(*)::int AS n FROM attendance_records WHERE user_id = $1`, [
+          user,
+        ])
+      ).rows[0].n,
+    ).toBe(1);
+    expect(
+      (
+        await owner.query(
+          `SELECT count(*)::int AS n FROM audit_logs WHERE tenant_id = $1 AND actor_id = $2 AND action = 'attendance.self_check_in'`,
+          [fx.tenantId, user],
+        )
+      ).rows[0].n,
+    ).toBe(2);
     await api.call('POST', '/auth/logout', token);
   });
 
@@ -184,29 +241,60 @@ describe('attendance starts when someone signs in from the office', () => {
 
   it('checks a Super Admin out when their last session ends', async () => {
     const token = await api.signIn('lockme');
-    const [open] = (await owner.query(`SELECT check_out_at FROM attendance_records WHERE user_id = $1`, [fx.user('lockme').id])).rows;
+    const [open] = (
+      await owner.query(`SELECT check_out_at FROM attendance_records WHERE user_id = $1`, [
+        fx.user('lockme').id,
+      ])
+    ).rows;
     expect(open.check_out_at).toBeNull();
     await api.call('POST', '/auth/logout', token);
-    const [closed] = (await owner.query(`SELECT check_out_at, check_out_reason FROM attendance_records WHERE user_id = $1`, [fx.user('lockme').id])).rows;
+    const [closed] = (
+      await owner.query(
+        `SELECT check_out_at, check_out_reason FROM attendance_records WHERE user_id = $1`,
+        [fx.user('lockme').id],
+      )
+    ).rows;
     expect(closed.check_out_at).not.toBeNull();
     expect(closed.check_out_reason).toBe('manual');
   });
 
   it('does not check in someone whose sign-in is refused', async () => {
-    const res = await api.login({ ...api.credentials('att5'), location: { ...inOffice, lat: inOffice.lat + 0.05 } }, OFFICE_IP);
+    const res = await api.login(
+      { ...api.credentials('att5'), location: { ...inOffice, lat: inOffice.lat + 0.05 } },
+      OFFICE_IP,
+    );
     expect(errorCode(res)).toBe('OUTSIDE_OFFICE');
     expect(await records('att5')).toHaveLength(0);
   });
 
   it('tells every Super Admin and the team Admin about a refused office sign-in, once for repeated tries', async () => {
-    const tryOutside = () => api.login({ ...api.credentials('att6'), location: { ...inOffice, lat: inOffice.lat + 0.05 } }, OFFICE_IP);
+    const tryOutside = () =>
+      api.login(
+        { ...api.credentials('att6'), location: { ...inOffice, lat: inOffice.lat + 0.05 } },
+        OFFICE_IP,
+      );
     expect(errorCode(await tryOutside())).toBe('OUTSIDE_OFFICE');
     expect(errorCode(await tryOutside())).toBe('OUTSIDE_OFFICE');
-    const superAdmins = Number((await owner.query(`SELECT count(*) FROM users u JOIN roles r ON r.id = u.role_id WHERE u.tenant_id = $1 AND r.system_key = 'super_admin' AND u.status = 'active'`, [fx.tenantId])).rows[0].count);
-    const alerts = (await owner.query(`SELECT user_id, type, payload FROM notifications WHERE tenant_id = $1 AND payload->>'event' = 'login_refused' AND payload->>'userName' = 'att6'`, [fx.tenantId])).rows;
+    const superAdmins = Number(
+      (
+        await owner.query(
+          `SELECT count(*) FROM users u JOIN roles r ON r.id = u.role_id WHERE u.tenant_id = $1 AND r.system_key = 'super_admin' AND u.status = 'active'`,
+          [fx.tenantId],
+        )
+      ).rows[0].count,
+    );
+    const alerts = (
+      await owner.query(
+        `SELECT user_id, type, payload FROM notifications WHERE tenant_id = $1 AND payload->>'event' = 'login_refused' AND payload->>'userName' = 'att6'`,
+        [fx.tenantId],
+      )
+    ).rows;
     expect(alerts).toHaveLength(superAdmins + 1); // and the Admin the person reports to
     expect(alerts.map((a) => a.user_id)).toContain(fx.user('admin').id);
-    expect(alerts[0]).toMatchObject({ type: 'security', payload: { event: 'login_refused', userName: 'att6' } });
+    expect(alerts[0]).toMatchObject({
+      type: 'security',
+      payload: { event: 'login_refused', userName: 'att6' },
+    });
   });
 });
 
@@ -254,18 +342,27 @@ describe('the idle sweep', () => {
     expect(result.idleEnded).toBeGreaterThanOrEqual(1);
 
     expect((await records('att8'))[0]).toMatchObject({ check_out_reason: 'inactivity' });
-    const session = (await owner.query(`SELECT ended_reason FROM user_sessions WHERE user_id = $1`, [fx.user('att8').id])).rows[0];
+    const session = (
+      await owner.query(`SELECT ended_reason FROM user_sessions WHERE user_id = $1`, [
+        fx.user('att8').id,
+      ])
+    ).rows[0];
     expect(session.ended_reason).toBe('inactivity');
 
     const activeSuperAdmins = Number(
-      (await owner.query(
-        `SELECT count(*) FROM users u JOIN roles r ON r.id = u.role_id WHERE u.tenant_id = $1 AND r.system_key = 'super_admin' AND u.status = 'active'`,
-        [fx.tenantId],
-      )).rows[0].count,
+      (
+        await owner.query(
+          `SELECT count(*) FROM users u JOIN roles r ON r.id = u.role_id WHERE u.tenant_id = $1 AND r.system_key = 'super_admin' AND u.status = 'active'`,
+          [fx.tenantId],
+        )
+      ).rows[0].count,
     );
     const alerts = await notificationsAbout('att8');
     expect(alerts).toHaveLength(activeSuperAdmins + 1); // the Super Admins and the Admin the person reports to
-    expect(alerts[0]).toMatchObject({ type: 'security', payload: { event: 'idle_logout', idleMinutes: 30 } });
+    expect(alerts[0]).toMatchObject({
+      type: 'security',
+      payload: { event: 'idle_logout', idleMinutes: 30 },
+    });
   });
 
   it('does nothing the second time, and leaves active people alone', async () => {
@@ -281,7 +378,11 @@ describe('the idle sweep', () => {
     await api.signIn('idle');
     await ageSession('idle', 45);
     await sweep.sweepOnce();
-    const session = (await owner.query(`SELECT ended_reason FROM user_sessions WHERE user_id = $1`, [fx.user('idle').id])).rows[0];
+    const session = (
+      await owner.query(`SELECT ended_reason FROM user_sessions WHERE user_id = $1`, [
+        fx.user('idle').id,
+      ])
+    ).rows[0];
     expect(session.ended_reason).toBe('inactivity');
     expect(await notificationsAbout('idle')).toHaveLength(0);
   });
@@ -291,18 +392,29 @@ describe('the idle sweep', () => {
     await api.signIn('expired');
     await ageSession('expired', 45);
     await sweep.sweepOnce();
-    let ended = (await owner.query(`SELECT ended_at FROM user_sessions WHERE user_id = $1`, [fx.user('expired').id])).rows[0].ended_at;
+    let ended = (
+      await owner.query(`SELECT ended_at FROM user_sessions WHERE user_id = $1`, [
+        fx.user('expired').id,
+      ])
+    ).rows[0].ended_at;
     expect(ended).toBeNull();
 
     await ageSession('expired', 61);
     await sweep.sweepOnce();
-    ended = (await owner.query(`SELECT ended_at FROM user_sessions WHERE user_id = $1`, [fx.user('expired').id])).rows[0].ended_at;
+    ended = (
+      await owner.query(`SELECT ended_at FROM user_sessions WHERE user_id = $1`, [
+        fx.user('expired').id,
+      ])
+    ).rows[0].ended_at;
     expect(ended).not.toBeNull();
   });
 
   it('ends sessions that reached their maximum age and checks the person out as forced', async () => {
     await checkIn('att10');
-    await owner.query(`UPDATE user_sessions SET expires_at = now() - interval '1 minute' WHERE user_id = $1`, [fx.user('att10').id]);
+    await owner.query(
+      `UPDATE user_sessions SET expires_at = now() - interval '1 minute' WHERE user_id = $1`,
+      [fx.user('att10').id],
+    );
     const result = await sweep.sweepOnce();
     expect(result.expiredEnded).toBeGreaterThanOrEqual(1);
     expect((await records('att10'))[0].check_out_reason).toBe('forced');
@@ -313,19 +425,29 @@ describe('the idle sweep', () => {
 
 describe('breaks', () => {
   beforeEach(() => useSettings());
-  const start = (token: string, breakTypeId: string) => api.call('POST', '/attendance/breaks/start', token, { breakTypeId }, OFFICE_IP);
-  const end = (token: string) => api.call('POST', '/attendance/breaks/end', token, undefined, OFFICE_IP);
+  const start = (token: string, breakTypeId: string) =>
+    api.call('POST', '/attendance/breaks/start', token, { breakTypeId }, OFFICE_IP);
+  const end = (token: string) =>
+    api.call('POST', '/attendance/breaks/end', token, undefined, OFFICE_IP);
   const typeId = async (name: string) =>
-    (await owner.query(`SELECT id FROM break_types WHERE tenant_id = $1 AND name = $2`, [fx.tenantId, name])).rows[0].id as string;
+    (
+      await owner.query(`SELECT id FROM break_types WHERE tenant_id = $1 AND name = $2`, [
+        fx.tenantId,
+        name,
+      ])
+    ).rows[0].id as string;
 
-  it('shows the kinds of break and today\'s state', async () => {
+  it("shows the kinds of break and today's state", async () => {
     const token = await checkIn('mobile');
     const types = await api.call('GET', '/attendance/break-types', token, undefined, OFFICE_IP);
     expect(types.json().map((t: { name: string }) => t.name)).toEqual(['Lunch', 'Tea']);
 
     const today = await api.call('GET', '/attendance/me/today', token, undefined, OFFICE_IP);
     expect(today.json()).toMatchObject({
-      tracked: true, checkedIn: true, onBreak: null, breakMinutesToday: 0,
+      tracked: true,
+      checkedIn: true,
+      onBreak: null,
+      breakMinutesToday: 0,
       shift: { start: '10:00', end: '19:00', graceMinutes: 10, idleTimeoutMin: 30 },
       record: { method: 'office_check' },
     });
@@ -336,8 +458,12 @@ describe('breaks', () => {
     const mine = await api.call('GET', '/attendance/me', token, undefined, OFFICE_IP);
     expect(mine.statusCode, mine.body).toBe(200);
     expect(mine.json().items.length).toBeGreaterThanOrEqual(1);
-    expect(mine.json().items.every((r: { user: { name: string } }) => r.user.name === 'mobile')).toBe(true);
-    expect((await api.call('GET', '/attendance', token, undefined, OFFICE_IP)).statusCode).toBe(403); // the team list stays closed
+    expect(
+      mine.json().items.every((r: { user: { name: string } }) => r.user.name === 'mobile'),
+    ).toBe(true);
+    expect((await api.call('GET', '/attendance', token, undefined, OFFICE_IP)).statusCode).toBe(
+      403,
+    ); // the team list stays closed
   });
 
   it('starts and ends a break, and reports minutes over the allowance', async () => {
@@ -348,9 +474,14 @@ describe('breaks', () => {
     expect(started.statusCode).toBe(200);
     expect(started.json().type).toMatchObject({ name: 'Lunch', allowedMinutes: 45 });
     expect(errorCode(await start(token, lunch))).toBe('BREAK_ALREADY_OPEN');
-    expect((await api.call('GET', '/attendance/me/today', token, undefined, OFFICE_IP)).json().onBreak).toMatchObject({ type: { name: 'Lunch' } });
+    expect(
+      (await api.call('GET', '/attendance/me/today', token, undefined, OFFICE_IP)).json().onBreak,
+    ).toMatchObject({ type: { name: 'Lunch' } });
 
-    await owner.query(`UPDATE break_logs SET started_at = now() - interval '50 minutes' WHERE id = $1`, [started.json().id]);
+    await owner.query(
+      `UPDATE break_logs SET started_at = now() - interval '50 minutes' WHERE id = $1`,
+      [started.json().id],
+    );
     const ended = await end(token);
     expect(ended.statusCode).toBe(200);
     expect(ended.json().usedTodayMinutes).toBeGreaterThanOrEqual(50);
@@ -377,7 +508,9 @@ describe('breaks', () => {
     await api.call('POST', '/auth/logout', token, undefined, OFFICE_IP);
 
     const [r] = await records('perms');
-    const brk = (await owner.query(`SELECT ended_at FROM break_logs WHERE id = $1`, [started.json().id])).rows[0];
+    const brk = (
+      await owner.query(`SELECT ended_at FROM break_logs WHERE id = $1`, [started.json().id])
+    ).rows[0];
     expect(brk.ended_at).not.toBeNull();
     expect(brk.ended_at).toEqual(r.check_out_at);
   });
@@ -385,12 +518,21 @@ describe('breaks', () => {
   describe('the allowance for each kind of break, per day', () => {
     const who = 'att14';
     const backdate = (id: string, minutes: number) =>
-      owner.query(`UPDATE break_logs SET started_at = now() - make_interval(mins => $2) WHERE id = $1`, [id, minutes]);
+      owner.query(
+        `UPDATE break_logs SET started_at = now() - make_interval(mins => $2) WHERE id = $1`,
+        [id, minutes],
+      );
 
     /** A clean start: no open sign-ins and no breaks left from an earlier test. */
     const reset = async () => {
-      await owner.query(`UPDATE user_sessions SET ended_at = now(), ended_reason = 'revoked' WHERE user_id = $1 AND ended_at IS NULL`, [fx.user(who).id]);
-      await owner.query(`DELETE FROM break_logs WHERE attendance_id IN (SELECT id FROM attendance_records WHERE user_id = $1)`, [fx.user(who).id]);
+      await owner.query(
+        `UPDATE user_sessions SET ended_at = now(), ended_reason = 'revoked' WHERE user_id = $1 AND ended_at IS NULL`,
+        [fx.user(who).id],
+      );
+      await owner.query(
+        `DELETE FROM break_logs WHERE attendance_id IN (SELECT id FROM attendance_records WHERE user_id = $1)`,
+        [fx.user(who).id],
+      );
     };
 
     beforeAll(async () => {
@@ -405,8 +547,13 @@ describe('breaks', () => {
       await backdate(first.json().id, 30);
       await api.call('POST', '/attendance/breaks/end', token, undefined, OFFICE_IP);
 
-      const mid = (await api.call('GET', '/attendance/me/today', token, undefined, OFFICE_IP)).json().breaks as { name: string; allowedMinutes: number; usedMinutes: number }[];
-      expect(mid.find((b) => b.name === 'Lunch')).toMatchObject({ allowedMinutes: 45, usedMinutes: 30 });
+      const mid = (
+        await api.call('GET', '/attendance/me/today', token, undefined, OFFICE_IP)
+      ).json().breaks as { name: string; allowedMinutes: number; usedMinutes: number }[];
+      expect(mid.find((b) => b.name === 'Lunch')).toMatchObject({
+        allowedMinutes: 45,
+        usedMinutes: 30,
+      });
 
       // Lunch can be taken in parts. Using up the 45 minutes does not stop a break: only the day's hard limit does.
       const second = await start(token, lunch);
@@ -416,15 +563,23 @@ describe('breaks', () => {
       const beyond = await start(token, lunch);
       expect(beyond.statusCode, beyond.body).toBe(200);
       await api.call('POST', '/attendance/breaks/end', token, undefined, OFFICE_IP);
-      const today = (await api.call('GET', '/attendance/me/today', token, undefined, OFFICE_IP)).json();
+      const today = (
+        await api.call('GET', '/attendance/me/today', token, undefined, OFFICE_IP)
+      ).json();
       expect(today.hardLimitMinutes).toBe(100);
 
       // At the hard limit no more break can be started.
-      await owner.query(`UPDATE attendance_settings SET break_hard_limit_minutes = 45 WHERE tenant_id = $1`, [fx.tenantId]);
+      await owner.query(
+        `UPDATE attendance_settings SET break_hard_limit_minutes = 45 WHERE tenant_id = $1`,
+        [fx.tenantId],
+      );
       const refused = await start(token, lunch);
       expect(refused.statusCode).toBe(409);
       expect(errorCode(refused)).toBe('BREAK_LIMIT_REACHED');
-      await owner.query(`UPDATE attendance_settings SET break_hard_limit_minutes = 100 WHERE tenant_id = $1`, [fx.tenantId]);
+      await owner.query(
+        `UPDATE attendance_settings SET break_hard_limit_minutes = 100 WHERE tenant_id = $1`,
+        [fx.tenantId],
+      );
 
       // The snack is a separate allowance.
       const snack = await start(token, await typeId('Tea'));
@@ -436,17 +591,32 @@ describe('breaks', () => {
       await reset();
       const token = await checkIn(who);
       const lunch = await typeId('Lunch');
-      await owner.query(`DELETE FROM break_logs WHERE attendance_id IN (SELECT id FROM attendance_records WHERE user_id = $1)`, [fx.user(who).id]);
+      await owner.query(
+        `DELETE FROM break_logs WHERE attendance_id IN (SELECT id FROM attendance_records WHERE user_id = $1)`,
+        [fx.user(who).id],
+      );
       const started = await start(token, lunch);
       expect(started.statusCode, started.body).toBe(200);
-      const quiet = (minutes: number) => owner.query(`UPDATE user_sessions SET last_active_at = now() - make_interval(mins => $2) WHERE user_id = $1 AND ended_at IS NULL`, [fx.user(who).id, minutes]);
-      const alive = async () => (await owner.query(`SELECT count(*)::int AS n FROM user_sessions WHERE user_id = $1 AND ended_at IS NULL`, [fx.user(who).id])).rows[0].n as number;
+      const quiet = (minutes: number) =>
+        owner.query(
+          `UPDATE user_sessions SET last_active_at = now() - make_interval(mins => $2) WHERE user_id = $1 AND ended_at IS NULL`,
+          [fx.user(who).id, minutes],
+        );
+      const alive = async () =>
+        (
+          await owner.query(
+            `SELECT count(*)::int AS n FROM user_sessions WHERE user_id = $1 AND ended_at IS NULL`,
+            [fx.user(who).id],
+          )
+        ).rows[0].n as number;
 
       // Forty minutes quiet is past the 30 minute limit, but fine in the middle of a 45 minute lunch.
       await quiet(40);
       await sweep.sweepOnce();
       expect(await alive()).toBe(1);
-      expect((await api.call('GET', '/attendance/me/today', token, undefined, OFFICE_IP)).statusCode).toBe(200);
+      expect(
+        (await api.call('GET', '/attendance/me/today', token, undefined, OFFICE_IP)).statusCode,
+      ).toBe(200);
 
       // Past the day's limit on break time (100 minutes) and a little more, the usual limit applies again.
       await quiet(70);
@@ -464,8 +634,20 @@ describe('breaks', () => {
       const lunch = await typeId('Lunch');
       const started = await start(token, lunch);
       const notices = async (event: string) =>
-        (await owner.query(`SELECT count(*)::int AS n FROM notifications WHERE tenant_id = $1 AND payload->>'event' = $2 AND payload->>'userId' = $3`, [fx.tenantId, event, fx.user(who).id])).rows[0].n as number;
-      const superAdmins = Number((await owner.query(`SELECT count(*) FROM users u JOIN roles r ON r.id = u.role_id WHERE u.tenant_id = $1 AND r.system_key = 'super_admin' AND u.status = 'active'`, [fx.tenantId])).rows[0].count);
+        (
+          await owner.query(
+            `SELECT count(*)::int AS n FROM notifications WHERE tenant_id = $1 AND payload->>'event' = $2 AND payload->>'userId' = $3`,
+            [fx.tenantId, event, fx.user(who).id],
+          )
+        ).rows[0].n as number;
+      const superAdmins = Number(
+        (
+          await owner.query(
+            `SELECT count(*) FROM users u JOIN roles r ON r.id = u.role_id WHERE u.tenant_id = $1 AND r.system_key = 'super_admin' AND u.status = 'active'`,
+            [fx.tenantId],
+          )
+        ).rows[0].count,
+      );
 
       await backdate(started.json().id, 40);
       await sweep.sweepOnce();
@@ -485,14 +667,22 @@ describe('breaks', () => {
       expect((await api.call('GET', '/auth/me', token, undefined, OFFICE_IP)).statusCode).toBe(401);
       const record = (await records(who))[0]!;
       expect(record.check_out_at).not.toBeNull();
-      const open = (await owner.query(`SELECT count(*)::int AS n FROM break_logs WHERE attendance_id = $1 AND ended_at IS NULL`, [record.id])).rows[0].n;
+      const open = (
+        await owner.query(
+          `SELECT count(*)::int AS n FROM break_logs WHERE attendance_id = $1 AND ended_at IS NULL`,
+          [record.id],
+        )
+      ).rows[0].n;
       expect(open).toBe(0);
     });
 
     it('still signs someone out after the usual quiet time when they are not on a break', async () => {
       await reset();
       const token = await checkIn(who);
-      await owner.query(`UPDATE user_sessions SET last_active_at = now() - interval '40 minutes' WHERE user_id = $1 AND ended_at IS NULL`, [fx.user(who).id]);
+      await owner.query(
+        `UPDATE user_sessions SET last_active_at = now() - interval '40 minutes' WHERE user_id = $1 AND ended_at IS NULL`,
+        [fx.user(who).id],
+      );
       const res = await api.call('GET', '/auth/me', token, undefined, OFFICE_IP);
       expect(res.statusCode).toBe(401);
       expect(errorCode(res)).toBe('SESSION_IDLE');
@@ -500,7 +690,9 @@ describe('breaks', () => {
   });
 
   it('is not available to someone whose attendance is not recorded', async () => {
-    const res = await withoutAttendanceForSuper(async () => api.call('POST', '/attendance/breaks/start', sa, { breakTypeId: await typeId('Lunch') }));
+    const res = await withoutAttendanceForSuper(async () =>
+      api.call('POST', '/attendance/breaks/start', sa, { breakTypeId: await typeId('Lunch') }),
+    );
     expect(errorCode(res)).toBe('NOT_TRACKED');
   });
 });
@@ -520,10 +712,16 @@ describe('reading attendance', () => {
     const names = res.json().items.map((i: { user: { name: string } }) => i.user.name);
     expect(names).toContain('counsellor');
     expect(names).not.toContain('counsellor2');
-    expect(res.json().items[0]).toEqual(expect.objectContaining({
-      workDate: await localDate(), method: 'office_check', lateMinutes: expect.any(Number),
-      presentMinutes: expect.any(Number), breakMinutes: 0, workedMinutes: expect.any(Number),
-    }));
+    expect(res.json().items[0]).toEqual(
+      expect.objectContaining({
+        workDate: await localDate(),
+        method: 'office_check',
+        lateMinutes: expect.any(Number),
+        presentMinutes: expect.any(Number),
+        breakMinutes: 0,
+        workedMinutes: expect.any(Number),
+      }),
+    );
   });
 
   it('shows a Super Admin everyone, and a counsellor nothing', async () => {
@@ -532,21 +730,31 @@ describe('reading attendance', () => {
     expect(names).toEqual(expect.arrayContaining(['counsellor', 'counsellor2']));
 
     const token = await checkIn('att1');
-    expect((await api.call('GET', '/attendance', token, undefined, OFFICE_IP)).statusCode).toBe(403);
+    expect((await api.call('GET', '/attendance', token, undefined, OFFICE_IP)).statusCode).toBe(
+      403,
+    );
   });
 
   it('filters by person, day and lateness', async () => {
     const one = await api.call('GET', `/attendance?userId=${fx.user('counsellor2').id}`, sa);
-    expect(one.json().items.map((i: { user: { name: string } }) => i.user.name)).toEqual(['counsellor2']);
+    expect(one.json().items.map((i: { user: { name: string } }) => i.user.name)).toEqual([
+      'counsellor2',
+    ]);
 
     const future = await api.call('GET', `/attendance?from=${await localDate(2)}`, sa);
     expect(future.json().items).toHaveLength(0);
-    const upToday = await api.call('GET', `/attendance?to=${await localDate()}&from=${await localDate()}`, sa);
+    const upToday = await api.call(
+      'GET',
+      `/attendance?to=${await localDate()}&from=${await localDate()}`,
+      sa,
+    );
     expect(upToday.json().items.length).toBeGreaterThan(0);
 
     const late = await api.call('GET', '/attendance?lateOnly=true&limit=100', sa);
     expect(late.json().items.every((i: { lateMinutes: number }) => i.lateMinutes > 0)).toBe(true);
-    expect(errorCode(await api.call('GET', '/attendance?from=2026-13-45', sa))).toBe('VALIDATION_FAILED');
+    expect(errorCode(await api.call('GET', '/attendance?from=2026-13-45', sa))).toBe(
+      'VALIDATION_FAILED',
+    );
   });
 
   it('pages through the records exactly once', async () => {
@@ -554,13 +762,23 @@ describe('reading attendance', () => {
     let cursor: string | null = null;
     let pages = 0;
     do {
-      const res = await api.call('GET', `/attendance?limit=3${cursor ? `&cursor=${cursor}` : ''}`, sa);
+      const res = await api.call(
+        'GET',
+        `/attendance?limit=3${cursor ? `&cursor=${cursor}` : ''}`,
+        sa,
+      );
       seen.push(...res.json().items.map((i: { id: string }) => i.id));
       cursor = res.json().nextCursor;
       pages++;
     } while (cursor && pages < 30);
     expect(new Set(seen).size).toBe(seen.length);
-    const total = Number((await owner.query(`SELECT count(*) FROM attendance_records WHERE tenant_id = $1`, [fx.tenantId])).rows[0].count);
+    const total = Number(
+      (
+        await owner.query(`SELECT count(*) FROM attendance_records WHERE tenant_id = $1`, [
+          fx.tenantId,
+        ])
+      ).rows[0].count,
+    );
     expect(seen.length).toBe(total);
   });
 });
@@ -577,26 +795,57 @@ describe('attendance exceptions', () => {
     const date = await localDate(-2);
     const res = await raise(admin, { userId: fx.user('att1').id, date, reason });
     expect(res.statusCode).toBe(201);
-    expect(res.json()).toMatchObject({ workDate: date, method: 'exception', lateMinutes: 0, user: { name: 'att1' }, checkOutReason: 'shift_end' });
+    expect(res.json()).toMatchObject({
+      workDate: date,
+      method: 'exception',
+      lateMinutes: 0,
+      user: { name: 'att1' },
+      checkOutReason: 'shift_end',
+    });
     expect(res.json().presentMinutes).toBe(9 * 60);
 
-    const logged = (await owner.query(
-      `SELECT reason, approved_by FROM attendance_exceptions WHERE attendance_id = $1`, [res.json().id],
-    )).rows[0];
+    const logged = (
+      await owner.query(
+        `SELECT reason, approved_by FROM attendance_exceptions WHERE attendance_id = $1`,
+        [res.json().id],
+      )
+    ).rows[0];
     expect(logged).toMatchObject({ reason, approved_by: fx.user('admin').id });
-    expect((await owner.query(`SELECT count(*)::int AS n FROM audit_logs WHERE tenant_id = $1 AND action = 'attendance.exception'`, [fx.tenantId])).rows[0].n).toBeGreaterThanOrEqual(1);
-    const alert = (await owner.query(`SELECT payload FROM notifications WHERE tenant_id = $1 AND payload->>'event' = 'attendance_exception' AND payload->>'userName' = 'att1' LIMIT 1`, [fx.tenantId])).rows[0];
+    expect(
+      (
+        await owner.query(
+          `SELECT count(*)::int AS n FROM audit_logs WHERE tenant_id = $1 AND action = 'attendance.exception'`,
+          [fx.tenantId],
+        )
+      ).rows[0].n,
+    ).toBeGreaterThanOrEqual(1);
+    const alert = (
+      await owner.query(
+        `SELECT payload FROM notifications WHERE tenant_id = $1 AND payload->>'event' = 'attendance_exception' AND payload->>'userName' = 'att1' LIMIT 1`,
+        [fx.tenantId],
+      )
+    ).rows[0];
     expect(alert.payload).toMatchObject({ event: 'attendance_exception', reason, date });
   });
 
   it('accepts explicit times', async () => {
-    const res = await raise(admin, { userId: fx.user('att2').id, date: await localDate(-3), reason, checkInTime: '09:30', checkOutTime: '18:15' });
+    const res = await raise(admin, {
+      userId: fx.user('att2').id,
+      date: await localDate(-3),
+      reason,
+      checkInTime: '09:30',
+      checkOutTime: '18:15',
+    });
     expect(res.statusCode).toBe(201);
     expect(res.json().presentMinutes).toBe(8 * 60 + 45);
   });
 
   it('leaves today open, and a later sign-in the same day reopens it without changing its kind', async () => {
-    const res = await raise(admin, { userId: fx.user('att11').id, date: await localDate(), reason });
+    const res = await raise(admin, {
+      userId: fx.user('att11').id,
+      date: await localDate(),
+      reason,
+    });
     expect(res.statusCode).toBe(201);
     expect(res.json().checkOutAt).toBeNull();
 
@@ -609,16 +858,48 @@ describe('attendance exceptions', () => {
 
   it('does not overwrite a day that already has attendance', async () => {
     const date = await localDate(-2);
-    expect(errorCode(await raise(admin, { userId: fx.user('att1').id, date, reason }))).toBe('ATTENDANCE_EXISTS');
+    expect(errorCode(await raise(admin, { userId: fx.user('att1').id, date, reason }))).toBe(
+      'ATTENDANCE_EXISTS',
+    );
   });
 
   it.each([
     ['for yourself', () => ({ userId: fx.user('admin').id, date: 'D' }), 403, 'SELF_EXCEPTION'],
-    ['for someone outside your team', () => ({ userId: fx.user('counsellor2').id, date: 'D' }), 404, 'NOT_FOUND'],
-    ['for a future day', () => ({ userId: fx.user('att4').id, date: 'FUTURE' }), 400, 'DATE_IN_FUTURE'],
-    ['for a day too long ago', () => ({ userId: fx.user('att4').id, date: 'OLD' }), 400, 'DATE_TOO_OLD'],
-    ['without a real reason', () => ({ userId: fx.user('att4').id, date: 'D', reason: 'no' }), 400, 'VALIDATION_FAILED'],
-    ['with check-out before check-in', () => ({ userId: fx.user('att4').id, date: 'D', checkInTime: '12:00', checkOutTime: '09:00' }), 400, 'VALIDATION_FAILED'],
+    [
+      'for someone outside your team',
+      () => ({ userId: fx.user('counsellor2').id, date: 'D' }),
+      404,
+      'NOT_FOUND',
+    ],
+    [
+      'for a future day',
+      () => ({ userId: fx.user('att4').id, date: 'FUTURE' }),
+      400,
+      'DATE_IN_FUTURE',
+    ],
+    [
+      'for a day too long ago',
+      () => ({ userId: fx.user('att4').id, date: 'OLD' }),
+      400,
+      'DATE_TOO_OLD',
+    ],
+    [
+      'without a real reason',
+      () => ({ userId: fx.user('att4').id, date: 'D', reason: 'no' }),
+      400,
+      'VALIDATION_FAILED',
+    ],
+    [
+      'with check-out before check-in',
+      () => ({
+        userId: fx.user('att4').id,
+        date: 'D',
+        checkInTime: '12:00',
+        checkOutTime: '09:00',
+      }),
+      400,
+      'VALIDATION_FAILED',
+    ],
   ])('refuses an exception %s', async (_name, build, status, code) => {
     const dates = { D: await localDate(-5), FUTURE: await localDate(3), OLD: await localDate(-45) };
     const body = { reason, ...build() } as Record<string, unknown>;
@@ -629,11 +910,16 @@ describe('attendance exceptions', () => {
   });
 
   it('is for people whose attendance is recorded, and for those allowed to raise one', async () => {
-    const notTracked = await withoutAttendanceForSuper(async () => raise(sa, { userId: fx.user('lockme').id, date: await localDate(-1), reason }));
+    const notTracked = await withoutAttendanceForSuper(async () =>
+      raise(sa, { userId: fx.user('lockme').id, date: await localDate(-1), reason }),
+    );
     expect(errorCode(notTracked)).toBe('NOT_TRACKED');
 
     const token = await checkIn('att5');
-    expect((await raise(token, { userId: fx.user('att4').id, date: await localDate(-1), reason })).statusCode).toBe(403);
+    expect(
+      (await raise(token, { userId: fx.user('att4').id, date: await localDate(-1), reason }))
+        .statusCode,
+    ).toBe(403);
   });
 });
 
@@ -642,21 +928,41 @@ describe('attendance exceptions', () => {
 describe('attendance settings', () => {
   beforeEach(() => useSettings());
   const next = {
-    shiftStart: '09:30', shiftEnd: '18:30', graceMinutes: 15, halfDayBelowHours: 5, idleTimeoutMin: 45, weeklyOffDays: [0, 6, 0],
+    shiftStart: '09:30',
+    shiftEnd: '18:30',
+    graceMinutes: 15,
+    halfDayBelowHours: 5,
+    idleTimeoutMin: 45,
+    weeklyOffDays: [0, 6, 0],
   };
 
   it('are for those who may change them', async () => {
-    expect((await api.call('GET', '/attendance/settings', admin, undefined, OFFICE_IP)).statusCode).toBe(403);
-    expect((await api.call('PUT', '/attendance/settings', admin, next, OFFICE_IP)).statusCode).toBe(403);
+    expect(
+      (await api.call('GET', '/attendance/settings', admin, undefined, OFFICE_IP)).statusCode,
+    ).toBe(403);
+    expect((await api.call('PUT', '/attendance/settings', admin, next, OFFICE_IP)).statusCode).toBe(
+      403,
+    );
     const view = await api.call('GET', '/attendance/settings', sa);
-    expect(view.json().current).toMatchObject({ shiftStart: '10:00', shiftEnd: '19:00', graceMinutes: 10, idleTimeoutMin: 30, weeklyOffDays: [0] });
+    expect(view.json().current).toMatchObject({
+      shiftStart: '10:00',
+      shiftEnd: '19:00',
+      graceMinutes: 10,
+      idleTimeoutMin: 30,
+      weeklyOffDays: [0],
+    });
     expect(view.json().breakTypes.map((b: { name: string }) => b.name)).toEqual(['Lunch', 'Tea']);
   });
 
   it('keep the old rules as history when new ones start, so a past month can be explained', async () => {
     const saved = await api.call('PUT', '/attendance/settings', sa, next);
     expect(saved.statusCode).toBe(200);
-    expect(saved.json().current).toMatchObject({ effectiveFrom: await localDate(), shiftStart: '09:30', graceMinutes: 15, weeklyOffDays: [0, 6] });
+    expect(saved.json().current).toMatchObject({
+      effectiveFrom: await localDate(),
+      shiftStart: '09:30',
+      graceMinutes: 15,
+      weeklyOffDays: [0, 6],
+    });
     expect(saved.json().history).toHaveLength(1);
     expect(saved.json().history[0]).toMatchObject({ shiftStart: '10:00' });
 
@@ -664,39 +970,93 @@ describe('attendance settings', () => {
     expect(again.json().current.graceMinutes).toBe(20);
     expect(again.json().history).toHaveLength(1); // same start day: replaced, not duplicated
 
-    const today = await checkIn('att6').then((t) => api.call('GET', '/attendance/me/today', t, undefined, OFFICE_IP));
-    expect(today.json().shift).toMatchObject({ start: '09:30', end: '18:30', graceMinutes: 20, idleTimeoutMin: 45 });
+    const today = await checkIn('att6').then((t) =>
+      api.call('GET', '/attendance/me/today', t, undefined, OFFICE_IP),
+    );
+    expect(today.json().shift).toMatchObject({
+      start: '09:30',
+      end: '18:30',
+      graceMinutes: 20,
+      idleTimeoutMin: 45,
+    });
   });
 
   it('can start on a later day without changing today', async () => {
     const later = await localDate(7);
-    const saved = await api.call('PUT', '/attendance/settings', sa, { ...next, effectiveFrom: later });
+    const saved = await api.call('PUT', '/attendance/settings', sa, {
+      ...next,
+      effectiveFrom: later,
+    });
     expect(saved.json().current).toMatchObject({ shiftStart: '10:00' });
     expect(saved.json().upcoming).toHaveLength(1);
     expect(saved.json().upcoming[0]).toMatchObject({ effectiveFrom: later, shiftStart: '09:30' });
   });
 
   it('refuses a start in the past or a shift that ends before it starts', async () => {
-    expect(errorCode(await api.call('PUT', '/attendance/settings', sa, { ...next, effectiveFrom: await localDate(-1) }))).toBe('DATE_IN_PAST');
-    const backwards = await api.call('PUT', '/attendance/settings', sa, { ...next, shiftEnd: '08:00' });
+    expect(
+      errorCode(
+        await api.call('PUT', '/attendance/settings', sa, {
+          ...next,
+          effectiveFrom: await localDate(-1),
+        }),
+      ),
+    ).toBe('DATE_IN_PAST');
+    const backwards = await api.call('PUT', '/attendance/settings', sa, {
+      ...next,
+      shiftEnd: '08:00',
+    });
     expect(errorCode(backwards)).toBe('VALIDATION_FAILED');
     expect(backwards.json().error.fieldErrors[0].field).toBe('shiftEnd');
-    expect(errorCode(await api.call('PUT', '/attendance/settings', sa, { ...next, idleTimeoutMin: 1 }))).toBe('VALIDATION_FAILED');
+    expect(
+      errorCode(await api.call('PUT', '/attendance/settings', sa, { ...next, idleTimeoutMin: 1 })),
+    ).toBe('VALIDATION_FAILED');
   });
 
   it('manages break types', async () => {
-    const created = await api.call('POST', '/attendance/break-types', sa, { name: 'Prayer', allowedMinutes: 10 });
+    const created = await api.call('POST', '/attendance/break-types', sa, {
+      name: 'Prayer',
+      allowedMinutes: 10,
+    });
     expect(created.statusCode).toBe(201);
-    expect(errorCode(await api.call('POST', '/attendance/break-types', sa, { name: 'prayer', allowedMinutes: 5 }))).toBe('BREAK_TYPE_EXISTS');
+    expect(
+      errorCode(
+        await api.call('POST', '/attendance/break-types', sa, {
+          name: 'prayer',
+          allowedMinutes: 5,
+        }),
+      ),
+    ).toBe('BREAK_TYPE_EXISTS');
 
-    const edited = await api.call('PATCH', `/attendance/break-types/${created.json().id}`, sa, { allowedMinutes: 20 });
+    const edited = await api.call('PATCH', `/attendance/break-types/${created.json().id}`, sa, {
+      allowedMinutes: 20,
+    });
     expect(edited.json()).toMatchObject({ name: 'Prayer', allowedMinutes: 20, isActive: true });
 
     const counsellor = await checkIn('att12');
     const seen = await api.call('GET', '/attendance/break-types', counsellor, undefined, OFFICE_IP);
     expect(seen.json().map((t: { name: string }) => t.name)).toContain('Prayer');
-    expect((await api.call('POST', '/attendance/break-types', counsellor, { name: 'Nap', allowedMinutes: 5 }, OFFICE_IP)).statusCode).toBe(403);
-    expect((await api.call('POST', '/attendance/break-types', admin, { name: 'Nap', allowedMinutes: 5 }, OFFICE_IP)).statusCode).toBe(403);
+    expect(
+      (
+        await api.call(
+          'POST',
+          '/attendance/break-types',
+          counsellor,
+          { name: 'Nap', allowedMinutes: 5 },
+          OFFICE_IP,
+        )
+      ).statusCode,
+    ).toBe(403);
+    expect(
+      (
+        await api.call(
+          'POST',
+          '/attendance/break-types',
+          admin,
+          { name: 'Nap', allowedMinutes: 5 },
+          OFFICE_IP,
+        )
+      ).statusCode,
+    ).toBe(403);
   });
 });
 
@@ -705,11 +1065,25 @@ describe('attendance settings', () => {
 describe('location log', () => {
   it('lists where people signed in from, with the distance from the office, and who was refused', async () => {
     await checkIn('att10');
-    expect(errorCode(await api.login({ ...api.credentials('att11'), location: { ...inOffice, lat: inOffice.lat + 0.05 } }, OFFICE_IP))).toBe('OUTSIDE_OFFICE');
+    expect(
+      errorCode(
+        await api.login(
+          { ...api.credentials('att11'), location: { ...inOffice, lat: inOffice.lat + 0.05 } },
+          OFFICE_IP,
+        ),
+      ),
+    ).toBe('OUTSIDE_OFFICE');
 
     const res = await api.call('GET', '/attendance/location-log', admin);
     expect(res.statusCode, res.body).toBe(200);
-    const items = res.json() as { kind: string; user: { name: string }; ip: string | null; position: { lat: number } | null; distanceM: number | null; result: string | null }[];
+    const items = res.json() as {
+      kind: string;
+      user: { name: string };
+      ip: string | null;
+      position: { lat: number } | null;
+      distanceM: number | null;
+      result: string | null;
+    }[];
 
     const signedIn = items.find((i) => i.kind === 'signed_in' && i.user.name === 'att10')!;
     expect(signedIn.position).not.toBeNull();
@@ -720,16 +1094,28 @@ describe('location log', () => {
     expect(refused.result).toBe('outside_office');
     expect(refused.distanceM).toBeGreaterThan(1000);
 
-    const onlyRefused = (await api.call('GET', '/attendance/location-log?kind=refused', admin)).json() as { kind: string }[];
+    const onlyRefused = (
+      await api.call('GET', '/attendance/location-log?kind=refused', admin)
+    ).json() as { kind: string }[];
     expect(onlyRefused.length).toBeGreaterThanOrEqual(1);
     expect(onlyRefused.every((i) => i.kind === 'refused')).toBe(true);
   });
 
   it('keeps to a team and a sensible range, and is closed to counsellors', async () => {
-    expect((await api.call('GET', '/attendance/location-log?from=2026-02-02&to=2026-02-01', admin)).json().error.code).toBe('RANGE_INVALID');
-    expect((await api.call('GET', '/attendance/location-log?from=2026-01-01&to=2026-12-31', admin)).json().error.code).toBe('RANGE_TOO_LONG');
+    expect(
+      (
+        await api.call('GET', '/attendance/location-log?from=2026-02-02&to=2026-02-01', admin)
+      ).json().error.code,
+    ).toBe('RANGE_INVALID');
+    expect(
+      (
+        await api.call('GET', '/attendance/location-log?from=2026-01-01&to=2026-12-31', admin)
+      ).json().error.code,
+    ).toBe('RANGE_TOO_LONG');
     const lc = await checkIn('att12');
-    expect((await api.call('GET', '/attendance/location-log', lc, undefined, OFFICE_IP)).statusCode).toBe(403);
+    expect(
+      (await api.call('GET', '/attendance/location-log', lc, undefined, OFFICE_IP)).statusCode,
+    ).toBe(403);
   });
 });
 
@@ -737,26 +1123,54 @@ describe('location log', () => {
 
 describe('the end of the shift', () => {
   const sessionEnded = async (name: string) =>
-    (await owner.query(`SELECT ended_at FROM user_sessions WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1`, [fx.user(name).id])).rows[0].ended_at;
+    (
+      await owner.query(
+        `SELECT ended_at FROM user_sessions WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1`,
+        [fx.user(name).id],
+      )
+    ).rows[0].ended_at;
 
   it('checks out a day that is still open when the shift ends, at the moment it ended, and closes its breaks', async () => {
     const token = await checkIn('att13');
-    const lunch = (await owner.query(`SELECT id FROM break_types WHERE tenant_id = $1 AND name = 'Lunch'`, [fx.tenantId])).rows[0].id as string;
-    expect((await api.call('POST', '/attendance/breaks/start', token, { breakTypeId: lunch }, OFFICE_IP)).statusCode).toBe(200);
+    const lunch = (
+      await owner.query(`SELECT id FROM break_types WHERE tenant_id = $1 AND name = 'Lunch'`, [
+        fx.tenantId,
+      ])
+    ).rows[0].id as string;
+    expect(
+      (await api.call('POST', '/attendance/breaks/start', token, { breakTypeId: lunch }, OFFICE_IP))
+        .statusCode,
+    ).toBe(200);
 
     // The shift ended at 00:01 today; the person arrived at midnight.
     await useSettings({ start: '00:00', end: '00:01' });
-    await owner.query(`UPDATE attendance_records SET check_in_at = (work_date::timestamp AT TIME ZONE 'Asia/Kolkata') WHERE user_id = $1`, [fx.user('att13').id]);
-    await owner.query(`UPDATE break_logs SET started_at = (SELECT check_in_at FROM attendance_records WHERE user_id = $1) + interval '10 seconds' WHERE attendance_id IN (SELECT id FROM attendance_records WHERE user_id = $1)`, [fx.user('att13').id]);
+    await owner.query(
+      `UPDATE attendance_records SET check_in_at = (work_date::timestamp AT TIME ZONE 'Asia/Kolkata') WHERE user_id = $1`,
+      [fx.user('att13').id],
+    );
+    await owner.query(
+      `UPDATE break_logs SET started_at = (SELECT check_in_at FROM attendance_records WHERE user_id = $1) + interval '10 seconds' WHERE attendance_id IN (SELECT id FROM attendance_records WHERE user_id = $1)`,
+      [fx.user('att13').id],
+    );
 
     const result = await sweep.sweepOnce();
     expect(result.shiftEndClosed).toBeGreaterThanOrEqual(1);
 
     const [day] = await records('att13');
     expect(day.check_out_reason).toBe('shift_end');
-    const closedAt = (await owner.query(`SELECT to_char(check_out_at AT TIME ZONE 'Asia/Kolkata', 'HH24:MI') AS t FROM attendance_records WHERE user_id = $1`, [fx.user('att13').id])).rows[0].t;
+    const closedAt = (
+      await owner.query(
+        `SELECT to_char(check_out_at AT TIME ZONE 'Asia/Kolkata', 'HH24:MI') AS t FROM attendance_records WHERE user_id = $1`,
+        [fx.user('att13').id],
+      )
+    ).rows[0].t;
     expect(closedAt).toBe('00:01');
-    const open = (await owner.query(`SELECT count(*) FROM break_logs b JOIN attendance_records a ON a.id = b.attendance_id WHERE a.user_id = $1 AND b.ended_at IS NULL`, [fx.user('att13').id])).rows[0].count;
+    const open = (
+      await owner.query(
+        `SELECT count(*) FROM break_logs b JOIN attendance_records a ON a.id = b.attendance_id WHERE a.user_id = $1 AND b.ended_at IS NULL`,
+        [fx.user('att13').id],
+      )
+    ).rows[0].count;
     expect(Number(open)).toBe(0);
     // Their session is not ended: they can keep working.
     expect(await sessionEnded('att13')).toBeNull();

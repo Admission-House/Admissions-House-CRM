@@ -4,7 +4,10 @@ import { z } from 'zod';
 export const recommendSchema = z.object({ collegeId: z.uuid() });
 export class RecommendDto extends createZodDto(recommendSchema) {}
 
-const collegeCourseIds = z.array(z.uuid()).max(30).transform((ids) => [...new Set(ids)]);
+const collegeCourseIds = z
+  .array(z.uuid())
+  .max(30)
+  .transform((ids) => [...new Set(ids)]);
 
 export const createShortlistSchema = z.object({
   collegeId: z.uuid(),
@@ -26,7 +29,10 @@ export class UpdateShortlistDto extends createZodDto(updateShortlistSchema) {}
 export const paymentSchema = z.object({
   amount: z.number().positive().max(100_000_000),
   /** When it was paid. Defaults to now; cannot be in the future. */
-  paidAt: z.iso.datetime({ offset: true }).transform((v) => new Date(v)).optional(),
+  paidAt: z.iso
+    .datetime({ offset: true })
+    .transform((v) => new Date(v))
+    .optional(),
 });
 export class PaymentDto extends createZodDto(paymentSchema) {}
 

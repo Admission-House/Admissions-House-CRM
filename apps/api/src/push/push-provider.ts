@@ -14,7 +14,10 @@ export type PushResult = { status: 'ok' } | { status: 'error'; dead: boolean; me
 
 /** The whole request failed, so nothing is known about the alerts in it. `retryable` is true when trying again later may work. */
 export class PushTransportError extends Error {
-  constructor(message: string, readonly retryable: boolean) {
+  constructor(
+    message: string,
+    readonly retryable: boolean,
+  ) {
     super(message);
     this.name = 'PushTransportError';
   }
@@ -39,13 +42,21 @@ const EXPO_BATCH = 100;
 /** How long a phone may be offline and still get the alert when it returns, in seconds. */
 const TTL_SEC = 3600;
 
-interface ExpoTicket { status: 'ok' | 'error'; id?: string; message?: string; details?: { error?: string } }
+interface ExpoTicket {
+  status: 'ok' | 'error';
+  id?: string;
+  message?: string;
+  details?: { error?: string };
+}
 
 /** Expo's push service (https://docs.expo.dev/push-notifications/sending-notifications/). */
 export class ExpoPushProvider extends PushProvider {
   private readonly logger = new Logger(ExpoPushProvider.name);
 
-  constructor(private readonly accessToken?: string, private readonly fetchFn: typeof fetch = fetch) {
+  constructor(
+    private readonly accessToken?: string,
+    private readonly fetchFn: typeof fetch = fetch,
+  ) {
     super();
   }
 
@@ -69,18 +80,35 @@ export class ExpoPushProvider extends PushProvider {
           ...(this.accessToken && { authorization: `Bearer ${this.accessToken}` }),
         },
         body: JSON.stringify(
-          batch.map((m) => ({ to: m.to, title: m.title, ...(m.body && { body: m.body }), data: m.data, sound: 'default', channelId: 'default', priority: 'high', ttl: TTL_SEC })),
+          batch.map((m) => ({
+            to: m.to,
+            title: m.title,
+            ...(m.body && { body: m.body }),
+            data: m.data,
+            sound: 'default',
+            channelId: 'default',
+            priority: 'high',
+            ttl: TTL_SEC,
+          })),
         ),
       });
     } catch (e) {
-      throw new PushTransportError(`Could not reach the push service: ${e instanceof Error ? e.message : String(e)}`, true);
+      throw new PushTransportError(
+        `Could not reach the push service: ${e instanceof Error ? e.message : String(e)}`,
+        true,
+      );
     }
 
     if (!res.ok) {
       // 429 and 5xx: Expo asks callers to back off and try again. Other failures (a wrong access token) will not fix themselves.
-      const body = (await res.json().catch(() => null)) as { errors?: { code?: string; message?: string }[] } | null;
+      const body = (await res.json().catch(() => null)) as {
+        errors?: { code?: string; message?: string }[];
+      } | null;
       const first = body?.errors?.[0];
-      throw new PushTransportError(`Push service answered ${res.status}${first ? `: ${first.code ?? ''} ${first.message ?? ''}`.trimEnd() : ''}`, res.status === 429 || res.status >= 500);
+      throw new PushTransportError(
+        `Push service answered ${res.status}${first ? `: ${first.code ?? ''} ${first.message ?? ''}`.trimEnd() : ''}`,
+        res.status === 429 || res.status >= 500,
+      );
     }
 
     const tickets = ((await res.json()) as { data?: ExpoTicket[] }).data;
@@ -90,8 +118,15 @@ export class ExpoPushProvider extends PushProvider {
     return tickets.map((t): PushResult => {
       if (t.status === 'ok') return { status: 'ok' };
       const dead = t.details?.error === 'DeviceNotRegistered';
-      if (!dead) this.logger.warn(`alert refused: ${t.details?.error ?? 'unknown'} ${t.message ?? ''}`.trimEnd());
-      return { status: 'error', dead, message: t.message ?? t.details?.error ?? 'The alert was refused' };
+      if (!dead)
+        this.logger.warn(
+          `alert refused: ${t.details?.error ?? 'unknown'} ${t.message ?? ''}`.trimEnd(),
+        );
+      return {
+        status: 'error',
+        dead,
+        message: t.message ?? t.details?.error ?? 'The alert was refused',
+      };
     });
   }
 }

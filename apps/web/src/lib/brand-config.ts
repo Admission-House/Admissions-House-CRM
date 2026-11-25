@@ -6,7 +6,8 @@ export const BRAND = {
   product: process.env.NEXT_PUBLIC_PRODUCT_NAME || 'Admissions House CRM',
   eyebrow: process.env.NEXT_PUBLIC_LOGIN_EYEBROW || 'Admissions House CRM',
   title: process.env.NEXT_PUBLIC_LOGIN_TITLE || 'Every student, every follow-up, in one place.',
-  tagline: process.env.NEXT_PUBLIC_LOGIN_TAGLINE || 'Leads, calls, counselling and your team, together.',
+  tagline:
+    process.env.NEXT_PUBLIC_LOGIN_TAGLINE || 'Leads, calls, counselling and your team, together.',
   /** Shown under the sign-in form only when set. */
   supportEmail: process.env.NEXT_PUBLIC_SUPPORT_EMAIL || '',
   manualUrl: process.env.NEXT_PUBLIC_USER_MANUAL_URL || '',

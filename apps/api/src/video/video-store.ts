@@ -8,7 +8,13 @@ import { AppError } from '../common/app-error.js';
 import type { Trx } from '../database/database.service.js';
 import { LeadWriter } from '../leads/lead-writer.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
-import { isConnected, type InviteState, type Outcome, type SessionKind, type SessionType } from './video-rules.js';
+import {
+  isConnected,
+  type InviteState,
+  type Outcome,
+  type SessionKind,
+  type SessionType,
+} from './video-rules.js';
 
 export interface SessionRow {
   id: string;
@@ -57,10 +63,35 @@ export interface InviteRow {
   consented_at: Date | null;
 }
 
-export type EventName = 'created' | 'invited' | 'ringing' | 'accepted' | 'declined' | 'missed' | 'busy' | 'joined' | 'left' | 'removed' | 'reset' | 'started' | 'ended' | 'reminder' | 'consent' | 'recording';
+export type EventName =
+  | 'created'
+  | 'invited'
+  | 'ringing'
+  | 'accepted'
+  | 'declined'
+  | 'missed'
+  | 'busy'
+  | 'joined'
+  | 'left'
+  | 'removed'
+  | 'reset'
+  | 'started'
+  | 'ended'
+  | 'reminder'
+  | 'consent'
+  | 'recording';
 
 /** What the notification bell and the phone alert say about a call or meeting. */
-export type CommunicationEvent = 'comm_incoming' | 'comm_missed' | 'comm_declined' | 'comm_meeting_invite' | 'comm_meeting_reminder' | 'comm_meeting_started' | 'comm_ended' | 'comm_recording_ready' | 'comm_recording_failed';
+export type CommunicationEvent =
+  | 'comm_incoming'
+  | 'comm_missed'
+  | 'comm_declined'
+  | 'comm_meeting_invite'
+  | 'comm_meeting_reminder'
+  | 'comm_meeting_started'
+  | 'comm_ended'
+  | 'comm_recording_ready'
+  | 'comm_recording_failed';
 
 const SESSION_SELECT = sql`
   SELECT v.id, v.tenant_id, v.lead_id, l.name AS lead_name, l.lead_no::text AS lead_no, v.created_by, u.name AS creator_name, v.type, v.kind, v.title, v.description,
@@ -94,9 +125,16 @@ export class VideoStore {
   }
 
   /** A session, or a 404. With `auth`, only if that person may see it. With `lock`, held still until the transaction ends. */
-  async load(trx: Trx, id: string, opts: { auth?: AuthContext; lock?: boolean } = {}): Promise<SessionRow> {
+  async load(
+    trx: Trx,
+    id: string,
+    opts: { auth?: AuthContext; lock?: boolean } = {},
+  ): Promise<SessionRow> {
     const visible = opts.auth ? sql`AND ${this.visibleCondition(opts.auth)}` : sql``;
-    const { rows } = await sql<SessionRow>`${SESSION_SELECT} WHERE v.id = ${id}::uuid ${visible} ${opts.lock ? sql`FOR UPDATE OF v` : sql``}`.execute(trx);
+    const { rows } =
+      await sql<SessionRow>`${SESSION_SELECT} WHERE v.id = ${id}::uuid ${visible} ${opts.lock ? sql`FOR UPDATE OF v` : sql``}`.execute(
+        trx,
+      );
     if (!rows[0]) throw AppError.notFound('Session');
     return rows[0];
   }
@@ -120,15 +158,27 @@ export class VideoStore {
     return rows[0];
   }
 
-  async event(trx: Trx, tenantId: string, sessionId: string, inviteId: string | null, event: EventName, detail?: string): Promise<void> {
-    await sql`INSERT INTO video_session_events (tenant_id, session_id, invite_id, event, detail) VALUES (${tenantId}, ${sessionId}, ${inviteId}, ${event}, ${detail ?? null})`.execute(trx);
+  async event(
+    trx: Trx,
+    tenantId: string,
+    sessionId: string,
+    inviteId: string | null,
+    event: EventName,
+    detail?: string,
+  ): Promise<void> {
+    await sql`INSERT INTO video_session_events (tenant_id, session_id, invite_id, event, detail) VALUES (${tenantId}, ${sessionId}, ${inviteId}, ${event}, ${detail ?? null})`.execute(
+      trx,
+    );
   }
 
   /** A number for someone in the channel that nobody else in the session has. */
   async freeUid(trx: Trx, sessionId: string): Promise<number> {
     for (;;) {
       const uid = 1 + randomInt(2_147_483_646);
-      const { rows } = await sql`SELECT 1 FROM video_session_invites WHERE session_id = ${sessionId}::uuid AND agora_uid = ${uid}`.execute(trx);
+      const { rows } =
+        await sql`SELECT 1 FROM video_session_invites WHERE session_id = ${sessionId}::uuid AND agora_uid = ${uid}`.execute(
+          trx,
+        );
       if (rows.length === 0) return uid;
     }
   }
@@ -136,7 +186,14 @@ export class VideoStore {
   /** Adds someone to a session. Returns the new invitation's id. */
   async addInvite(
     trx: Trx,
-    p: { tenantId: string; sessionId: string; invitedBy: string; expiresAt: Date; role?: 'host' | 'participant'; state: InviteState } & ({ userId: string; guestName?: undefined } | { guestName: string; userId?: undefined }),
+    p: {
+      tenantId: string;
+      sessionId: string;
+      invitedBy: string;
+      expiresAt: Date;
+      role?: 'host' | 'participant';
+      state: InviteState;
+    } & ({ userId: string; guestName?: undefined } | { guestName: string; userId?: undefined }),
   ): Promise<string> {
     const uid = await this.freeUid(trx, p.sessionId);
     const { rows } = await sql<{ id: string }>`
@@ -149,19 +206,39 @@ export class VideoStore {
 
   /** People who count towards the limit: everyone invited and not removed. */
   async headCount(trx: Trx, sessionId: string): Promise<number> {
-    const { rows } = await sql<{ n: string }>`SELECT count(*) AS n FROM video_session_invites WHERE session_id = ${sessionId}::uuid AND state <> 'removed'`.execute(trx);
+    const { rows } = await sql<{
+      n: string;
+    }>`SELECT count(*) AS n FROM video_session_invites WHERE session_id = ${sessionId}::uuid AND state <> 'removed'`.execute(
+      trx,
+    );
     return Number(rows[0]?.n ?? 0);
   }
 
-  notify(trx: Trx, tenantId: string, userIds: readonly string[], event: CommunicationEvent, payload: Record<string, unknown>): Promise<number> {
-    return this.notifications.notify(trx, { tenantId, userIds, type: 'communication', payload: { event, ...payload } });
+  notify(
+    trx: Trx,
+    tenantId: string,
+    userIds: readonly string[],
+    event: CommunicationEvent,
+    payload: Record<string, unknown>,
+  ): Promise<number> {
+    return this.notifications.notify(trx, {
+      tenantId,
+      userIds,
+      type: 'communication',
+      payload: { event, ...payload },
+    });
   }
 
   /**
    * Ends a session for good. Anyone still connected is marked as having left. A session that never started
    * can only be cancelled, missed, declined or busy, never "completed".
    */
-  async end(trx: Trx, session: SessionRow, outcome: Outcome, opts: { by?: string; by_name?: string; detail?: string } = {}): Promise<void> {
+  async end(
+    trx: Trx,
+    session: SessionRow,
+    outcome: Outcome,
+    opts: { by?: string; by_name?: string; detail?: string } = {},
+  ): Promise<void> {
     const done = await sql`
       UPDATE video_sessions SET status = 'ended', outcome = ${outcome}, ended_at = GREATEST(now(), COALESCE(started_at, now())), ended_by = ${opts.by ?? null}
       WHERE id = ${session.id}::uuid AND status = 'open'`.execute(trx);
@@ -175,14 +252,30 @@ export class VideoStore {
     const noStart = await sql<{ id: string }>`
       UPDATE session_recordings SET status = 'failed', failure_reason = 'The session ended before the recording could start.', stopped_at = now()
       WHERE session_id = ${session.id}::uuid AND status = 'pending' RETURNING id`.execute(trx);
-    for (const r of noStart.rows) await this.event(trx, session.tenant_id, session.id, null, 'recording', `failed: the session ended before the recording could start (${r.id})`);
+    for (const r of noStart.rows)
+      await this.event(
+        trx,
+        session.tenant_id,
+        session.id,
+        null,
+        'recording',
+        `failed: the session ended before the recording could start (${r.id})`,
+      );
     await sql`
       UPDATE session_recordings SET stop_requested_at = now(), last_attempt_at = NULL, status = CASE WHEN status = 'recording' THEN 'stopping' ELSE status END
-      WHERE session_id = ${session.id}::uuid AND status IN ('starting', 'recording') AND stop_requested_at IS NULL`.execute(trx);
+      WHERE session_id = ${session.id}::uuid AND status IN ('starting', 'recording') AND stop_requested_at IS NULL`.execute(
+      trx,
+    );
     if (session.lead_id && session.started_at) {
-      const minutes = Math.max(1, Math.round((Date.now() - new Date(session.started_at).getTime()) / 60_000));
+      const minutes = Math.max(
+        1,
+        Math.round((Date.now() - new Date(session.started_at).getTime()) / 60_000),
+      );
       await this.writer.activity(trx, {
-        tenantId: session.tenant_id, leadId: session.lead_id, userId: opts.by ?? session.created_by, type: 'note',
+        tenantId: session.tenant_id,
+        leadId: session.lead_id,
+        userId: opts.by ?? session.created_by,
+        type: 'note',
         remark: `${session.kind === 'voice' ? 'Voice' : 'Video'} ${session.type === 'meeting' ? 'meeting' : 'call'} ended after about ${minutes} min${opts.by_name ? ` (by ${opts.by_name})` : ''}`,
       });
     }
@@ -201,7 +294,9 @@ export class VideoStore {
                * GREATEST((SELECT count(*) FROM video_session_invites i WHERE i.session_id = v.id AND i.first_joined_at IS NOT NULL), 2)
                * CASE v.kind WHEN 'voice' THEN 1 ELSE 4 END), 0)::int AS minutes
       FROM video_sessions v JOIN tenants t ON t.id = v.tenant_id
-      WHERE v.started_at >= (date_trunc('month', now() AT TIME ZONE t.timezone) AT TIME ZONE t.timezone)`.execute(trx);
+      WHERE v.started_at >= (date_trunc('month', now() AT TIME ZONE t.timezone) AT TIME ZONE t.timezone)`.execute(
+      trx,
+    );
     return rows[0]?.minutes ?? 0;
   }
 

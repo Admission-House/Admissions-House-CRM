@@ -28,8 +28,19 @@ export interface LocationQuery {
 }
 
 interface Row {
-  kind: LocationEntry['kind']; at: Date; user_id: string | null; user_name: string | null; ip: string | null; lat: string | null; lng: string | null;
-  accuracy: string | null; result: string | null; branch_id: string | null; branch_name: string | null; b_lat: string | null; b_lng: string | null;
+  kind: LocationEntry['kind'];
+  at: Date;
+  user_id: string | null;
+  user_name: string | null;
+  ip: string | null;
+  lat: string | null;
+  lng: string | null;
+  accuracy: string | null;
+  result: string | null;
+  branch_id: string | null;
+  branch_name: string | null;
+  b_lat: string | null;
+  b_lng: string | null;
 }
 
 const MAX_DAYS = 62;
@@ -45,12 +56,25 @@ export class LocationLogService {
 
   list(auth: AuthContext, q: LocationQuery): Promise<LocationEntry[]> {
     return this.db.withTenant(auth.tenantId, async (trx) => {
-      const { rows: t } = await sql<{ tz: string; today: string }>`SELECT timezone AS tz, (now() AT TIME ZONE timezone)::date::text AS today FROM tenants LIMIT 1`.execute(trx);
+      const { rows: t } = await sql<{
+        tz: string;
+        today: string;
+      }>`SELECT timezone AS tz, (now() AT TIME ZONE timezone)::date::text AS today FROM tenants LIMIT 1`.execute(
+        trx,
+      );
       const { tz, today } = t[0]!;
       const to = q.to ?? today;
-      const from = q.from ?? new Date(Date.parse(`${to}T00:00:00Z`) - 6 * 86_400_000).toISOString().slice(0, 10);
-      if (from > to) throw AppError.badRequest('RANGE_INVALID', 'The start date is after the end date', [{ field: 'from', message: 'Must not be after the end date' }]);
-      if ((Date.parse(to) - Date.parse(from)) / 86_400_000 >= MAX_DAYS) throw AppError.badRequest('RANGE_TOO_LONG', `Choose at most ${MAX_DAYS} days at a time`, [{ field: 'from', message: `At most ${MAX_DAYS} days` }]);
+      const from =
+        q.from ??
+        new Date(Date.parse(`${to}T00:00:00Z`) - 6 * 86_400_000).toISOString().slice(0, 10);
+      if (from > to)
+        throw AppError.badRequest('RANGE_INVALID', 'The start date is after the end date', [
+          { field: 'from', message: 'Must not be after the end date' },
+        ]);
+      if ((Date.parse(to) - Date.parse(from)) / 86_400_000 >= MAX_DAYS)
+        throw AppError.badRequest('RANGE_TOO_LONG', `Choose at most ${MAX_DAYS} days at a time`, [
+          { field: 'from', message: `At most ${MAX_DAYS} days` },
+        ]);
 
       const lower = sql`(${from}::date::timestamp AT TIME ZONE ${tz})`;
       const upper = sql`((${to}::date + 1)::timestamp AT TIME ZONE ${tz})`;
@@ -75,13 +99,31 @@ export class LocationLogService {
           WHERE l.result IN ('outside_office', 'device_blocked') AND l.created_at >= ${lower} AND l.created_at < ${upper}
             ${q.userId ? sql`AND l.user_id = ${q.userId}::uuid` : sql``} ${scopeL ? sql`AND ${scopeL}` : sql``}`);
       }
-      const { rows } = await sql<Row>`SELECT * FROM (${sql.join(parts, sql` UNION ALL `)}) x ORDER BY at DESC LIMIT ${q.limit}`.execute(trx);
+      const { rows } =
+        await sql<Row>`SELECT * FROM (${sql.join(parts, sql` UNION ALL `)}) x ORDER BY at DESC LIMIT ${q.limit}`.execute(
+          trx,
+        );
 
       return rows.map((r) => {
-        const pos = r.lat !== null && r.lng !== null ? { lat: Number(r.lat), lng: Number(r.lng), accuracy: r.accuracy === null ? null : Number(r.accuracy) } : null;
-        const office = r.b_lat !== null && r.b_lng !== null ? { lat: Number(r.b_lat), lng: Number(r.b_lng) } : null;
+        const pos =
+          r.lat !== null && r.lng !== null
+            ? {
+                lat: Number(r.lat),
+                lng: Number(r.lng),
+                accuracy: r.accuracy === null ? null : Number(r.accuracy),
+              }
+            : null;
+        const office =
+          r.b_lat !== null && r.b_lng !== null
+            ? { lat: Number(r.b_lat), lng: Number(r.b_lng) }
+            : null;
         return {
-          kind: r.kind, at: r.at, user: r.user_id ? { id: r.user_id, name: r.user_name ?? '' } : null, ip: r.ip, position: pos, result: r.result,
+          kind: r.kind,
+          at: r.at,
+          user: r.user_id ? { id: r.user_id, name: r.user_name ?? '' } : null,
+          ip: r.ip,
+          position: pos,
+          result: r.result,
           branch: r.branch_id ? { id: r.branch_id, name: r.branch_name ?? '' } : null,
           distanceM: pos && office ? Math.round(distanceMeters(office, pos)) : null,
         };

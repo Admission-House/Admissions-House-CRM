@@ -13,12 +13,31 @@ export const SIGNED_IN_MARKER = 'ah_in';
 export function proxy(request: NextRequest): NextResponse {
   const signedIn = request.cookies.has(SIGNED_IN_MARKER);
   const { pathname } = request.nextUrl;
-  if (pathname === '/') return NextResponse.redirect(new URL(signedIn ? homePath(request.cookies.get('ah_home')?.value) : '/login', request.url));
+  if (pathname === '/')
+    return NextResponse.redirect(
+      new URL(signedIn ? homePath(request.cookies.get('ah_home')?.value) : '/login', request.url),
+    );
   if (!signedIn) return NextResponse.redirect(new URL('/login', request.url));
   return NextResponse.next();
 }
 
 // Only the screens that need a sign-in. The sign-in, password reset and guest meeting pages are left alone.
 export const config = {
-  matcher: ['/', '/dashboard/:path*', '/leads/:path*', '/calls/:path*', '/dialer/:path*', '/communications/:path*', '/video/:path*', '/attendance/:path*', '/leave/:path*', '/salary/:path*', '/reports/:path*', '/imports/:path*', '/notifications/:path*', '/account/:path*', '/settings/:path*'],
+  matcher: [
+    '/',
+    '/dashboard/:path*',
+    '/leads/:path*',
+    '/calls/:path*',
+    '/dialer/:path*',
+    '/communications/:path*',
+    '/video/:path*',
+    '/attendance/:path*',
+    '/leave/:path*',
+    '/salary/:path*',
+    '/reports/:path*',
+    '/imports/:path*',
+    '/notifications/:path*',
+    '/account/:path*',
+    '/settings/:path*',
+  ],
 };

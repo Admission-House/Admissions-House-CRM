@@ -31,8 +31,16 @@ export interface DocumentView {
 }
 
 interface Row {
-  id: string; doc_type: string; shortlist_id: string | null; college: string | null; original_name: string; mime_type: string;
-  size_bytes: number; uploaded_by: string | null; created_at: Date; file_key: string;
+  id: string;
+  doc_type: string;
+  shortlist_id: string | null;
+  college: string | null;
+  original_name: string;
+  mime_type: string;
+  size_bytes: number;
+  uploaded_by: string | null;
+  created_at: Date;
+  file_key: string;
 }
 
 @Injectable()
@@ -71,7 +79,8 @@ export class DocumentsService {
     if (input.data.length > this.env.MAX_UPLOAD_BYTES) throw tooLarge(this.env.MAX_UPLOAD_BYTES);
 
     const kind = sniffFile(input.data);
-    if (!kind) throw new AppError('UNSUPPORTED_FILE', 'Only JPG, PNG and PDF files are accepted', 415);
+    if (!kind)
+      throw new AppError('UNSUPPORTED_FILE', 'Only JPG, PNG and PDF files are accepted', 415);
     if (kind.type === 'pdf') {
       const problem = pdfProblem(input.data);
       if (problem) throw new AppError('UNSAFE_FILE', `${problem}, so it cannot be accepted`, 415);
@@ -95,17 +104,35 @@ export class DocumentsService {
         const row = await trx
           .insertInto('lead_documents')
           .values({
-            tenant_id: auth.tenantId, lead_id: lead.id, shortlist_id: input.shortlistId ?? null, doc_type: input.docType, file_key: key,
-            mime_type: kind.mime, size_bytes: input.data.length, uploaded_by: auth.userId, original_name: name,
+            tenant_id: auth.tenantId,
+            lead_id: lead.id,
+            shortlist_id: input.shortlistId ?? null,
+            doc_type: input.docType,
+            file_key: key,
+            mime_type: kind.mime,
+            size_bytes: input.data.length,
+            uploaded_by: auth.userId,
+            original_name: name,
             sha256: createHash('sha256').update(input.data).digest('hex'),
           })
           .returning('id')
           .executeTakeFirstOrThrow();
-        await this.writer.activity(trx, { tenantId: auth.tenantId, leadId: lead.id, userId: auth.userId, type: 'document', field: input.docType, newValue: name, remark: 'Uploaded' });
+        await this.writer.activity(trx, {
+          tenantId: auth.tenantId,
+          leadId: lead.id,
+          userId: auth.userId,
+          type: 'document',
+          field: input.docType,
+          newValue: name,
+          remark: 'Uploaded',
+        });
         return toView(await this.one(trx, lead.id, row.id));
       });
     } catch (err) {
-      if (written) await this.storage.delete(written).catch((e: unknown) => this.logger.error(`could not remove ${written}: ${String(e)}`));
+      if (written)
+        await this.storage
+          .delete(written)
+          .catch((e: unknown) => this.logger.error(`could not remove ${written}: ${String(e)}`));
       throw err;
     }
   }
@@ -129,7 +156,11 @@ export class DocumentsService {
       await this.access.get(trx, auth, leadId);
       const doc = await this.one(trx, leadId, docId);
       await this.recordAccess(trx, auth, leadId, doc, 'link');
-      const { token, expiresAt } = this.links.sign({ key: doc.file_key, type: doc.mime_type, name: doc.original_name });
+      const { token, expiresAt } = this.links.sign({
+        key: doc.file_key,
+        type: doc.mime_type,
+        name: doc.original_name,
+      });
       return { url: `/api/v1/files/${token}`, expiresAt };
     });
   }
@@ -139,11 +170,21 @@ export class DocumentsService {
       const lead = await this.access.get(trx, auth, leadId, true);
       const doc = await this.one(trx, lead.id, docId);
       await trx.deleteFrom('lead_documents').where('id', '=', docId).execute();
-      await this.writer.activity(trx, { tenantId: auth.tenantId, leadId: lead.id, userId: auth.userId, type: 'document', field: doc.doc_type, oldValue: doc.original_name, remark: 'Removed' });
+      await this.writer.activity(trx, {
+        tenantId: auth.tenantId,
+        leadId: lead.id,
+        userId: auth.userId,
+        type: 'document',
+        field: doc.doc_type,
+        oldValue: doc.original_name,
+        remark: 'Removed',
+      });
       return doc.file_key;
     });
     // After the record is gone for good. A file that cannot be removed now is only clutter.
-    await this.storage.delete(key).catch((e: unknown) => this.logger.error(`could not remove ${key}: ${String(e)}`));
+    await this.storage
+      .delete(key)
+      .catch((e: unknown) => this.logger.error(`could not remove ${key}: ${String(e)}`));
   }
 
   // ---------------------------------------------------------------- helpers
@@ -153,10 +194,22 @@ export class DocumentsService {
    * sensitive files in the system, so opening one is written to the audit log in the same
    * transaction as the access check. Uploads and removals are already in the lead's timeline.
    */
-  private async recordAccess(trx: Trx, auth: AuthContext, leadId: string, doc: Row, how: 'download' | 'link'): Promise<void> {
+  private async recordAccess(
+    trx: Trx,
+    auth: AuthContext,
+    leadId: string,
+    doc: Row,
+    how: 'download' | 'link',
+  ): Promise<void> {
     await this.audit.write(trx, {
-      tenantId: auth.tenantId, actorId: auth.userId, action: 'document.view', entity: 'lead_document', entityId: doc.id,
-      after: { lead: leadId, type: doc.doc_type, via: how }, ip: auth.ip, requestId: auth.requestId,
+      tenantId: auth.tenantId,
+      actorId: auth.userId,
+      action: 'document.view',
+      entity: 'lead_document',
+      entityId: doc.id,
+      after: { lead: leadId, type: doc.doc_type, via: how },
+      ip: auth.ip,
+      requestId: auth.requestId,
     });
   }
 
@@ -180,23 +233,52 @@ export class DocumentsService {
   }
 
   private async requireShortlist(trx: Trx, leadId: string, shortlistId: string): Promise<void> {
-    const found = await trx.selectFrom('lead_shortlists').select('id').where('id', '=', shortlistId).where('lead_id', '=', leadId).executeTakeFirst();
-    if (!found) throw AppError.badRequest('SHORTLIST_INVALID', 'That institute is not on this student\'s shortlist', [{ field: 'shortlistId', message: 'Choose a shortlisted institute' }]);
+    const found = await trx
+      .selectFrom('lead_shortlists')
+      .select('id')
+      .where('id', '=', shortlistId)
+      .where('lead_id', '=', leadId)
+      .executeTakeFirst();
+    if (!found)
+      throw AppError.badRequest(
+        'SHORTLIST_INVALID',
+        "That institute is not on this student's shortlist",
+        [{ field: 'shortlistId', message: 'Choose a shortlisted institute' }],
+      );
   }
 
-  private async assertRoom(trx: Trx, leadId: string, docType: string, shortlistId: string | undefined): Promise<void> {
+  private async assertRoom(
+    trx: Trx,
+    leadId: string,
+    docType: string,
+    shortlistId: string | undefined,
+  ): Promise<void> {
     const { rows } = await sql<{ total: string; same: string }>`
       SELECT count(*) AS total,
              count(*) FILTER (WHERE doc_type = ${docType} AND shortlist_id IS NOT DISTINCT FROM ${shortlistId ?? null}::uuid) AS same
       FROM lead_documents WHERE lead_id = ${leadId}`.execute(trx);
-    if (Number(rows[0]!.same) >= MAX_PER_KIND) throw AppError.conflict('TOO_MANY_FILES', `A student can have at most ${MAX_PER_KIND} files of one kind. Remove one first.`);
-    if (Number(rows[0]!.total) >= MAX_PER_LEAD) throw AppError.conflict('TOO_MANY_FILES', `A student can have at most ${MAX_PER_LEAD} files. Remove one first.`);
+    if (Number(rows[0]!.same) >= MAX_PER_KIND)
+      throw AppError.conflict(
+        'TOO_MANY_FILES',
+        `A student can have at most ${MAX_PER_KIND} files of one kind. Remove one first.`,
+      );
+    if (Number(rows[0]!.total) >= MAX_PER_LEAD)
+      throw AppError.conflict(
+        'TOO_MANY_FILES',
+        `A student can have at most ${MAX_PER_LEAD} files. Remove one first.`,
+      );
   }
 }
 
 function toView(r: Row): DocumentView {
   return {
-    id: r.id, docType: r.doc_type, shortlist: r.shortlist_id ? { id: r.shortlist_id, college: r.college ?? '' } : null,
-    name: r.original_name, mimeType: r.mime_type, sizeBytes: r.size_bytes, uploadedBy: r.uploaded_by, createdAt: r.created_at,
+    id: r.id,
+    docType: r.doc_type,
+    shortlist: r.shortlist_id ? { id: r.shortlist_id, college: r.college ?? '' } : null,
+    name: r.original_name,
+    mimeType: r.mime_type,
+    sizeBytes: r.size_bytes,
+    uploadedBy: r.uploaded_by,
+    createdAt: r.created_at,
   };
 }

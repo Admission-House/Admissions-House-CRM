@@ -37,10 +37,16 @@ export const listCollegesSchema = pageQuerySchema.extend({
    * With a course: also keep the institutes that have no courses listed yet (nothing is known about them, so they cannot
    * be ruled out). For the forms where a counsellor picks a university for a student; the Colleges list itself stays exact.
    */
-  includeUnlisted: z.enum(['true', 'false']).transform((v) => v === 'true').optional(),
+  includeUnlisted: z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true')
+    .optional(),
   leadId: z.uuid().optional(),
   /** Added by hand and waiting for an Admin to review them. */
-  pendingReview: z.enum(['true', 'false']).transform((v) => v === 'true').optional(),
+  pendingReview: z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true')
+    .optional(),
 });
 export class ListCollegesDto extends createZodDto(listCollegesSchema) {}
 
@@ -92,12 +98,19 @@ export const createCollegeSchema = z.object({
 export class CreateCollegeDto extends createZodDto(createCollegeSchema) {}
 
 export const updateCollegeSchema = z
-  .object({ name: z.string().trim().min(2).max(150), locationId: z.uuid().nullable(), isActive: z.boolean(), studyModes: studyModesSchema })
+  .object({
+    name: z.string().trim().min(2).max(150),
+    locationId: z.uuid().nullable(),
+    isActive: z.boolean(),
+    studyModes: studyModesSchema,
+  })
   .partial()
   .refine((v) => Object.keys(v).length > 0, 'Send at least one field to change');
 export class UpdateCollegeDto extends createZodDto(updateCollegeSchema) {}
 
-export const setOfferedCourseSchema = offeredCourseSchema.extend({ isActive: z.boolean().default(true) });
+export const setOfferedCourseSchema = offeredCourseSchema.extend({
+  isActive: z.boolean().default(true),
+});
 export class SetOfferedCourseDto extends createZodDto(setOfferedCourseSchema) {}
 
 export const reviewSchema = z.object({ decision: z.enum(['approved', 'rejected']) });

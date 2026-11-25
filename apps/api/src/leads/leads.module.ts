@@ -13,7 +13,16 @@ import { ProfileService } from './profile.service.js';
 
 @Module({
   controllers: [LeadsController, LeadStatusesController, ProfileController, SuggestionsController],
-  providers: [LeadWriter, FollowUpWriter, LeadAccess, Assignees, AssignmentService, LeadsService, LeadStatusesService, ProfileService],
+  providers: [
+    LeadWriter,
+    FollowUpWriter,
+    LeadAccess,
+    Assignees,
+    AssignmentService,
+    LeadsService,
+    LeadStatusesService,
+    ProfileService,
+  ],
   exports: [LeadsService, LeadWriter, FollowUpWriter, LeadAccess, Assignees, AssignmentService],
 })
 export class LeadsModule {}

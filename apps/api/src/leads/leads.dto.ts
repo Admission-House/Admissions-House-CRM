@@ -7,7 +7,9 @@ import { phoneSchema } from '../common/phone-schema.js';
 
 const phone = phoneSchema;
 
-const instant = z.iso.datetime({ offset: true, message: 'Use a date and time such as 2026-11-03T15:30:00+05:30' }).transform((v) => new Date(v));
+const instant = z.iso
+  .datetime({ offset: true, message: 'Use a date and time such as 2026-11-03T15:30:00+05:30' })
+  .transform((v) => new Date(v));
 
 export const followUpInputSchema = z.object({
   dueAt: instant,
@@ -17,7 +19,18 @@ export const followUpInputSchema = z.object({
 });
 
 /** The columns of the leads table that can be sorted with the arrows in their heading. */
-export const LIST_ORDER_COLUMNS = ['name', 'email', 'course', 'region', 'status', 'source', 'assigned', 'received', 'followup', 'updated'] as const;
+export const LIST_ORDER_COLUMNS = [
+  'name',
+  'email',
+  'course',
+  'region',
+  'status',
+  'source',
+  'assigned',
+  'received',
+  'followup',
+  'updated',
+] as const;
 export type ListOrderColumn = (typeof LIST_ORDER_COLUMNS)[number];
 
 export const QUEUES = ['fresh', 'missed', 'followup', 'counselled', 'fee_paid', 'closed'] as const;
@@ -52,7 +65,9 @@ export const listLeadsSchema = pageQuerySchema.extend({
 export class ListLeadsDto extends createZodDto(listLeadsSchema) {}
 
 /** The same filters as the list, and the file format. Paging does not apply: the file holds everything that matches. */
-export const exportLeadsSchema = listLeadsSchema.omit({ cursor: true, limit: true, sort: true }).extend({ format: z.enum(['csv', 'xlsx']).default('csv') });
+export const exportLeadsSchema = listLeadsSchema
+  .omit({ cursor: true, limit: true, sort: true })
+  .extend({ format: z.enum(['csv', 'xlsx']).default('csv') });
 export class ExportLeadsDto extends createZodDto(exportLeadsSchema) {}
 
 // -------------------------------------------------------------------- create
@@ -108,7 +123,10 @@ export const changeStatusSchema = z.object({
 });
 export class ChangeStatusDto extends createZodDto(changeStatusSchema) {}
 
-export const assignSchema = z.object({ userId: z.uuid().nullable(), allowUnavailable: z.boolean().optional() });
+export const assignSchema = z.object({
+  userId: z.uuid().nullable(),
+  allowUnavailable: z.boolean().optional(),
+});
 export class AssignDto extends createZodDto(assignSchema) {}
 
 /** The most leads one bulk action takes: ten pages of the list (100 a page). */
@@ -118,7 +136,11 @@ const leadIds = z
   .min(1)
   .max(MAX_BULK_LEADS, `Choose at most ${MAX_BULK_LEADS} leads at a time`)
   .transform((ids) => [...new Set(ids)]);
-export const bulkAssignSchema = z.object({ leadIds, userId: z.uuid().nullable(), allowUnavailable: z.boolean().optional() });
+export const bulkAssignSchema = z.object({
+  leadIds,
+  userId: z.uuid().nullable(),
+  allowUnavailable: z.boolean().optional(),
+});
 export class BulkAssignDto extends createZodDto(bulkAssignSchema) {}
 
 /**
@@ -127,7 +149,11 @@ export class BulkAssignDto extends createZodDto(bulkAssignSchema) {}
  */
 export const transferLeadsSchema = z.object({
   fromUserId: z.uuid(),
-  toUserIds: z.array(z.uuid()).min(1).max(20).transform((ids) => [...new Set(ids)]),
+  toUserIds: z
+    .array(z.uuid())
+    .min(1)
+    .max(20)
+    .transform((ids) => [...new Set(ids)]),
   /** "open" moves only leads still being worked; "all" moves every lead the person holds. */
   which: z.enum(['open', 'all']).default('open'),
   /** Also stop automatic hand-out to the person, so new leads do not pile up on them again. */

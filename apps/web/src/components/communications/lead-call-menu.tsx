@@ -4,7 +4,7 @@ import { Mic, PhoneCall, Users, Video } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { api, ApiError } from '@/lib/api';
+import { api, errorText } from '@/lib/api';
 import type { SessionView } from '@/lib/communications';
 import { useDismiss } from '@/lib/use-dismiss';
 
@@ -42,11 +42,17 @@ export function LeadCallMenu({ lead, phone, internet, onMeeting, onError }: Prop
   useEffect(() => {
     if (!open) return;
     const close = () => setOpen(false);
-    const outside = (e: MouseEvent) => { if (menu.current?.contains(e.target as Node)) e.stopPropagation(); };
+    const outside = (e: MouseEvent) => {
+      if (menu.current?.contains(e.target as Node)) e.stopPropagation();
+    };
     window.addEventListener('scroll', close, true);
     window.addEventListener('resize', close);
     document.addEventListener('mousedown', outside, true);
-    return () => { window.removeEventListener('scroll', close, true); window.removeEventListener('resize', close); document.removeEventListener('mousedown', outside, true); };
+    return () => {
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('resize', close);
+      document.removeEventListener('mousedown', outside, true);
+    };
   }, [open]);
 
   function toggle() {
@@ -54,7 +60,8 @@ export function LeadCallMenu({ lead, phone, internet, onMeeting, onError }: Prop
     const r = box.current?.getBoundingClientRect();
     if (r) {
       const height = 4 * 40 + 8;
-      const top = r.bottom + 6 + height > window.innerHeight ? Math.max(8, r.top - 6 - height) : r.bottom + 6;
+      const top =
+        r.bottom + 6 + height > window.innerHeight ? Math.max(8, r.top - 6 - height) : r.bottom + 6;
       setPlace({ top, left: Math.max(8, Math.min(r.right - 224, window.innerWidth - 232)) });
     }
     setOpen(true);
@@ -63,44 +70,109 @@ export function LeadCallMenu({ lead, phone, internet, onMeeting, onError }: Prop
   async function start(kind: 'voice' | 'video') {
     setBusy(true);
     try {
-      const made = await api<SessionView>(`/leads/${lead.id}/communications`, { method: 'POST', body: { kind, maxMinutes: 30, record: true } });
+      const made = await api<SessionView>(`/leads/${lead.id}/communications`, {
+        method: 'POST',
+        body: { kind, maxMinutes: 30, record: true },
+      });
       router.push(`/video/${made.id}`);
     } catch (e) {
-      onError(e instanceof ApiError ? e.message : 'Cannot reach the server.');
+      onError(errorText(e, 'Cannot reach the server.'));
       setBusy(false);
       setOpen(false);
     }
   }
 
-  const item = 'flex h-10 w-full items-center gap-2.5 px-3 text-left text-sm text-ink hover:bg-head disabled:opacity-50';
+  const item =
+    'flex h-10 w-full items-center gap-2.5 px-3 text-left text-sm text-ink hover:bg-head disabled:opacity-50';
   return (
     <div ref={box} className="relative">
-      <button type="button" onClick={toggle} aria-haspopup="menu" aria-expanded={open} aria-label={`Call ${lead.name}`} title="Call"
-        className="grid h-8 w-8 place-items-center rounded-md text-muted hover:bg-info-50 hover:text-info">
+      <button
+        type="button"
+        onClick={toggle}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={`Call ${lead.name}`}
+        title="Call"
+        className="grid h-8 w-8 place-items-center rounded-md text-muted hover:bg-info-50 hover:text-info"
+      >
         <PhoneCall className="h-[17px] w-[17px]" />
       </button>
-      {open && place && createPortal(
-        <div ref={menu} role="menu" aria-label={`Call ${lead.name}`} style={{ position: 'fixed', top: place.top, left: place.left }} className="z-[60] w-56 overflow-hidden rounded-lg border border-line bg-surface py-1 shadow-xl">
-          {phone?.href && (
-            <a href={phone.href} role="menuitem" className={item} onClick={() => { setOpen(false); phone.onCall(); }}>
-              <PhoneCall className="h-4 w-4 text-info" aria-hidden /> {phone.label ?? 'Phone call'}
-            </a>
-          )}
-          {phone && !phone.href && (
-            <button type="button" role="menuitem" className={item} disabled={busy || !phone.enabled} onClick={() => { setOpen(false); phone.onCall(); }}>
-              <PhoneCall className="h-4 w-4 text-info" aria-hidden /> {phone.label ?? 'Phone call'}
-            </button>
-          )}
-          {internet && (
-            <>
-              <button type="button" role="menuitem" className={item} disabled={busy} onClick={() => void start('voice')}><Mic className="h-4 w-4 text-brand" aria-hidden /> Voice call (link)</button>
-              <button type="button" role="menuitem" className={item} disabled={busy} onClick={() => void start('video')}><Video className="h-4 w-4 text-brand" aria-hidden /> Video call (link)</button>
-              <button type="button" role="menuitem" className={item} disabled={busy} onClick={() => { setOpen(false); onMeeting(lead); }}><Users className="h-4 w-4 text-brand" aria-hidden /> Meeting…</button>
-            </>
-          )}
-        </div>,
-        document.body,
-      )}
+      {open &&
+        place &&
+        createPortal(
+          <div
+            ref={menu}
+            role="menu"
+            aria-label={`Call ${lead.name}`}
+            style={{ position: 'fixed', top: place.top, left: place.left }}
+            className="z-[60] w-56 overflow-hidden rounded-lg border border-line bg-surface py-1 shadow-xl"
+          >
+            {phone?.href && (
+              <a
+                href={phone.href}
+                role="menuitem"
+                className={item}
+                onClick={() => {
+                  setOpen(false);
+                  phone.onCall();
+                }}
+              >
+                <PhoneCall className="h-4 w-4 text-info" aria-hidden />{' '}
+                {phone.label ?? 'Phone call'}
+              </a>
+            )}
+            {phone && !phone.href && (
+              <button
+                type="button"
+                role="menuitem"
+                className={item}
+                disabled={busy || !phone.enabled}
+                onClick={() => {
+                  setOpen(false);
+                  phone.onCall();
+                }}
+              >
+                <PhoneCall className="h-4 w-4 text-info" aria-hidden />{' '}
+                {phone.label ?? 'Phone call'}
+              </button>
+            )}
+            {internet && (
+              <>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={item}
+                  disabled={busy}
+                  onClick={() => void start('voice')}
+                >
+                  <Mic className="h-4 w-4 text-brand" aria-hidden /> Voice call (link)
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={item}
+                  disabled={busy}
+                  onClick={() => void start('video')}
+                >
+                  <Video className="h-4 w-4 text-brand" aria-hidden /> Video call (link)
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={item}
+                  disabled={busy}
+                  onClick={() => {
+                    setOpen(false);
+                    onMeeting(lead);
+                  }}
+                >
+                  <Users className="h-4 w-4 text-brand" aria-hidden /> Meeting…
+                </button>
+              </>
+            )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

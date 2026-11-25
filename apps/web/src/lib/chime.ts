@@ -9,7 +9,9 @@ let ctx: AudioContext | null = null;
 
 function audio(): AudioContext | null {
   if (typeof window === 'undefined') return null;
-  const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  const Ctor =
+    window.AudioContext ??
+    (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!Ctor) return null;
   ctx ??= new Ctor();
   return ctx;
@@ -18,7 +20,9 @@ function audio(): AudioContext | null {
 /** Call once when the app starts: the first click or key press makes sound possible. */
 export function unlockChimeOnFirstInput(): () => void {
   const unlock = () => {
-    void audio()?.resume().catch(() => undefined);
+    void audio()
+      ?.resume()
+      .catch(() => undefined);
     remove();
   };
   const remove = () => {
@@ -53,7 +57,10 @@ export function playChime(): void {
   const a = audio();
   if (!a || a.state !== 'running') return;
   const now = a.currentTime;
-  const notes: [number, number][] = [[880, 0], [1320, 0.14]];
+  const notes: [number, number][] = [
+    [880, 0],
+    [1320, 0.14],
+  ];
   for (const [freq, at] of notes) {
     const osc = a.createOscillator();
     const gain = a.createGain();

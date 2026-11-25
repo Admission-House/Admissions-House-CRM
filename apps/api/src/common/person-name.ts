@@ -4,4 +4,5 @@ import { z } from 'zod';
 export const tidyName = (value: string): string => value.replace(/\s+/g, ' ').trim();
 
 /** A name from a form or a file, tidied, between `min` and `max` characters. */
-export const personName = (min: number, max: number) => z.string().transform(tidyName).pipe(z.string().min(min).max(max));
+export const personName = (min: number, max: number) =>
+  z.string().transform(tidyName).pipe(z.string().min(min).max(max));

@@ -16,7 +16,8 @@ export class ProviderRegistry {
 
   get(name: string): TelephonyProvider {
     const provider = this.byName.get(name);
-    if (!provider) throw new AppError('PROVIDER_UNKNOWN', `Telephony provider "${name}" is not available`, 422);
+    if (!provider)
+      throw new AppError('PROVIDER_UNKNOWN', `Telephony provider "${name}" is not available`, 422);
     return provider;
   }
 }

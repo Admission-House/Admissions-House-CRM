@@ -2,7 +2,9 @@ import { findBadText } from './clean-text.js';
 
 describe('findBadText', () => {
   it('accepts ordinary text in any script, emoji and line breaks', () => {
-    expect(findBadText({ name: 'प्रिया वर्मा', note: 'Call 🔥\nafter 6 pm', list: ['a', { b: 'c' }] })).toBeNull();
+    expect(
+      findBadText({ name: 'प्रिया वर्मा', note: 'Call 🔥\nafter 6 pm', list: ['a', { b: 'c' }] }),
+    ).toBeNull();
     expect(findBadText('plain')).toBeNull();
     expect(findBadText(null)).toBeNull();
   });

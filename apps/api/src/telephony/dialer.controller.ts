@@ -8,7 +8,10 @@ import { DialerService } from './dialer.service.js';
 
 class StartDto extends createZodDto(z.object({ leadIds: z.array(z.uuid()).min(1).max(200) })) {}
 class ListDto extends createZodDto(
-  z.object({ status: z.enum(['running', 'paused', 'stopped', 'finished']).optional(), limit: z.coerce.number().int().min(1).max(100).default(20) }),
+  z.object({
+    status: z.enum(['running', 'paused', 'stopped', 'finished']).optional(),
+    limit: z.coerce.number().int().min(1).max(100).default(20),
+  }),
 ) {}
 
 @ApiTags('dialer')

@@ -18,7 +18,12 @@ export class MetricsService {
   constructor(database: DatabaseService) {
     collectDefaultMetrics({ register: this.registry, prefix: 'ah_' });
 
-    this.requests = new Counter({ name: 'ah_http_requests_total', help: 'Requests answered, by route and status.', labelNames: ['method', 'route', 'status'], registers: [this.registry] });
+    this.requests = new Counter({
+      name: 'ah_http_requests_total',
+      help: 'Requests answered, by route and status.',
+      labelNames: ['method', 'route', 'status'],
+      registers: [this.registry],
+    });
     this.duration = new Histogram({
       name: 'ah_http_request_duration_seconds',
       help: 'How long requests took, by route.',
@@ -29,10 +34,25 @@ export class MetricsService {
     });
 
     const pool = (name: string, help: string, read: () => number) =>
-      new Gauge({ name, help, registers: [this.registry], collect() { this.set(read()); } });
+      new Gauge({
+        name,
+        help,
+        registers: [this.registry],
+        collect() {
+          this.set(read());
+        },
+      });
     pool('ah_db_pool_connections', 'Database connections open.', () => database.poolStats().total);
-    pool('ah_db_pool_idle', 'Database connections waiting for work.', () => database.poolStats().idle);
-    pool('ah_db_pool_waiting', 'Requests waiting for a free database connection. Above zero for long means the pool is too small or queries are slow.', () => database.poolStats().waiting);
+    pool(
+      'ah_db_pool_idle',
+      'Database connections waiting for work.',
+      () => database.poolStats().idle,
+    );
+    pool(
+      'ah_db_pool_waiting',
+      'Requests waiting for a free database connection. Above zero for long means the pool is too small or queries are slow.',
+      () => database.poolStats().waiting,
+    );
   }
 
   /** Records one finished request. */

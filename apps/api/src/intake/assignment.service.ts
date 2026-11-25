@@ -35,7 +35,9 @@ export class AssignmentService {
   async choose(trx: Trx, tenantId: string, lead: LeadFacts): Promise<Assignment> {
     // Two leads arriving together must not both read the same "who is next". The lock lasts until
     // the caller's transaction ends, which is after the lead is saved with its new assignee.
-    await sql`SELECT pg_advisory_xact_lock(hashtext('lead-assign'), hashtext(${tenantId}))`.execute(trx);
+    await sql`SELECT pg_advisory_xact_lock(hashtext('lead-assign'), hashtext(${tenantId}))`.execute(
+      trx,
+    );
 
     const rules = await this.rules(trx);
     const rule = firstMatchingRule(rules, lead);
@@ -55,8 +57,14 @@ export class AssignmentService {
       WHERE r.is_active
       GROUP BY r.id`.execute(trx);
     return rows.map((r) => ({
-      id: r.id, priority: r.priority, sourceId: r.source_id, courseId: r.course_id, locationId: r.location_id,
-      studyMode: r.study_mode, strategy: r.strategy, users: r.users,
+      id: r.id,
+      priority: r.priority,
+      sourceId: r.source_id,
+      courseId: r.course_id,
+      locationId: r.location_id,
+      studyMode: r.study_mode,
+      strategy: r.strategy,
+      users: r.users,
     }));
   }
 
@@ -81,6 +89,10 @@ export class AssignmentService {
         AND NOT EXISTS (
           SELECT 1 FROM break_logs b JOIN attendance_records a ON a.id = b.attendance_id
           WHERE a.user_id = u.id AND b.ended_at IS NULL)`.execute(trx);
-    return rows.map((r) => ({ userId: r.id, lastAssignedAt: r.last_assigned_at, openLeads: Number(r.open_leads) }));
+    return rows.map((r) => ({
+      userId: r.id,
+      lastAssignedAt: r.last_assigned_at,
+      openLeads: Number(r.open_leads),
+    }));
   }
 }

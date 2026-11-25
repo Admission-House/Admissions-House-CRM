@@ -21,12 +21,19 @@ export interface RoleShape {
 }
 
 /** The Super Admin role always holds every permission, so its list cannot be edited. */
-export function assertRoleEditable(role: RoleShape, change: { permissions?: boolean; name?: boolean; scope?: boolean }): void {
+export function assertRoleEditable(
+  role: RoleShape,
+  change: { permissions?: boolean; name?: boolean; scope?: boolean },
+): void {
   if (role.systemKey === 'super_admin') {
     throw new AppError('ROLE_LOCKED', 'The Super Admin role cannot be changed', 409);
   }
   if (role.isSystem && (change.name || change.scope)) {
-    throw new AppError('ROLE_LOCKED', 'The name and visibility of a standard role cannot be changed', 409);
+    throw new AppError(
+      'ROLE_LOCKED',
+      'The name and visibility of a standard role cannot be changed',
+      409,
+    );
   }
 }
 
@@ -36,6 +43,10 @@ export type ScopeName = keyof typeof SCOPE_RANK;
 /** A role cannot see more people than the person creating it can. */
 export function assertScopeNotWider(actor: ScopeName, wanted: ScopeName): void {
   if (SCOPE_RANK[wanted] > SCOPE_RANK[actor]) {
-    throw new AppError('SCOPE_ESCALATION', 'You cannot give a role wider visibility than your own', 403);
+    throw new AppError(
+      'SCOPE_ESCALATION',
+      'You cannot give a role wider visibility than your own',
+      403,
+    );
   }
 }

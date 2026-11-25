@@ -25,12 +25,28 @@ const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
  */
 export const intakePayloadSchema = z.object({
   id: text(120),
-  name: z.string().transform(tidyName).pipe(z.string().min(1, 'A name is needed')).transform((v) => v.slice(0, 80)),
+  name: z
+    .string()
+    .transform(tidyName)
+    .pipe(z.string().min(1, 'A name is needed'))
+    .transform((v) => v.slice(0, 80)),
   phone: z.string().trim().min(1, 'A phone number is needed').max(40),
   // A bad email must not cost us the lead: it is dropped instead.
   email: text(254).transform((v) => (v && EMAIL.test(v) ? v.toLowerCase() : undefined)),
-  level: text(20).transform((v) => (v && /^(ug|pg|diploma)$/i.test(v) ? ({ ug: 'UG', pg: 'PG', diploma: 'Diploma' } as const)[v.toLowerCase() as 'ug' | 'pg' | 'diploma'] : undefined)),
-  mode: text(20).transform((v) => (v && /^online$/i.test(v) ? ('online' as const) : v && /^regular$/i.test(v) ? ('regular' as const) : undefined)),
+  level: text(20).transform((v) =>
+    v && /^(ug|pg|diploma)$/i.test(v)
+      ? ({ ug: 'UG', pg: 'PG', diploma: 'Diploma' } as const)[
+          v.toLowerCase() as 'ug' | 'pg' | 'diploma'
+        ]
+      : undefined,
+  ),
+  mode: text(20).transform((v) =>
+    v && /^online$/i.test(v)
+      ? ('online' as const)
+      : v && /^regular$/i.test(v)
+        ? ('regular' as const)
+        : undefined,
+  ),
   stream: text(60),
   city: text(60),
   /** The course and college the student was looking at, as free text. */
@@ -39,7 +55,13 @@ export const intakePayloadSchema = z.object({
   source: text(60),
   page: text(300),
   utm: z
-    .object({ source: text(100), medium: text(100), campaign: text(100), term: text(100), content: text(100) })
+    .object({
+      source: text(100),
+      medium: text(100),
+      campaign: text(100),
+      term: text(100),
+      content: text(100),
+    })
     .optional(),
 });
 
@@ -76,11 +98,21 @@ export type ParsedIntake = { ok: true; lead: IntakeLead } | { ok: false; errors:
 export function parseIntake(raw: unknown): ParsedIntake {
   const parsed = intakePayloadSchema.safeParse(raw);
   if (!parsed.success) {
-    return { ok: false, errors: parsed.error.issues.map((i) => ({ field: i.path.join('.') || '(body)', message: i.message })) };
+    return {
+      ok: false,
+      errors: parsed.error.issues.map((i) => ({
+        field: i.path.join('.') || '(body)',
+        message: i.message,
+      })),
+    };
   }
   const p = parsed.data;
   const phone = normalizePhone(p.phone);
-  if (!phone) return { ok: false, errors: [{ field: 'phone', message: 'This is not a valid mobile number' }] };
+  if (!phone)
+    return {
+      ok: false,
+      errors: [{ field: 'phone', message: 'This is not a valid mobile number' }],
+    };
 
   return {
     ok: true,
@@ -104,7 +136,10 @@ export function parseIntake(raw: unknown): ParsedIntake {
  * A note kept on the lead, for what could not be matched to the master lists (a city or stream the
  * company does not have yet), so that the counsellor still sees what the student asked for.
  */
-export function interestNote(lead: IntakeLead, unmatched: { city: boolean; stream: boolean }): string | undefined {
+export function interestNote(
+  lead: IntakeLead,
+  unmatched: { city: boolean; stream: boolean },
+): string | undefined {
   const parts = [
     lead.interest,
     unmatched.stream && lead.stream ? `Stream: ${lead.stream}` : undefined,
@@ -119,7 +154,9 @@ export function interestNote(lead: IntakeLead, unmatched: { city: boolean; strea
 export function stableStringify(value: unknown): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null';
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
-  const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : 1));
+  const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) =>
+    a < b ? -1 : 1,
+  );
   return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stableStringify(v)}`).join(',')}}`;
 }
 
@@ -160,7 +197,10 @@ export interface LeadFacts {
  * The first rule, lowest priority number first, whose conditions all hold. A condition left empty
  * means "any". A condition that is set never matches a lead that lacks that fact.
  */
-export function firstMatchingRule<R extends RuleLike>(rules: readonly R[], lead: LeadFacts): R | undefined {
+export function firstMatchingRule<R extends RuleLike>(
+  rules: readonly R[],
+  lead: LeadFacts,
+): R | undefined {
   return [...rules]
     .sort((a, b) => a.priority - b.priority)
     .find(
@@ -188,9 +228,13 @@ const time = (c: Candidate): number => c.lastAssignedAt?.getTime() ?? Number.NEG
  *   fixed       - always the same person: the first by id.
  * Ties break on id, so the choice is the same however the list arrives.
  */
-export function pickAssignee(candidates: readonly Candidate[], strategy: RuleLike['strategy']): string | null {
+export function pickAssignee(
+  candidates: readonly Candidate[],
+  strategy: RuleLike['strategy'],
+): string | null {
   if (candidates.length === 0) return null;
-  const byId = (a: Candidate, b: Candidate) => (a.userId < b.userId ? -1 : a.userId > b.userId ? 1 : 0);
+  const byId = (a: Candidate, b: Candidate) =>
+    a.userId < b.userId ? -1 : a.userId > b.userId ? 1 : 0;
   const sorted = [...candidates].sort((a, b) => {
     if (strategy === 'least_busy' && a.openLeads !== b.openLeads) return a.openLeads - b.openLeads;
     if (strategy !== 'fixed' && time(a) !== time(b)) return time(a) < time(b) ? -1 : 1;

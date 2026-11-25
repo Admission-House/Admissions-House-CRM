@@ -32,7 +32,15 @@ describe('TtlCache', () => {
 
   it('does not keep a failure', async () => {
     const cache = new TtlCache<number>(1000);
-    await expect(cache.get('k', async () => { throw new Error('boom'); }, 0)).rejects.toThrow('boom');
+    await expect(
+      cache.get(
+        'k',
+        async () => {
+          throw new Error('boom');
+        },
+        0,
+      ),
+    ).rejects.toThrow('boom');
     expect(await cache.get('k', async () => 3, 1)).toBe(3);
   });
 
@@ -71,7 +79,9 @@ describe('TtlCache.invalidate', () => {
   it('does not keep an answer that was being worked out when the change was reported', async () => {
     const cache = new TtlCache<number>(60_000);
     let release: () => void = () => undefined;
-    const stale = new Promise<number>((resolve) => { release = () => resolve(1); });
+    const stale = new Promise<number>((resolve) => {
+      release = () => resolve(1);
+    });
     const first = cache.get('c1|a', () => stale, 0);
     cache.invalidate('c1|');
     release();

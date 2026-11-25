@@ -25,9 +25,14 @@ export class MailerService {
   constructor(@Inject(ENV) private readonly env: Env) {
     if (env.MAIL_DRIVER === 'smtp') {
       this.transport = nodemailer.createTransport({
-        host: env.SMTP_HOST, port: env.SMTP_PORT, secure: env.SMTP_SECURE, requireTLS: !env.SMTP_SECURE,
+        host: env.SMTP_HOST,
+        port: env.SMTP_PORT,
+        secure: env.SMTP_SECURE,
+        requireTLS: !env.SMTP_SECURE,
         auth: env.SMTP_USER ? { user: env.SMTP_USER, pass: env.SMTP_PASSWORD } : undefined,
-        connectionTimeout: 10_000, greetingTimeout: 10_000, socketTimeout: 20_000,
+        connectionTimeout: 10_000,
+        greetingTimeout: 10_000,
+        socketTimeout: 20_000,
       });
     }
   }
@@ -50,10 +55,17 @@ export class MailerService {
       return true;
     }
     try {
-      await this.transport.sendMail({ from: this.env.MAIL_FROM, to: mail.to, subject: mail.subject, text: mail.text });
+      await this.transport.sendMail({
+        from: this.env.MAIL_FROM,
+        to: mail.to,
+        subject: mail.subject,
+        text: mail.text,
+      });
       return true;
     } catch (err) {
-      this.logger.error(`email to a user failed: ${err instanceof Error ? err.message : String(err)}`);
+      this.logger.error(
+        `email to a user failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
       return false;
     }
   }

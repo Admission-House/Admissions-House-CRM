@@ -11,7 +11,13 @@ import { SalaryStructureService } from './salary-structure.service.js';
 @Module({
   imports: [AttendanceModule],
   controllers: [PayrollController, PayrollRunController],
-  providers: [PayrollService, PayrollPolicyService, SalaryStructureService, PayrollFactsService, PayrollRunService],
+  providers: [
+    PayrollService,
+    PayrollPolicyService,
+    SalaryStructureService,
+    PayrollFactsService,
+    PayrollRunService,
+  ],
   exports: [PayrollService],
 })
 export class PayrollModule {}

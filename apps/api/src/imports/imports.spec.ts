@@ -2,7 +2,15 @@ import { parse } from 'csv-parse/sync';
 import writeXlsxFile from 'write-excel-file/node';
 import { AppError } from '../common/app-error.js';
 import { csvCell, csvRow, neutralizeFormula } from '../common/csv.js';
-import { applyOverride, detailsOf, detectMapping, leadHeaderRow, repeatsInFile, toRecords, validateRecords } from './import-rules.js';
+import {
+  applyOverride,
+  detailsOf,
+  detectMapping,
+  leadHeaderRow,
+  repeatsInFile,
+  toRecords,
+  validateRecords,
+} from './import-rules.js';
 import { MAX_COLUMNS, MAX_ROWS, readTable } from './spreadsheet.js';
 
 const codeOf = async (fn: () => unknown): Promise<string | undefined> => {
@@ -20,7 +28,7 @@ const csv = (text: string) => Buffer.from(text, 'utf8');
 
 describe('CSV cells', () => {
   it.each([
-    ['=HYPERLINK("http://evil.example","click")', "'=HYPERLINK(\"http://evil.example\",\"click\")"],
+    ['=HYPERLINK("http://evil.example","click")', '\'=HYPERLINK("http://evil.example","click")'],
     ['+91 98765 43210', "'+91 98765 43210"],
     ['-5', "'-5"],
     ['@SUM(A1)', "'@SUM(A1)"],
@@ -60,7 +68,13 @@ describe('CSV cells', () => {
 describe('readTable: CSV', () => {
   it('reads a simple file, ignoring a byte-order mark and blank lines', async () => {
     const t = await readTable(csv('﻿Name,Mobile\r\nRiya,9876543210\r\n\r\nAsha,9876543211\r\n'));
-    expect(t).toEqual({ header: ['Name', 'Mobile'], rows: [['Riya', '9876543210'], ['Asha', '9876543211']] });
+    expect(t).toEqual({
+      header: ['Name', 'Mobile'],
+      rows: [
+        ['Riya', '9876543210'],
+        ['Asha', '9876543211'],
+      ],
+    });
   });
 
   it.each([[';'], ['\t']])('reads a file separated by %j', async (d) => {
@@ -69,8 +83,13 @@ describe('readTable: CSV', () => {
   });
 
   it('reads quoted cells with commas, quotes and line breaks, and Hindi text', async () => {
-    const t = await readTable(csv('Name,Interest\n"Sharma, Riya","B.Tech ""CSE""\nsecond line"\nसिया,एमबीए\n'));
-    expect(t.rows).toEqual([['Sharma, Riya', 'B.Tech "CSE"\nsecond line'], ['सिया', 'एमबीए']]);
+    const t = await readTable(
+      csv('Name,Interest\n"Sharma, Riya","B.Tech ""CSE""\nsecond line"\nसिया,एमबीए\n'),
+    );
+    expect(t.rows).toEqual([
+      ['Sharma, Riya', 'B.Tech "CSE"\nsecond line'],
+      ['सिया', 'एमबीए'],
+    ]);
   });
 
   it('skips blank rows before the header, and fills short rows', async () => {
@@ -80,7 +99,9 @@ describe('readTable: CSV', () => {
   });
 
   it('refuses a file that is not UTF-8, saying how to fix it', async () => {
-    const latin1 = Buffer.from([0x4e, 0x61, 0x6d, 0x65, 0x0a, 0x52, 0xe9, 0x73, 0x75, 0x6d, 0xe9, 0x0a]); // "Résumé" in Latin-1
+    const latin1 = Buffer.from([
+      0x4e, 0x61, 0x6d, 0x65, 0x0a, 0x52, 0xe9, 0x73, 0x75, 0x6d, 0xe9, 0x0a,
+    ]); // "Résumé" in Latin-1
     expect(await codeOf(() => readTable(latin1))).toBe('NOT_UTF8');
   });
 
@@ -96,17 +117,25 @@ describe('readTable: CSV', () => {
   });
 
   it('refuses binary data that is not a spreadsheet', async () => {
-    expect(await codeOf(() => readTable(Buffer.from([0x4d, 0x5a, 0x90, 0x00, 0x03, 0x00, 0x00, 0x00])))).toBe('NOT_A_SPREADSHEET');
+    expect(
+      await codeOf(() => readTable(Buffer.from([0x4d, 0x5a, 0x90, 0x00, 0x03, 0x00, 0x00, 0x00]))),
+    ).toBe('NOT_A_SPREADSHEET');
   });
 
   it('refuses the old .xls format, saying what to do', async () => {
-    expect(await codeOf(() => readTable(Buffer.concat([Buffer.from([0xd0, 0xcf, 0x11, 0xe0]), Buffer.alloc(100)])))).toBe('OLD_EXCEL');
+    expect(
+      await codeOf(() =>
+        readTable(Buffer.concat([Buffer.from([0xd0, 0xcf, 0x11, 0xe0]), Buffer.alloc(100)])),
+      ),
+    ).toBe('OLD_EXCEL');
   });
 
   it('keeps to the size limits', async () => {
-    const many = 'Name,Mobile\n' + Array.from({ length: MAX_ROWS + 1 }, (_v, i) => `P${i},${i}`).join('\n');
+    const many =
+      'Name,Mobile\n' + Array.from({ length: MAX_ROWS + 1 }, (_v, i) => `P${i},${i}`).join('\n');
     expect(await codeOf(() => readTable(csv(many)))).toBe('TOO_MANY_ROWS');
-    const exact = 'Name,Mobile\n' + Array.from({ length: MAX_ROWS }, (_v, i) => `P${i},${i}`).join('\n');
+    const exact =
+      'Name,Mobile\n' + Array.from({ length: MAX_ROWS }, (_v, i) => `P${i},${i}`).join('\n');
     expect((await readTable(csv(exact))).rows).toHaveLength(MAX_ROWS);
     const wide = Array.from({ length: MAX_COLUMNS + 1 }, (_v, i) => `c${i}`).join(',');
     expect(await codeOf(() => readTable(csv(`${wide}\n`)))).toBe('TOO_MANY_COLUMNS');
@@ -115,17 +144,38 @@ describe('readTable: CSV', () => {
 
 describe('readTable: Excel', () => {
   const xlsx = (rows: unknown[][]) =>
-    writeXlsxFile(rows.map((r) => r.map((value) => (value === null ? { value: '' } : typeof value === 'string' ? { value, type: String } : value instanceof Date ? { value, format: 'yyyy-mm-dd' } : { value } as never)))).toBuffer();
+    writeXlsxFile(
+      rows.map((r) =>
+        r.map((value) =>
+          value === null
+            ? { value: '' }
+            : typeof value === 'string'
+              ? { value, type: String }
+              : value instanceof Date
+                ? { value, format: 'yyyy-mm-dd' }
+                : ({ value } as never),
+        ),
+      ),
+    ).toBuffer();
 
   it('reads an .xlsx file, writing a number out in full', async () => {
-    const t = await readTable(await xlsx([['Name', 'Mobile', 'Joined'], ['Riya', 919876543210, new Date('2026-10-28T00:00:00Z')], ['Asha', '09876543211', null]]));
+    const t = await readTable(
+      await xlsx([
+        ['Name', 'Mobile', 'Joined'],
+        ['Riya', 919876543210, new Date('2026-10-28T00:00:00Z')],
+        ['Asha', '09876543211', null],
+      ]),
+    );
     expect(t.header).toEqual(['Name', 'Mobile', 'Joined']);
     expect(t.rows[0]).toEqual(['Riya', '919876543210', '2026-10-28']);
     expect(t.rows[1]).toEqual(['Asha', '09876543211', '']);
   });
 
   it('refuses a file that claims to be a spreadsheet but is not', async () => {
-    const fake = Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.from('this is not really a zip archive')]);
+    const fake = Buffer.concat([
+      Buffer.from([0x50, 0x4b, 0x03, 0x04]),
+      Buffer.from('this is not really a zip archive'),
+    ]);
     expect(await codeOf(() => readTable(fake))).toBe('BAD_XLSX');
   });
 });
@@ -134,7 +184,15 @@ describe('readTable: Excel', () => {
 
 describe('detectMapping', () => {
   it('finds columns by the names people use', () => {
-    const { mapping, unmapped } = detectMapping(['Student Name', 'Mobile No.', 'E-mail ID', 'Course', 'City', 'Study Mode', 'Remarks']);
+    const { mapping, unmapped } = detectMapping([
+      'Student Name',
+      'Mobile No.',
+      'E-mail ID',
+      'Course',
+      'City',
+      'Study Mode',
+      'Remarks',
+    ]);
     expect(mapping).toEqual({ name: 0, phone: 1, email: 2, interest: 3, city: 4, mode: 5 });
     expect(unmapped).toEqual(['Remarks']);
   });
@@ -154,7 +212,9 @@ describe('detectMapping', () => {
     const header = ['Candidate', 'Number'];
     const base = detectMapping(header).mapping;
     expect(base.phone).toBeUndefined();
-    expect(applyOverride(header, base, { phone: 'Number', name: 'No such column' })).toMatchObject({ phone: 1 });
+    expect(applyOverride(header, base, { phone: 'Number', name: 'No such column' })).toMatchObject({
+      phone: 1,
+    });
   });
 });
 
@@ -178,10 +238,22 @@ describe('toRecords and validateRecords', () => {
 
   it('sorts rows into those that can be filed and those that cannot, with the reason', () => {
     const { valid, invalid } = validateRecords(toRecords(table, mapping), 'import: leads.csv');
-    expect(valid.map((v) => [v.row, v.lead.phone])).toEqual([[2, '919876543210'], [6, '919876543211'], [7, '919876543210']]);
-    expect(valid[0]!.lead).toMatchObject({ name: 'Riya Sharma', email: 'riya@example.com', studyMode: 'online', formName: 'import: leads.csv' });
+    expect(valid.map((v) => [v.row, v.lead.phone])).toEqual([
+      [2, '919876543210'],
+      [6, '919876543211'],
+      [7, '919876543210'],
+    ]);
+    expect(valid[0]!.lead).toMatchObject({
+      name: 'Riya Sharma',
+      email: 'riya@example.com',
+      studyMode: 'online',
+      formName: 'import: leads.csv',
+    });
     expect(valid[1]!.lead).toMatchObject({ email: undefined, studyMode: undefined }); // bad optional details are dropped, the lead is kept
-    expect(invalid.map((i) => [i.row, i.name])).toEqual([[4, 'No Phone'], [5, 'Bad Phone']]);
+    expect(invalid.map((i) => [i.row, i.name])).toEqual([
+      [4, 'No Phone'],
+      [5, 'Bad Phone'],
+    ]);
     expect(invalid[0]!.problem).toContain('phone');
     expect(invalid[1]!.problem).toContain('not a valid mobile number');
   });
@@ -194,12 +266,20 @@ describe('toRecords and validateRecords', () => {
 
 describe('readTable: workbooks as people really make them', () => {
   const cells = (rows: string[][]) => rows.map((r) => r.map((value) => ({ value, type: String })));
-  const book = (sheets: { name: string; rows: string[][] }[]) => writeXlsxFile(sheets.map((s) => ({ data: cells(s.rows), sheet: s.name }))).toBuffer();
+  const book = (sheets: { name: string; rows: string[][] }[]) =>
+    writeXlsxFile(sheets.map((s) => ({ data: cells(s.rows), sheet: s.name }))).toBuffer();
 
   it('reads the sheet that holds the leads when the first sheet is empty or only has a header', async () => {
     const buf = await book([
       { name: 'Sheet1', rows: [['Name', 'Phone']] },
-      { name: 'Data', rows: [['Student Name', 'Mobile No.'], ['Riya', '9811100001'], ['Asha', '9811100002']] },
+      {
+        name: 'Data',
+        rows: [
+          ['Student Name', 'Mobile No.'],
+          ['Riya', '9811100001'],
+          ['Asha', '9811100002'],
+        ],
+      },
     ]);
     const t = await readTable(buf, { looksLikeHeader: leadHeaderRow });
     expect(t.header).toEqual(['Student Name', 'Mobile No.']);
@@ -208,22 +288,55 @@ describe('readTable: workbooks as people really make them', () => {
 
   it('keeps the first sheet when it has the leads', async () => {
     const buf = await book([
-      { name: 'Leads', rows: [['Name', 'Phone'], ['Riya', '9811100001']] },
-      { name: 'Other', rows: [['Name', 'Phone'], ['Someone', '9811100003']] },
+      {
+        name: 'Leads',
+        rows: [
+          ['Name', 'Phone'],
+          ['Riya', '9811100001'],
+        ],
+      },
+      {
+        name: 'Other',
+        rows: [
+          ['Name', 'Phone'],
+          ['Someone', '9811100003'],
+        ],
+      },
     ]);
     expect((await readTable(buf)).rows).toEqual([['Riya', '9811100001']]);
   });
 
   it('skips a title or blank banner above the column names', async () => {
-    const buf = await book([{ name: 'Sheet1', rows: [['October enquiries', ''], ['', ''], ['Student Name', 'Mobile No.', 'City'], ['Riya', '9811100001', 'Noida']] }]);
+    const buf = await book([
+      {
+        name: 'Sheet1',
+        rows: [
+          ['October enquiries', ''],
+          ['', ''],
+          ['Student Name', 'Mobile No.', 'City'],
+          ['Riya', '9811100001', 'Noida'],
+        ],
+      },
+    ]);
     const t = await readTable(buf, { looksLikeHeader: leadHeaderRow });
     expect(t.header).toEqual(['Student Name', 'Mobile No.', 'City']);
     expect(t.rows).toEqual([['Riya', '9811100001', 'Noida']]);
   });
 
   it('still takes the first filled row as the header when nothing looks like one', async () => {
-    const buf = await book([{ name: 'Sheet1', rows: [['Alpha', 'Beta'], ['1', '2']] }]);
-    expect((await readTable(buf, { looksLikeHeader: leadHeaderRow })).header).toEqual(['Alpha', 'Beta']);
+    const buf = await book([
+      {
+        name: 'Sheet1',
+        rows: [
+          ['Alpha', 'Beta'],
+          ['1', '2'],
+        ],
+      },
+    ]);
+    expect((await readTable(buf, { looksLikeHeader: leadHeaderRow })).header).toEqual([
+      'Alpha',
+      'Beta',
+    ]);
   });
 });
 
@@ -233,21 +346,33 @@ describe('details: the columns that have no field of their own', () => {
   it('keeps them in the order of the sheet, and leaves out empty cells and the mapped columns', () => {
     const header = ['Name', 'Mobile', 'Qualification', 'Parent', 'Note'];
     const mapping = detectMapping(header).mapping;
-    expect(detailsOf(header, ['Riya', '9811100001', 'B.Com', '', 'Call after 5'], mapping)).toBe('Qualification: B.Com; Note: Call after 5');
+    expect(detailsOf(header, ['Riya', '9811100001', 'B.Com', '', 'Call after 5'], mapping)).toBe(
+      'Qualification: B.Com; Note: Call after 5',
+    );
     expect(detailsOf(header, ['Riya', '9811100001', '', '', ''], mapping)).toBeUndefined();
   });
 
   it('shortens a very long value and caps the whole text', () => {
     const header = ['Name', 'Phone', 'A', 'B'];
     const mapping = detectMapping(header).mapping;
-    expect(detailsOf(header, ['x', '9', 'a'.repeat(500), ''], mapping)).toBe(`A: ${'a'.repeat(200)}…`);
+    expect(detailsOf(header, ['x', '9', 'a'.repeat(500), ''], mapping)).toBe(
+      `A: ${'a'.repeat(200)}…`,
+    );
     const wide = Array.from({ length: 12 }, (_v, i) => `Col${i}`);
-    const text = detailsOf(['Name', 'Phone', ...wide], ['x', '9', ...wide.map(() => 'v'.repeat(180))], detectMapping(['Name', 'Phone']).mapping)!;
+    const text = detailsOf(
+      ['Name', 'Phone', ...wide],
+      ['x', '9', ...wide.map(() => 'v'.repeat(180))],
+      detectMapping(['Name', 'Phone']).mapping,
+    )!;
     expect(text.length).toBeLessThanOrEqual(1501);
   });
 
   it('attaches the details to a valid row and to nothing else', () => {
-    const t = table(['Name', 'Phone', 'Qualification'], ['Riya', '9811100001', 'B.Com'], ['Asha', '9811100002', '']);
+    const t = table(
+      ['Name', 'Phone', 'Qualification'],
+      ['Riya', '9811100001', 'B.Com'],
+      ['Asha', '9811100002', ''],
+    );
     const { valid } = validateRecords(toRecords(t, detectMapping(t.header).mapping), 'import');
     expect(valid[0]!.lead.details).toBe('Qualification: B.Com');
     expect(valid[1]!.lead.details).toBeUndefined();
@@ -256,10 +381,23 @@ describe('details: the columns that have no field of their own', () => {
 
 describe('detectMapping: the headings people really use', () => {
   it('reads Region, Area and Locality as the city, and Course as the interest', () => {
-    for (const heading of ['Region', 'region', 'REGION', 'Area', 'Locality', 'City / Town', 'Preferred Location']) {
+    for (const heading of [
+      'Region',
+      'region',
+      'REGION',
+      'Area',
+      'Locality',
+      'City / Town',
+      'Preferred Location',
+    ]) {
       expect(detectMapping(['Name', 'Phone', heading]).mapping.city, heading).toBe(2);
     }
-    expect(detectMapping(['Student Name', 'Mobile No.', 'Email ID', 'Course', 'Region'])).toMatchObject({ mapping: { name: 0, phone: 1, email: 2, interest: 3, city: 4 }, unmapped: [] });
+    expect(
+      detectMapping(['Student Name', 'Mobile No.', 'Email ID', 'Course', 'Region']),
+    ).toMatchObject({
+      mapping: { name: 0, phone: 1, email: 2, interest: 3, city: 4 },
+      unmapped: [],
+    });
   });
   it('does not take State for the city', () => {
     expect(detectMapping(['Name', 'Phone', 'State']).mapping.city).toBeUndefined();

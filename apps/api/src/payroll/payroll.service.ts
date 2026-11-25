@@ -2,7 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { sql, SqlBool } from 'kysely';
 import { z } from 'zod';
 import { scopeCondition } from '../access/scope.js';
-import { AttendanceSummaryService, MonthSummary } from '../attendance/attendance-summary.service.js';
+import {
+  AttendanceSummaryService,
+  MonthSummary,
+} from '../attendance/attendance-summary.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import type { AuthContext } from '../auth/auth-context.js';
 import { AppError } from '../common/app-error.js';
@@ -10,7 +13,14 @@ import { CSV_BOM, csvRow } from '../common/csv.js';
 import { decodeCursor, Page, toPage } from '../common/pagination.js';
 import { DatabaseService, Trx } from '../database/database.service.js';
 import { readTable } from '../imports/spreadsheet.js';
-import { amountProblem, monthLabel, monthStart, parseSalarySheet, SalaryProblem, SalaryRow } from './payroll-rules.js';
+import {
+  amountProblem,
+  monthLabel,
+  monthStart,
+  parseSalarySheet,
+  SalaryProblem,
+  SalaryRow,
+} from './payroll-rules.js';
 import { buildPayslip, PayslipData } from './payslip.js';
 
 export interface SalaryInput {
@@ -38,8 +48,21 @@ export interface SalaryView {
 }
 
 interface Row {
-  id: string; user_id: string; user_name: string; email: string; role: string; month: string; base_pay: string; allowances: string;
-  deductions: string; net_pay: string; notes: string | null; entered_by: string; updated_at: Date; created_text: string; payslip_id: string | null;
+  id: string;
+  user_id: string;
+  user_name: string;
+  email: string;
+  role: string;
+  month: string;
+  base_pay: string;
+  allowances: string;
+  deductions: string;
+  net_pay: string;
+  notes: string | null;
+  entered_by: string;
+  updated_at: Date;
+  created_text: string;
+  payslip_id: string | null;
 }
 
 const SELECT = sql`
@@ -78,13 +101,22 @@ export class PayrollService {
 
   save(auth: AuthContext, input: SalaryInput): Promise<SalaryView> {
     return this.db.withTenant(auth.tenantId, async (trx) => {
-      const id = await this.upsert(trx, auth, this.checked(input, await this.companyMonth(trx, auth)), null);
+      const id = await this.upsert(
+        trx,
+        auth,
+        this.checked(input, await this.companyMonth(trx, auth)),
+        null,
+      );
       return this.view(trx, id);
     });
   }
 
   /** Several employees for one month, all together or none. */
-  saveMany(auth: AuthContext, month: string, rows: Omit<SalaryInput, 'month'>[]): Promise<{ saved: SalaryView[] }> {
+  saveMany(
+    auth: AuthContext,
+    month: string,
+    rows: Omit<SalaryInput, 'month'>[],
+  ): Promise<{ saved: SalaryView[] }> {
     return this.db.withTenant(auth.tenantId, async (trx) => {
       const thisMonth = await this.companyMonth(trx, auth);
       const problems: { index: number; problem: string }[] = [];
@@ -92,7 +124,8 @@ export class PayrollService {
       const seen = new Set<string>();
       for (const [index, r] of rows.entries()) {
         try {
-          if (seen.has(r.userId)) throw AppError.badRequest('DUPLICATE_ROW', 'This employee appears more than once');
+          if (seen.has(r.userId))
+            throw AppError.badRequest('DUPLICATE_ROW', 'This employee appears more than once');
           seen.add(r.userId);
           ids.push(await this.upsert(trx, auth, this.checked({ ...r, month }, thisMonth), null));
         } catch (err) {
@@ -100,22 +133,41 @@ export class PayrollService {
           problems.push({ index, problem: err.message });
         }
       }
-      if (problems.length > 0) throw new AppError('BULK_REJECTED', 'Some rows cannot be saved, so none were', 422, undefined, undefined, { problems });
+      if (problems.length > 0)
+        throw new AppError(
+          'BULK_REJECTED',
+          'Some rows cannot be saved, so none were',
+          422,
+          undefined,
+          undefined,
+          { problems },
+        );
       return { saved: await Promise.all(ids.map((id) => this.view(trx, id))) };
     });
   }
 
   /** The current month on the company's own calendar (YYYY-MM), not the server's UTC one. */
   private async companyMonth(trx: Trx, auth: AuthContext): Promise<string> {
-    const { rows } = await sql<{ m: string }>`SELECT to_char(now() AT TIME ZONE timezone, 'YYYY-MM') AS m FROM tenants WHERE id = ${auth.tenantId}`.execute(trx);
+    const { rows } = await sql<{
+      m: string;
+    }>`SELECT to_char(now() AT TIME ZONE timezone, 'YYYY-MM') AS m FROM tenants WHERE id = ${auth.tenantId}`.execute(
+      trx,
+    );
     return rows[0]!.m;
   }
 
   private checked(input: SalaryInput, thisMonth: string): SalaryInput & { monthDate: string } {
     const monthDate = monthStart(input.month);
-    if (!monthDate) throw AppError.badRequest('MONTH_INVALID', 'Give the month as YYYY-MM', [{ field: 'month', message: 'Give the month as YYYY-MM' }]);
+    if (!monthDate)
+      throw AppError.badRequest('MONTH_INVALID', 'Give the month as YYYY-MM', [
+        { field: 'month', message: 'Give the month as YYYY-MM' },
+      ]);
     if (monthDate > thisMonth + '-01') {
-      throw AppError.badRequest('MONTH_IN_FUTURE', 'A salary cannot be entered for a month that has not begun', [{ field: 'month', message: 'Choose this month or an earlier one' }]);
+      throw AppError.badRequest(
+        'MONTH_IN_FUTURE',
+        'A salary cannot be entered for a month that has not begun',
+        [{ field: 'month', message: 'Choose this month or an earlier one' }],
+      );
     }
     const bad = amountProblem(input);
     if (bad) throw new AppError('NET_NEGATIVE', bad, 422, [{ field: 'deductions', message: bad }]);
@@ -123,17 +175,42 @@ export class PayrollService {
   }
 
   /** Adds or changes one record, with the audit entry. Returns the record's id. */
-  private async upsert(trx: Trx, auth: AuthContext, input: SalaryInput & { monthDate: string }, batchId: string | null): Promise<string> {
-    if (input.userId === auth.userId) throw new AppError('OWN_SALARY', 'You cannot enter your own salary. Ask another admin.', 403);
+  private async upsert(
+    trx: Trx,
+    auth: AuthContext,
+    input: SalaryInput & { monthDate: string },
+    batchId: string | null,
+  ): Promise<string> {
+    if (input.userId === auth.userId)
+      throw new AppError('OWN_SALARY', 'You cannot enter your own salary. Ask another admin.', 403);
     // A month with a payroll run is worked out by the run; typing a salary in as well would make two answers.
-    const { rows: run } = await sql<{ id: string }>`SELECT id FROM payroll_runs WHERE month = ${input.monthDate}::date`.execute(trx);
-    if (run[0]) throw AppError.conflict('PAYROLL_RUN_EXISTS', `${monthLabel(input.monthDate)} has a payroll run, so its salaries come from the run`, { runId: run[0].id });
+    const { rows: run } = await sql<{
+      id: string;
+    }>`SELECT id FROM payroll_runs WHERE month = ${input.monthDate}::date`.execute(trx);
+    if (run[0])
+      throw AppError.conflict(
+        'PAYROLL_RUN_EXISTS',
+        `${monthLabel(input.monthDate)} has a payroll run, so its salaries come from the run`,
+        { runId: run[0].id },
+      );
     const scoped = scopeCondition(auth, 'u.id');
-    const { rows: target } = await sql<{ id: string }>`SELECT u.id FROM users u WHERE u.id = ${input.userId}::uuid ${scoped ? sql`AND ${scoped}` : sql``}`.execute(trx);
+    const { rows: target } = await sql<{
+      id: string;
+    }>`SELECT u.id FROM users u WHERE u.id = ${input.userId}::uuid ${scoped ? sql`AND ${scoped}` : sql``}`.execute(
+      trx,
+    );
     if (!target[0]) throw AppError.notFound('Employee');
 
-    const { rows: before } = await sql<{ id: string; base_pay: string; allowances: string; deductions: string; notes: string | null }>`
-      SELECT id, base_pay, allowances, deductions, notes FROM salary_records WHERE user_id = ${input.userId}::uuid AND month = ${input.monthDate}::date FOR UPDATE`.execute(trx);
+    const { rows: before } = await sql<{
+      id: string;
+      base_pay: string;
+      allowances: string;
+      deductions: string;
+      notes: string | null;
+    }>`
+      SELECT id, base_pay, allowances, deductions, notes FROM salary_records WHERE user_id = ${input.userId}::uuid AND month = ${input.monthDate}::date FOR UPDATE`.execute(
+      trx,
+    );
     const notes = input.notes?.trim() || null;
     let id: string;
     if (before[0]) {
@@ -150,10 +227,27 @@ export class PayrollService {
       id = rows[0]!.id;
     }
     await this.audit.write(trx, {
-      tenantId: auth.tenantId, actorId: auth.userId, action: before[0] ? 'salary.update' : 'salary.create', entity: 'salary_record', entityId: id,
-      before: before[0] && { basePay: Number(before[0].base_pay), allowances: Number(before[0].allowances), deductions: Number(before[0].deductions), notes: before[0].notes },
-      after: { userId: input.userId, month: monthLabel(input.monthDate), basePay: input.basePay, allowances: input.allowances, deductions: input.deductions, notes },
-      ip: auth.ip, requestId: auth.requestId,
+      tenantId: auth.tenantId,
+      actorId: auth.userId,
+      action: before[0] ? 'salary.update' : 'salary.create',
+      entity: 'salary_record',
+      entityId: id,
+      before: before[0] && {
+        basePay: Number(before[0].base_pay),
+        allowances: Number(before[0].allowances),
+        deductions: Number(before[0].deductions),
+        notes: before[0].notes,
+      },
+      after: {
+        userId: input.userId,
+        month: monthLabel(input.monthDate),
+        basePay: input.basePay,
+        allowances: input.allowances,
+        deductions: input.deductions,
+        notes,
+      },
+      ip: auth.ip,
+      requestId: auth.requestId,
     });
     return id;
   }
@@ -161,14 +255,31 @@ export class PayrollService {
   // ---------------------------------------------------------------- import
 
   /** Reads a salary sheet for one month. With `apply`, saves the good rows and keeps a record of the upload. */
-  async importSheet(auth: AuthContext, input: { month: string; fileName: string; data: Buffer }, apply: boolean): Promise<ImportResult> {
+  async importSheet(
+    auth: AuthContext,
+    input: { month: string; fileName: string; data: Buffer },
+    apply: boolean,
+  ): Promise<ImportResult> {
     const monthDate = monthStart(input.month);
-    if (!monthDate) throw AppError.badRequest('MONTH_INVALID', 'Give the month as YYYY-MM', [{ field: 'month', message: 'Give the month as YYYY-MM' }]);
-    this.checked({ userId: auth.userId, month: input.month, basePay: 0, allowances: 0, deductions: 0 }, await this.db.withTenant(auth.tenantId, (trx) => this.companyMonth(trx, auth)));
+    if (!monthDate)
+      throw AppError.badRequest('MONTH_INVALID', 'Give the month as YYYY-MM', [
+        { field: 'month', message: 'Give the month as YYYY-MM' },
+      ]);
+    this.checked(
+      { userId: auth.userId, month: input.month, basePay: 0, allowances: 0, deductions: 0 },
+      await this.db.withTenant(auth.tenantId, (trx) => this.companyMonth(trx, auth)),
+    );
     const table = await readTable(input.data);
     const parsed = parseSalarySheet(table);
     if (parsed.missing.length > 0) {
-      throw new AppError('MAPPING_INCOMPLETE', `The sheet needs columns for: ${parsed.missing.join(', ')}`, 422, undefined, undefined, { missing: parsed.missing, columns: table.header });
+      throw new AppError(
+        'MAPPING_INCOMPLETE',
+        `The sheet needs columns for: ${parsed.missing.join(', ')}`,
+        422,
+        undefined,
+        undefined,
+        { missing: parsed.missing, columns: table.header },
+      );
     }
 
     return this.db.withTenant(auth.tenantId, async (trx) => {
@@ -177,34 +288,86 @@ export class PayrollService {
       const seen = new Set<string>();
       for (const r of parsed.rows) {
         if (seen.has(r.email)) {
-          problems.push({ row: r.row, email: r.email, problem: 'This employee appears more than once in the file' });
+          problems.push({
+            row: r.row,
+            email: r.email,
+            problem: 'This employee appears more than once in the file',
+          });
           continue;
         }
         seen.add(r.email);
         const scoped = scopeCondition(auth, 'u.id');
-        const { rows } = await sql<{ id: string }>`SELECT u.id FROM users u WHERE u.email = ${r.email} ${scoped ? sql`AND ${scoped}` : sql``}`.execute(trx);
-        if (!rows[0]) problems.push({ row: r.row, email: r.email, problem: 'email: No employee with this email in your team' });
-        else if (rows[0].id === auth.userId) problems.push({ row: r.row, email: r.email, problem: 'email: You cannot enter your own salary' });
+        const { rows } = await sql<{
+          id: string;
+        }>`SELECT u.id FROM users u WHERE u.email = ${r.email} ${scoped ? sql`AND ${scoped}` : sql``}`.execute(
+          trx,
+        );
+        if (!rows[0])
+          problems.push({
+            row: r.row,
+            email: r.email,
+            problem: 'email: No employee with this email in your team',
+          });
+        else if (rows[0].id === auth.userId)
+          problems.push({
+            row: r.row,
+            email: r.email,
+            problem: 'email: You cannot enter your own salary',
+          });
         else good.push({ ...r, userId: rows[0].id });
       }
       const { rows: existing } = good.length
-        ? await sql<{ user_id: string }>`SELECT user_id FROM salary_records WHERE month = ${monthDate}::date AND user_id = ANY(${good.map((g) => g.userId)}::uuid[])`.execute(trx)
+        ? await sql<{
+            user_id: string;
+          }>`SELECT user_id FROM salary_records WHERE month = ${monthDate}::date AND user_id = ANY(${good.map((g) => g.userId)}::uuid[])`.execute(
+            trx,
+          )
         : { rows: [] };
       const result: ImportResult = {
-        month: monthLabel(monthDate), rows: parsed.rows.length + parsed.problems.length, toAdd: good.length - existing.length, toChange: existing.length,
-        problems: problems.sort((a, b) => a.row - b.row), applied: apply,
+        month: monthLabel(monthDate),
+        rows: parsed.rows.length + parsed.problems.length,
+        toAdd: good.length - existing.length,
+        toChange: existing.length,
+        problems: problems.sort((a, b) => a.row - b.row),
+        applied: apply,
       };
       if (!apply) return result;
 
       const { rows: batch } = await sql<{ id: string }>`
         INSERT INTO salary_import_batches (tenant_id, month, uploaded_by, rows_total, rows_ok, rows_failed)
-        VALUES (${auth.tenantId}, ${monthDate}, ${auth.userId}, ${result.rows}, ${good.length}, ${problems.length}) RETURNING id`.execute(trx);
+        VALUES (${auth.tenantId}, ${monthDate}, ${auth.userId}, ${result.rows}, ${good.length}, ${problems.length}) RETURNING id`.execute(
+        trx,
+      );
       for (const g of good) {
-        await this.upsert(trx, auth, { userId: g.userId, month: input.month, monthDate, basePay: g.basePay, allowances: g.allowances, deductions: g.deductions, notes: g.notes }, batch[0]!.id);
+        await this.upsert(
+          trx,
+          auth,
+          {
+            userId: g.userId,
+            month: input.month,
+            monthDate,
+            basePay: g.basePay,
+            allowances: g.allowances,
+            deductions: g.deductions,
+            notes: g.notes,
+          },
+          batch[0]!.id,
+        );
       }
       await this.audit.write(trx, {
-        tenantId: auth.tenantId, actorId: auth.userId, action: 'salary.import', entity: 'salary_import_batch', entityId: batch[0]!.id,
-        after: { file: input.fileName, month: result.month, saved: good.length, skipped: problems.length }, ip: auth.ip, requestId: auth.requestId,
+        tenantId: auth.tenantId,
+        actorId: auth.userId,
+        action: 'salary.import',
+        entity: 'salary_import_batch',
+        entityId: batch[0]!.id,
+        after: {
+          file: input.fileName,
+          month: result.month,
+          saved: good.length,
+          skipped: problems.length,
+        },
+        ip: auth.ip,
+        requestId: auth.requestId,
       });
       return { ...result, batchId: batch[0]!.id };
     });
@@ -212,7 +375,10 @@ export class PayrollService {
 
   // ------------------------------------------------------------------ read
 
-  list(auth: AuthContext, q: { month?: string; userId?: string; roleId?: string; limit: number; cursor?: string }): Promise<Page<SalaryView>> {
+  list(
+    auth: AuthContext,
+    q: { month?: string; userId?: string; roleId?: string; limit: number; cursor?: string },
+  ): Promise<Page<SalaryView>> {
     return this.db.withTenant(auth.tenantId, async (trx) => {
       const after = decodeCursor(q.cursor, cursorShape);
       // A record that came from a payroll run is shown only while that run is approved.
@@ -223,7 +389,10 @@ export class PayrollService {
       if (q.userId) c.push(sql<SqlBool>`s.user_id = ${q.userId}::uuid`);
       if (q.roleId) c.push(sql<SqlBool>`u.role_id = ${q.roleId}::uuid`);
       if (after) c.push(sql<SqlBool>`(s.month, s.id) < (${after.m}::date, ${after.i}::uuid)`);
-      const { rows } = await sql<Row>`${SELECT} WHERE ${sql.join(c, sql` AND `)} ORDER BY s.month DESC, s.id DESC LIMIT ${q.limit + 1}`.execute(trx);
+      const { rows } =
+        await sql<Row>`${SELECT} WHERE ${sql.join(c, sql` AND `)} ORDER BY s.month DESC, s.id DESC LIMIT ${q.limit + 1}`.execute(
+          trx,
+        );
       const page = toPage(rows, q.limit, (last) => ({ m: last.month, i: last.id }));
       return { items: page.items.map(toView), nextCursor: page.nextCursor };
     });
@@ -231,7 +400,10 @@ export class PayrollService {
 
   mine(auth: AuthContext): Promise<SalaryView[]> {
     return this.db.withTenant(auth.tenantId, async (trx) => {
-      const { rows } = await sql<Row>`${SELECT} WHERE s.user_id = ${auth.userId}::uuid AND s.is_live ORDER BY s.month DESC LIMIT 60`.execute(trx);
+      const { rows } =
+        await sql<Row>`${SELECT} WHERE s.user_id = ${auth.userId}::uuid AND s.is_live ORDER BY s.month DESC LIMIT 60`.execute(
+          trx,
+        );
       return rows.map(toView);
     });
   }
@@ -240,13 +412,17 @@ export class PayrollService {
   detail(auth: AuthContext, id: string): Promise<SalaryView & { attendance: MonthSummary | null }> {
     return this.db.withTenant(auth.tenantId, async (trx) => {
       const row = await this.reachable(trx, auth, id);
-      const attendance = (await this.summary.forMonth(trx, [row.user_id], row.month)).get(row.user_id) ?? null;
+      const attendance =
+        (await this.summary.forMonth(trx, [row.user_id], row.month)).get(row.user_id) ?? null;
       return { ...toView(row), attendance };
     });
   }
 
   /** The monthly report as a file. */
-  async report(auth: AuthContext, q: { month?: string; userId?: string; roleId?: string; format: 'csv' | 'xlsx' }) {
+  async report(
+    auth: AuthContext,
+    q: { month?: string; userId?: string; roleId?: string; format: 'csv' | 'xlsx' },
+  ) {
     const all: SalaryView[] = [];
     let cursor: string | undefined;
     do {
@@ -254,14 +430,47 @@ export class PayrollService {
       all.push(...page.items);
       cursor = page.nextCursor ?? undefined;
     } while (cursor && all.length < 20_000);
-    const header = ['Month', 'Employee', 'Email', 'Role', 'Base Pay', 'Allowances', 'Deductions', 'Net Pay', 'Notes'];
-    const lines = all.map((s) => [s.month, s.user.name, s.user.email, s.user.role, s.basePay, s.allowances, s.deductions, s.netPay, s.notes ?? '']);
+    const header = [
+      'Month',
+      'Employee',
+      'Email',
+      'Role',
+      'Base Pay',
+      'Allowances',
+      'Deductions',
+      'Net Pay',
+      'Notes',
+    ];
+    const lines = all.map((s) => [
+      s.month,
+      s.user.name,
+      s.user.email,
+      s.user.role,
+      s.basePay,
+      s.allowances,
+      s.deductions,
+      s.netPay,
+      s.notes ?? '',
+    ]);
     const stamp = q.month ?? 'all';
-    if (q.format === 'csv') return { fileName: `salaries-${stamp}.csv`, contentType: 'text/csv; charset=utf-8', body: CSV_BOM + csvRow(header) + lines.map(csvRow).join('') };
+    if (q.format === 'csv')
+      return {
+        fileName: `salaries-${stamp}.csv`,
+        contentType: 'text/csv; charset=utf-8',
+        body: CSV_BOM + csvRow(header) + lines.map(csvRow).join(''),
+      };
     const { default: writeXlsxFile } = await import('write-excel-file/node');
-    const cell = (v: string | number) => (typeof v === 'number' ? { value: v, format: '#,##0.00' } : { value: v, type: String });
-    const body = await writeXlsxFile([header.map((h) => ({ value: h, fontWeight: 'bold' as const })), ...lines.map((l) => l.map(cell))] as never).toBuffer();
-    return { fileName: `salaries-${stamp}.xlsx`, contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', body };
+    const cell = (v: string | number) =>
+      typeof v === 'number' ? { value: v, format: '#,##0.00' } : { value: v, type: String };
+    const body = await writeXlsxFile([
+      header.map((h) => ({ value: h, fontWeight: 'bold' as const })),
+      ...lines.map((l) => l.map(cell)),
+    ] as never).toBuffer();
+    return {
+      fileName: `salaries-${stamp}.xlsx`,
+      contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      body,
+    };
   }
 
   async payslip(auth: AuthContext, id: string): Promise<{ fileName: string; pdf: Buffer }> {
@@ -269,29 +478,56 @@ export class PayrollService {
       const found = await this.reachable(trx, auth, id);
       return {
         row: found,
-        company: (await sql<{ name: string }>`SELECT name FROM tenants LIMIT 1`.execute(trx)).rows[0]!.name,
+        company: (await sql<{ name: string }>`SELECT name FROM tenants LIMIT 1`.execute(trx))
+          .rows[0]!.name,
         lines: found.payslip_id ? await this.payslipLines(trx, found.payslip_id) : undefined,
       };
     });
     const pdf = await buildPayslip({
-      company, employee: { name: row.user_name, email: row.email, role: row.role }, month: monthLabel(row.month),
-      basePay: Number(row.base_pay), allowances: Number(row.allowances), deductions: Number(row.deductions), netPay: Number(row.net_pay), notes: row.notes, lines,
+      company,
+      employee: { name: row.user_name, email: row.email, role: row.role },
+      month: monthLabel(row.month),
+      basePay: Number(row.base_pay),
+      allowances: Number(row.allowances),
+      deductions: Number(row.deductions),
+      netPay: Number(row.net_pay),
+      notes: row.notes,
+      lines,
     });
     return { fileName: `payslip-${monthLabel(row.month)}.pdf`, pdf };
   }
 
   /** The lines and the month's attendance facts of a payslip that came from a payroll run. */
-  private async payslipLines(trx: Trx, payslipId: string): Promise<NonNullable<PayslipData['lines']>> {
-    const { rows } = await sql<{ kind: 'earning' | 'deduction'; label: string; amount: string; detail: string | null; reason: string | null }>`
-      SELECT kind, label, amount, detail, reason FROM payslip_lines WHERE payslip_id = ${payslipId}::uuid ORDER BY position, id`.execute(trx);
-    return rows.map((l) => ({ kind: l.kind, label: l.label, amount: Number(l.amount), note: l.reason ?? l.detail }));
+  private async payslipLines(
+    trx: Trx,
+    payslipId: string,
+  ): Promise<NonNullable<PayslipData['lines']>> {
+    const { rows } = await sql<{
+      kind: 'earning' | 'deduction';
+      label: string;
+      amount: string;
+      detail: string | null;
+      reason: string | null;
+    }>`
+      SELECT kind, label, amount, detail, reason FROM payslip_lines WHERE payslip_id = ${payslipId}::uuid ORDER BY position, id`.execute(
+      trx,
+    );
+    return rows.map((l) => ({
+      kind: l.kind,
+      label: l.label,
+      amount: Number(l.amount),
+      note: l.reason ?? l.detail,
+    }));
   }
 
   // ----------------------------------------------------------------- inner
 
   private month(text: string): string {
     const m = monthStart(text);
-    if (!m) throw AppError.badRequest('MONTH_INVALID', 'Give the month as YYYY-MM', [{ field: 'month', message: 'Give the month as YYYY-MM' }]);
+    if (!m)
+      throw AppError.badRequest('MONTH_INVALID', 'Give the month as YYYY-MM', [
+        { field: 'month', message: 'Give the month as YYYY-MM' },
+      ]);
     return m;
   }
 
@@ -305,7 +541,8 @@ export class PayrollService {
     } else if (!auth.permissions.has('salary.read_own')) {
       throw AppError.forbidden();
     }
-    const { rows } = await sql<Row>`${SELECT} WHERE s.id = ${id}::uuid AND s.is_live AND ${access}`.execute(trx);
+    const { rows } =
+      await sql<Row>`${SELECT} WHERE s.id = ${id}::uuid AND s.is_live AND ${access}`.execute(trx);
     if (!rows[0]) throw AppError.notFound('Salary record');
     return rows[0];
   }
@@ -318,8 +555,16 @@ export class PayrollService {
 
 function toView(r: Row): SalaryView {
   return {
-    id: r.id, user: { id: r.user_id, name: r.user_name, email: r.email, role: r.role }, month: monthLabel(r.month), basePay: Number(r.base_pay),
-    allowances: Number(r.allowances), deductions: Number(r.deductions), netPay: Number(r.net_pay), notes: r.notes, enteredBy: r.entered_by, updatedAt: r.updated_at, payslipId: r.payslip_id,
+    id: r.id,
+    user: { id: r.user_id, name: r.user_name, email: r.email, role: r.role },
+    month: monthLabel(r.month),
+    basePay: Number(r.base_pay),
+    allowances: Number(r.allowances),
+    deductions: Number(r.deductions),
+    netPay: Number(r.net_pay),
+    notes: r.notes,
+    enteredBy: r.entered_by,
+    updatedAt: r.updated_at,
+    payslipId: r.payslip_id,
   };
 }
-

@@ -5,7 +5,10 @@ import { pageQuerySchema } from '../common/pagination.js';
 
 const year = z.coerce.number().int().min(2000).max(2100);
 
-export const createHolidaySchema = z.object({ date: calendarDate, name: z.string().trim().min(2).max(80) });
+export const createHolidaySchema = z.object({
+  date: calendarDate,
+  name: z.string().trim().min(2).max(80),
+});
 export class CreateHolidayDto extends createZodDto(createHolidaySchema) {}
 
 /** Many holidays at once (a year's list pasted from a sheet). A date that already has a holiday is left as it is. */
@@ -47,7 +50,12 @@ export const createRequestSchema = z
   })
   .transform((v) => {
     const halfDay = v.halfDay || v.half !== undefined;
-    return { ...v, toDate: v.toDate ?? v.fromDate, halfDay, half: halfDay ? (v.half ?? ('first' as const)) : undefined };
+    return {
+      ...v,
+      toDate: v.toDate ?? v.fromDate,
+      halfDay,
+      half: halfDay ? (v.half ?? ('first' as const)) : undefined,
+    };
   });
 export class CreateLeaveRequestDto extends createZodDto(createRequestSchema) {}
 
@@ -70,4 +78,6 @@ export const listRequestsSchema = pageQuerySchema.extend({
 });
 export class ListLeaveRequestsDto extends createZodDto(listRequestsSchema) {}
 
-export class BalancesQueryDto extends createZodDto(z.object({ year: year.optional(), userId: z.uuid().optional() })) {}
+export class BalancesQueryDto extends createZodDto(
+  z.object({ year: year.optional(), userId: z.uuid().optional() }),
+) {}

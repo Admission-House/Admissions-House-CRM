@@ -33,7 +33,10 @@ export interface Subscriber {
 }
 
 /** Whether this person should hear about this event. */
-export function wants(sub: Pick<Subscriber, 'tenantId' | 'userId' | 'canSeeTeam'>, e: LiveEvent): boolean {
+export function wants(
+  sub: Pick<Subscriber, 'tenantId' | 'userId' | 'canSeeTeam'>,
+  e: LiveEvent,
+): boolean {
   if (e.topic === 'resync') return true;
   if (sub.tenantId !== e.t) return false;
   switch (e.topic) {
@@ -78,7 +81,9 @@ export class RealtimeHub {
   /** Adds a connection. If the person already has `maxPerUser`, the oldest ones are returned so they can be closed. */
   add(sub: Subscriber, maxPerUser: number): Subscriber[] {
     this.entries.set(sub, { ...sub, pending: new Set(), timer: null });
-    const mine = [...this.entries.keys()].filter((s) => s.userId === sub.userId && s.tenantId === sub.tenantId);
+    const mine = [...this.entries.keys()].filter(
+      (s) => s.userId === sub.userId && s.tenantId === sub.tenantId,
+    );
     return mine.slice(0, Math.max(0, mine.length - maxPerUser));
   }
 

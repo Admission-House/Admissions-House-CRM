@@ -1,12 +1,21 @@
 'use client';
 
-import { AlertTriangle, CalendarClock, CalendarDays, Inbox, PhoneCall, PhoneMissed, Users, type LucideIcon } from 'lucide-react';
+import {
+  AlertTriangle,
+  CalendarClock,
+  CalendarDays,
+  Inbox,
+  PhoneCall,
+  PhoneMissed,
+  Users,
+  type LucideIcon,
+} from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { ChartCard, DonutChart, colorAt } from '@/components/charts';
 import { Button, Input, Notice, Panel, Select, Spinner, cx } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
-import { firstName, greeting } from '@/lib/format';
+import { firstName, greeting, ymd } from '@/lib/format';
 import { useRealtime } from '@/lib/realtime';
 import { useApi } from '@/lib/use-api';
 
@@ -16,8 +25,13 @@ interface Dashboard {
   dueToday: number;
   total: number;
   byStatus: { status: string; leads: number }[];
-  today: { calls: { total: number; connected: number; missed: number; talkSec: number }; overdueFollowUps: number };
-  team: { userId: string; name: string; role: string; status: string; lastActive: string | null }[] | null;
+  today: {
+    calls: { total: number; connected: number; missed: number; talkSec: number };
+    overdueFollowUps: number;
+  };
+  team:
+    | { userId: string; name: string; role: string; status: string; lastActive: string | null }[]
+    | null;
 }
 
 interface Report<R> {
@@ -26,7 +40,14 @@ interface Report<R> {
   rows: R[];
 }
 
-const QUEUE_LABEL: Record<string, string> = { fresh: 'Fresh', missed: 'Missed', followup: 'Follow-up', counselled: 'Counselled', fee_paid: 'Fee paid', closed: 'Closed' };
+const QUEUE_LABEL: Record<string, string> = {
+  fresh: 'Fresh',
+  missed: 'Missed',
+  followup: 'Follow-up',
+  counselled: 'Counselled',
+  fee_paid: 'Fee paid',
+  closed: 'Closed',
+};
 const TEAM_LABEL: Record<string, { label: string; color: string }> = {
   online: { label: 'Online', color: '#12a150' },
   on_call: { label: 'On a call', color: '#1d6fb8' },
@@ -44,24 +65,54 @@ const PERIODS = [
 ] as const;
 type Period = (typeof PERIODS)[number]['key'];
 
-const ymd = (d: Date) => new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
-const shortDay = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
-const talk = (s: number) => (s >= 3600 ? `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m` : `${Math.floor(s / 60)}m`);
+const shortDay = (iso: string) =>
+  new Date(`${iso}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+const talk = (s: number) =>
+  s >= 3600 ? `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m` : `${Math.floor(s / 60)}m`;
 
-function Kpi({ icon: Icon, label, value, hint, href, tone = 'brand' }: { icon: LucideIcon; label: string; value: number | string; hint?: string; href?: string; tone?: 'brand' | 'bad' | 'warn' | 'info' }) {
+function Kpi({
+  icon: Icon,
+  label,
+  value,
+  hint,
+  href,
+  tone = 'brand',
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: number | string;
+  hint?: string;
+  href?: string;
+  tone?: 'brand' | 'bad' | 'warn' | 'info';
+}) {
   // The circle carries the colour: teal normally, amber, red or blue for what needs attention.
-  const badge = { brand: 'bg-brand-600 text-white', bad: 'bg-bad text-white', warn: 'bg-warn text-white', info: 'bg-info text-white' };
+  const badge = {
+    brand: 'bg-brand-600 text-white',
+    bad: 'bg-bad text-white',
+    warn: 'bg-warn text-white',
+    info: 'bg-info text-white',
+  };
   const body = (
     <div className="glass h-full rounded-[var(--radius-card)] px-3 py-3 transition sm:px-4 sm:py-4 hover:-translate-y-0.5 hover:shadow-[0_12px_36px_rgb(6_59_57/0.14)]">
       <div className="flex items-center gap-2.5">
-        <span className={cx('grid h-9 w-9 shrink-0 place-items-center rounded-full', badge[tone])}><Icon className="h-[18px] w-[18px]" aria-hidden /></span>
+        <span className={cx('grid h-9 w-9 shrink-0 place-items-center rounded-full', badge[tone])}>
+          <Icon className="h-[18px] w-[18px]" aria-hidden />
+        </span>
         <p className="text-[13px] font-medium leading-tight text-muted">{label}</p>
       </div>
-      <p className="tabular mt-3 text-[24px] font-bold leading-none text-ink sm:text-[28px]">{value}</p>
+      <p className="tabular mt-3 text-[24px] font-bold leading-none text-ink sm:text-[28px]">
+        {value}
+      </p>
       {hint && <p className="mt-2 text-xs text-subtle">{hint}</p>}
     </div>
   );
-  return href ? <Link href={href} className="block h-full">{body}</Link> : body;
+  return href ? (
+    <Link href={href} className="block h-full">
+      {body}
+    </Link>
+  ) : (
+    body
+  );
 }
 
 export default function DashboardPage() {
@@ -88,11 +139,25 @@ export default function DashboardPage() {
   useRealtime(['team', 'lead', 'calllog'], dash.reload, 5_000);
   const reports = can('report.read');
   const range = reports && dates ? dates : undefined;
-  const perDay = useApi<Report<{ name: string; leads: number }>>(range ? '/reports/leads' : null, { groupBy: 'day', ...range });
-  const bySource = useApi<Report<{ name: string; leads: number }>>(range && can('lead.source') ? '/reports/leads' : null, { groupBy: 'source', ...range });
-  const calls = useApi<Report<{ name: string; total: number; connected: number; missed: number }>>(range ? '/reports/calls' : null, range);
-  const tat = useApi<Report<{ name: string; avgMin: number | null; leads: number }>>(range ? '/reports/tat' : null, { groupBy: 'user', ...range });
-  const followups = useApi<{ overdue: number; today: number; upcoming: number }>(can('followup.manage') ? '/followups/summary' : null);
+  const perDay = useApi<Report<{ name: string; leads: number }>>(range ? '/reports/leads' : null, {
+    groupBy: 'day',
+    ...range,
+  });
+  const bySource = useApi<Report<{ name: string; leads: number }>>(
+    range && can('lead.source') ? '/reports/leads' : null,
+    { groupBy: 'source', ...range },
+  );
+  const calls = useApi<Report<{ name: string; total: number; connected: number; missed: number }>>(
+    range ? '/reports/calls' : null,
+    range,
+  );
+  const tat = useApi<Report<{ name: string; avgMin: number | null; leads: number }>>(
+    range ? '/reports/tat' : null,
+    { groupBy: 'user', ...range },
+  );
+  const followups = useApi<{ overdue: number; today: number; upcoming: number }>(
+    can('followup.manage') ? '/followups/summary' : null,
+  );
 
   if (dash.loading && !dash.data) return <Spinner />;
   if (dash.error) return <Notice tone="bad">{dash.error.message}</Notice>;
@@ -101,16 +166,30 @@ export default function DashboardPage() {
   const todayLocal = new Date().toLocaleDateString('en-CA');
   if (!d) return null;
 
-  const team = d.team ? Object.entries(TEAM_LABEL).map(([key, v]) => ({ name: v.label, color: v.color, value: d.team!.filter((m) => m.status === key).length })) : null;
-  const trend = (perDay.data?.rows ?? []).slice().reverse().map((r) => ({ day: shortDay(r.name), leads: r.leads }));
+  const team = d.team
+    ? Object.entries(TEAM_LABEL).map(([key, v]) => ({
+        name: v.label,
+        color: v.color,
+        value: d.team!.filter((m) => m.status === key).length,
+      }))
+    : null;
+  const trend = (perDay.data?.rows ?? [])
+    .slice()
+    .reverse()
+    .map((r) => ({ day: shortDay(r.name), leads: r.leads }));
 
   return (
     <>
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight text-ink">{greeting(now)}{me ? `, ${firstName(me.user.name)}` : ''}</h1>
+          <h1 className="text-xl font-semibold tracking-tight text-ink">
+            {greeting(now)}
+            {me ? `, ${firstName(me.user.name)}` : ''}
+          </h1>
           <p className="mt-1 text-sm text-muted">
-            {me?.user.role.dataScope === 'own' ? 'Here is your work for today.' : `Here is how ${me?.company.name ?? 'the team'} is doing today.`}
+            {me?.user.role.dataScope === 'own'
+              ? 'Here is your work for today.'
+              : `Here is how ${me?.company.name ?? 'the team'} is doing today.`}
           </p>
         </div>
         {reports && (
@@ -118,50 +197,154 @@ export default function DashboardPage() {
             <label className="flex items-center gap-2 text-sm text-muted">
               <CalendarDays className="h-4 w-4" aria-hidden />
               <span className="sr-only">Period</span>
-              <Select value={period} onChange={(e) => setPeriod(e.target.value as Period)} className="w-44">
-                {PERIODS.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
+              <Select
+                value={period}
+                onChange={(e) => setPeriod(e.target.value as Period)}
+                className="w-44"
+              >
+                {PERIODS.map((p) => (
+                  <option key={p.key} value={p.key}>
+                    {p.label}
+                  </option>
+                ))}
               </Select>
             </label>
             {period === 'custom' && (
               <>
-                <label className="flex items-center gap-2 text-sm text-muted">From<Input type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} className="w-36" /></label>
-                <label className="flex items-center gap-2 text-sm text-muted">To<Input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} className="w-36" /></label>
+                <label className="flex items-center gap-2 text-sm text-muted">
+                  From
+                  <Input
+                    type="date"
+                    value={from}
+                    max={to || undefined}
+                    onChange={(e) => setFrom(e.target.value)}
+                    className="w-36"
+                  />
+                </label>
+                <label className="flex items-center gap-2 text-sm text-muted">
+                  To
+                  <Input
+                    type="date"
+                    value={to}
+                    min={from || undefined}
+                    onChange={(e) => setTo(e.target.value)}
+                    className="w-36"
+                  />
+                </label>
               </>
             )}
-            <Button variant="secondary" onClick={() => { setPeriod('30'); setFrom(''); setTo(''); }}>Reset</Button>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setPeriod('30');
+                setFrom('');
+                setTo('');
+              }}
+            >
+              Reset
+            </Button>
           </div>
         )}
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-6">
         <Kpi icon={Users} label="All leads" value={d.total} href="/leads" />
-        <Kpi icon={Inbox} label="Fresh leads" value={d.queues.fresh ?? 0} hint={d.unassigned > 0 ? `${d.unassigned} not assigned` : undefined} href="/leads?queue=fresh" />
-        <Kpi icon={CalendarClock} label="Follow-ups today" value={d.dueToday} tone="warn" href="/leads?followup=today" />
-        <Kpi icon={AlertTriangle} label="Overdue" value={d.today.overdueFollowUps} tone={d.today.overdueFollowUps > 0 ? 'bad' : 'brand'} href="/leads?followup=overdue" />
-        <Kpi icon={PhoneCall} label="Calls today" value={d.today.calls.total} tone="info" hint={`${d.today.calls.connected} connected · ${talk(d.today.calls.talkSec)}`} href={can('call.read') ? `/calls?from=${todayLocal}&to=${todayLocal}` : undefined} />
-        <Kpi icon={PhoneMissed} label="Missed calls today" value={d.today.calls.missed} tone={d.today.calls.missed > 0 ? 'bad' : 'brand'} href={can('call.read') ? `/calls?from=${todayLocal}&to=${todayLocal}&outcome=missed` : undefined} />
+        <Kpi
+          icon={Inbox}
+          label="Fresh leads"
+          value={d.queues.fresh ?? 0}
+          hint={d.unassigned > 0 ? `${d.unassigned} not assigned` : undefined}
+          href="/leads?queue=fresh"
+        />
+        <Kpi
+          icon={CalendarClock}
+          label="Follow-ups today"
+          value={d.dueToday}
+          tone="warn"
+          href="/leads?followup=today"
+        />
+        <Kpi
+          icon={AlertTriangle}
+          label="Overdue"
+          value={d.today.overdueFollowUps}
+          tone={d.today.overdueFollowUps > 0 ? 'bad' : 'brand'}
+          href="/leads?followup=overdue"
+        />
+        <Kpi
+          icon={PhoneCall}
+          label="Calls today"
+          value={d.today.calls.total}
+          tone="info"
+          hint={`${d.today.calls.connected} connected · ${talk(d.today.calls.talkSec)}`}
+          href={can('call.read') ? `/calls?from=${todayLocal}&to=${todayLocal}` : undefined}
+        />
+        <Kpi
+          icon={PhoneMissed}
+          label="Missed calls today"
+          value={d.today.calls.missed}
+          tone={d.today.calls.missed > 0 ? 'bad' : 'brand'}
+          href={
+            can('call.read')
+              ? `/calls?from=${todayLocal}&to=${todayLocal}&outcome=missed`
+              : undefined
+          }
+        />
       </div>
 
-      {reports && !dates && <div className="mt-4"><Notice tone="warn">Choose both dates to see the charts for your own period.</Notice></div>}
+      {reports && !dates && (
+        <div className="mt-4">
+          <Notice tone="warn">Choose both dates to see the charts for your own period.</Notice>
+        </div>
+      )}
 
       <div className="mt-5 grid gap-5 xl:grid-cols-2">
         {reports && (
-          <ChartCard title="Leads received" caption="New leads per day in the chosen period" rows={trend} xKey="day" series={[{ key: 'leads', label: 'Leads' }]} initial="area" height={270} />
+          <ChartCard
+            title="Leads received"
+            caption="New leads per day in the chosen period"
+            rows={trend}
+            xKey="day"
+            series={[{ key: 'leads', label: 'Leads' }]}
+            initial="area"
+            height={270}
+          />
         )}
         <Panel title="Leads by status">
-          <DonutChart data={d.byStatus.map((s, i) => ({ name: s.status, value: s.leads, color: colorAt(i) }))} centerLabel="leads" height={200} />
+          <DonutChart
+            data={d.byStatus.map((s, i) => ({ name: s.status, value: s.leads, color: colorAt(i) }))}
+            centerLabel="leads"
+            height={200}
+          />
         </Panel>
 
         {reports && can('lead.source') && (
-          <ChartCard title="Leads by source" caption="Where the leads in this period came from" rows={(bySource.data?.rows ?? []).map((r) => ({ name: r.name, leads: r.leads }))} xKey="name" series={[{ key: 'leads', label: 'Leads' }]} height={260} />
+          <ChartCard
+            title="Leads by source"
+            caption="Where the leads in this period came from"
+            rows={(bySource.data?.rows ?? []).map((r) => ({ name: r.name, leads: r.leads }))}
+            xKey="name"
+            series={[{ key: 'leads', label: 'Leads' }]}
+            height={260}
+          />
         )}
-        <ChartCard title="Leads by queue" caption="Where every lead sits right now" rows={Object.entries(d.queues).map(([k, n]) => ({ name: QUEUE_LABEL[k] ?? k, leads: n }))} xKey="name" series={[{ key: 'leads', label: 'Leads', color: '#0f625e' }]} height={260} />
+        <ChartCard
+          title="Leads by queue"
+          caption="Where every lead sits right now"
+          rows={Object.entries(d.queues).map(([k, n]) => ({ name: QUEUE_LABEL[k] ?? k, leads: n }))}
+          xKey="name"
+          series={[{ key: 'leads', label: 'Leads', color: '#0f625e' }]}
+          height={260}
+        />
 
         {followups.data && (
           <ChartCard
             title="Follow-ups"
             caption="What is waiting to be done"
-            rows={[{ name: 'Overdue', n: followups.data.overdue }, { name: 'Due today', n: followups.data.today }, { name: 'Upcoming', n: followups.data.upcoming }]}
+            rows={[
+              { name: 'Overdue', n: followups.data.overdue },
+              { name: 'Due today', n: followups.data.today },
+              { name: 'Upcoming', n: followups.data.upcoming },
+            ]}
             xKey="name"
             series={[{ key: 'n', label: 'Follow-ups', color: '#e29a1a' }]}
             height={240}
@@ -177,10 +360,19 @@ export default function DashboardPage() {
           <ChartCard
             title="Calls by counsellor"
             caption="Connected, missed and the rest, in the chosen period"
-            rows={(calls.data?.rows ?? []).map((r) => ({ name: r.name, answered: r.connected, missed: r.missed, other: Math.max(0, r.total - r.connected - r.missed) }))}
+            rows={(calls.data?.rows ?? []).map((r) => ({
+              name: r.name,
+              answered: r.connected,
+              missed: r.missed,
+              other: Math.max(0, r.total - r.connected - r.missed),
+            }))}
             xKey="name"
             stacked
-            series={[{ key: 'answered', label: 'Connected', color: '#12a150' }, { key: 'missed', label: 'Missed', color: '#d6393f' }, { key: 'other', label: 'Not picked or other', color: '#cfd8db' }]}
+            series={[
+              { key: 'answered', label: 'Connected', color: '#12a150' },
+              { key: 'missed', label: 'Missed', color: '#d6393f' },
+              { key: 'other', label: 'Not picked or other', color: '#cfd8db' },
+            ]}
             height={260}
             className="xl:col-span-1"
           />
@@ -189,7 +381,9 @@ export default function DashboardPage() {
           <ChartCard
             title="Time to first call"
             caption="Average hours from a lead arriving to the first call"
-            rows={(tat.data?.rows ?? []).filter((r) => r.avgMin !== null).map((r) => ({ name: r.name, hours: Math.round((r.avgMin! / 60) * 10) / 10 }))}
+            rows={(tat.data?.rows ?? [])
+              .filter((r) => r.avgMin !== null)
+              .map((r) => ({ name: r.name, hours: Math.round((r.avgMin! / 60) * 10) / 10 }))}
             xKey="name"
             series={[{ key: 'hours', label: 'Hours', color: '#1d6fb8' }]}
             height={260}

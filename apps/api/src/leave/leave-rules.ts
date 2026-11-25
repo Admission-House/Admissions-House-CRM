@@ -24,9 +24,14 @@ export interface DayCountInput {
 export function countLeaveDays(input: DayCountInput): number {
   const start = dayNumber(input.from);
   const end = dayNumber(input.to);
-  if (end < start) throw AppError.badRequest('DATES_REVERSED', 'The last day cannot be before the first day', [{ field: 'toDate', message: 'Choose a day on or after the first day' }]);
+  if (end < start)
+    throw AppError.badRequest('DATES_REVERSED', 'The last day cannot be before the first day', [
+      { field: 'toDate', message: 'Choose a day on or after the first day' },
+    ]);
   if (input.halfDay && start !== end) {
-    throw AppError.badRequest('HALF_DAY_SINGLE', 'A half day can be taken for one day only', [{ field: 'halfDay', message: 'Use a single day for a half day' }]);
+    throw AppError.badRequest('HALF_DAY_SINGLE', 'A half day can be taken for one day only', [
+      { field: 'halfDay', message: 'Use a single day for a half day' },
+    ]);
   }
   let days = 0;
   for (let day = start; day <= end; day++) {
@@ -38,9 +43,11 @@ export function countLeaveDays(input: DayCountInput): number {
 /** Leave balances are kept per calendar year, so one request stays inside one year. */
 export function assertSingleYear(from: string, to: string): void {
   if (from.slice(0, 4) !== to.slice(0, 4)) {
-    throw AppError.badRequest('SPANS_YEARS', 'Split leave that runs into the next year into two requests', [
-      { field: 'toDate', message: 'Keep the leave within one calendar year' },
-    ]);
+    throw AppError.badRequest(
+      'SPANS_YEARS',
+      'Split leave that runs into the next year into two requests',
+      [{ field: 'toDate', message: 'Keep the leave within one calendar year' }],
+    );
   }
 }
 

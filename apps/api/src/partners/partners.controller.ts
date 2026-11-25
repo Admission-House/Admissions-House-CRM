@@ -1,4 +1,14 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
@@ -40,7 +50,12 @@ export class PartnersController {
   @RequirePermissions('lead.update')
   @Post('leads/:id/partners/:key/send')
   @HttpCode(200)
-  send(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Param('key') key: string, @Body() body: SendDto) {
+  send(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('key') key: string,
+    @Body() body: SendDto,
+  ) {
     return this.partners.send(auth, id, key, body);
   }
 
@@ -48,14 +63,23 @@ export class PartnersController {
   @RequirePermissions('lead.update')
   @Post('leads/:id/partner-submissions/:submissionId/dnp')
   @HttpCode(200)
-  markDnp(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Param('submissionId', ParseUUIDPipe) submissionId: string, @Body() body: DnpDto) {
+  markDnp(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('submissionId', ParseUUIDPipe) submissionId: string,
+    @Body() body: DnpDto,
+  ) {
     return this.partners.markDnp(auth, id, submissionId, body.reason);
   }
 
   @RequirePermissions('lead.update')
   @Delete('leads/:id/partner-submissions/:submissionId/dnp')
   @HttpCode(200)
-  undoDnp(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Param('submissionId', ParseUUIDPipe) submissionId: string) {
+  undoDnp(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('submissionId', ParseUUIDPipe) submissionId: string,
+  ) {
     return this.partners.undoDnp(auth, id, submissionId);
   }
 }

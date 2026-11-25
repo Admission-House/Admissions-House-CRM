@@ -21,7 +21,10 @@ beforeAll(async () => {
   admin = await api.signIn('admin', { office: true });
   // Four entries by two different people, over two kinds of action.
   const insert = (actor: string, action: string, entity: string, after: object) =>
-    owner.query(`INSERT INTO audit_logs (tenant_id, actor_id, action, entity, after, ip) VALUES ($1, $2, $3, $4, $5, '10.0.0.7')`, [fx.tenantId, fx.user(actor).id, action, entity, JSON.stringify(after)]);
+    owner.query(
+      `INSERT INTO audit_logs (tenant_id, actor_id, action, entity, after, ip) VALUES ($1, $2, $3, $4, $5, '10.0.0.7')`,
+      [fx.tenantId, fx.user(actor).id, action, entity, JSON.stringify(after)],
+    );
   await insert('super', 'salary.update', 'salary', { basePay: 1000 });
   await insert('super', 'salary.create', 'salary', { basePay: 2000 });
   await insert('admin', 'attendance.exception', 'attendance', { reason: 'network' });
@@ -40,28 +43,47 @@ describe('audit log', () => {
   it('shows entries newest first, with who did it and what changed', async () => {
     const res = await list(sa, '?limit=100');
     expect(res.statusCode, res.body).toBe(200);
-    const items = res.json().items as { id: string; action: string; actor: { name: string } | null; after: unknown; ip: string }[];
+    const items = res.json().items as {
+      id: string;
+      action: string;
+      actor: { name: string } | null;
+      after: unknown;
+      ip: string;
+    }[];
     expect(items.length).toBeGreaterThanOrEqual(4);
     const ids = items.map((i) => BigInt(i.id));
     expect([...ids].sort((a, b) => (a < b ? 1 : -1))).toEqual(ids); // newest first
     const update = items.find((i) => i.action === 'salary.update')!;
-    expect(update).toMatchObject({ actor: { name: 'super' }, after: { basePay: 1000 }, ip: '10.0.0.7' });
+    expect(update).toMatchObject({
+      actor: { name: 'super' },
+      after: { basePay: 1000 },
+      ip: '10.0.0.7',
+    });
   });
 
   it('filters by person, by action or action group, and by day', async () => {
-    const byAdmin = (await list(sa, `?limit=100&actorId=${fx.user('admin').id}`)).json().items as { actor: { name: string } }[];
+    const byAdmin = (await list(sa, `?limit=100&actorId=${fx.user('admin').id}`)).json().items as {
+      actor: { name: string };
+    }[];
     expect(byAdmin.length).toBeGreaterThanOrEqual(2);
     expect(byAdmin.every((i) => i.actor.name === 'admin')).toBe(true);
 
     // "salary" means every salary.* action, and does not catch "salaryish.thing".
-    const salary = (await list(sa, '?limit=100&action=salary')).json().items as { action: string }[];
+    const salary = (await list(sa, '?limit=100&action=salary')).json().items as {
+      action: string;
+    }[];
     expect(salary.map((i) => i.action).sort()).toEqual(['salary.create', 'salary.update']);
     expect((await list(sa, '?limit=100&action=salary.update')).json().items).toHaveLength(1);
 
-    const today = (await owner.query(`SELECT (now() AT TIME ZONE 'Asia/Kolkata')::date::text AS d`)).rows[0].d as string;
-    expect((await list(sa, `?limit=100&from=${today}&to=${today}`)).json().items.length).toBeGreaterThanOrEqual(4);
+    const today = (await owner.query(`SELECT (now() AT TIME ZONE 'Asia/Kolkata')::date::text AS d`))
+      .rows[0].d as string;
+    expect(
+      (await list(sa, `?limit=100&from=${today}&to=${today}`)).json().items.length,
+    ).toBeGreaterThanOrEqual(4);
     expect((await list(sa, '?limit=100&from=2020-01-01&to=2020-01-02')).json().items).toEqual([]);
-    expect((await list(sa, '?from=2026-02-02&to=2026-02-01')).json().error.code).toBe('RANGE_INVALID');
+    expect((await list(sa, '?from=2026-02-02&to=2026-02-01')).json().error.code).toBe(
+      'RANGE_INVALID',
+    );
   });
 
   it('pages through the entries without repeating any', async () => {

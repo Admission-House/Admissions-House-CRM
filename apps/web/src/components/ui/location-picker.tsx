@@ -12,11 +12,21 @@ export interface Place {
   state?: string | null;
 }
 
-const label = (p: Place) => (p.type === 'city' && p.state ? `${p.name}, ${p.state}` : p.type === 'state' ? `${p.name} (state)` : p.name);
+const label = (p: Place) =>
+  p.type === 'city' && p.state
+    ? `${p.name}, ${p.state}`
+    : p.type === 'state'
+      ? `${p.name} (state)`
+      : p.name;
 
 /** A search box over the shared list of states and cities. Choosing sets one place or, with `multiple`, adds to a list. */
 export function LocationPicker({
-  id, value, onChange, multiple, placeholder = 'Search a city or state', allow,
+  id,
+  value,
+  onChange,
+  multiple,
+  placeholder = 'Search a city or state',
+  allow,
 }: {
   id?: string;
   value: Place[];
@@ -63,19 +73,36 @@ export function LocationPicker({
 
   return (
     <div ref={box} className="relative">
-      <div className={cx('flex min-h-9 flex-wrap items-center gap-1.5 rounded-md border border-line-strong bg-surface px-2 py-1 focus-within:border-teal-600 focus-within:ring-0')}>
+      <div
+        className={cx(
+          'flex min-h-9 flex-wrap items-center gap-1.5 rounded-md border border-line-strong bg-surface px-2 py-1 focus-within:border-teal-600 focus-within:ring-0',
+        )}
+      >
         {value.map((p) => (
-          <span key={p.id} className="inline-flex items-center gap-1 rounded bg-mint px-1.5 py-0.5 text-xs font-medium text-brand">
+          <span
+            key={p.id}
+            className="inline-flex items-center gap-1 rounded bg-mint px-1.5 py-0.5 text-xs font-medium text-brand"
+          >
             <MapPin className="h-3 w-3" aria-hidden />
             {label(p)}
-            <button type="button" onClick={() => onChange(value.filter((v) => v.id !== p.id))} aria-label={`Remove ${p.name}`} className="rounded text-brand/70 hover:text-brand"><X className="h-3 w-3" /></button>
+            <button
+              type="button"
+              onClick={() => onChange(value.filter((v) => v.id !== p.id))}
+              aria-label={`Remove ${p.name}`}
+              className="rounded text-brand/70 hover:text-brand"
+            >
+              <X className="h-3 w-3" />
+            </button>
           </span>
         ))}
         {(multiple || value.length === 0) && (
           <Input
             id={id}
             value={text}
-            onChange={(e) => { setText(e.target.value); setOpen(true); }}
+            onChange={(e) => {
+              setText(e.target.value);
+              setOpen(true);
+            }}
             onFocus={() => setOpen(true)}
             placeholder={value.length === 0 ? placeholder : 'Add another'}
             autoComplete="off"
@@ -84,10 +111,21 @@ export function LocationPicker({
         )}
       </div>
       {open && shown.length > 0 && (
-        <ul role="listbox" className="absolute z-30 mt-1 max-h-60 w-full overflow-y-auto rounded-md border border-line bg-surface py-1 shadow-lg">
+        <ul
+          role="listbox"
+          className="absolute z-30 mt-1 max-h-60 w-full overflow-y-auto rounded-md border border-line bg-surface py-1 shadow-lg"
+        >
           {shown.map((p) => (
             <li key={p.id}>
-              <button type="button" role="option" aria-selected={false} onClick={() => pick(p)} className="block w-full px-3 py-1.5 text-left text-sm hover:bg-head">{label(p)}</button>
+              <button
+                type="button"
+                role="option"
+                aria-selected={false}
+                onClick={() => pick(p)}
+                className="block w-full px-3 py-1.5 text-left text-sm hover:bg-head"
+              >
+                {label(p)}
+              </button>
             </li>
           ))}
         </ul>

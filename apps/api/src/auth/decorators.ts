@@ -39,8 +39,10 @@ export const AllowPasswordChange = () => SetMetadata(ALLOW_PASSWORD_CHANGE, true
 export const AllowMfaSetup = () => SetMetadata(ALLOW_MFA_SETUP, true);
 
 /** The signed-in user. Only available on routes that are not @Public(). */
-export const CurrentAuth = createParamDecorator((_data: unknown, ctx: ExecutionContext): AuthContext => {
-  const auth = ctx.switchToHttp().getRequest<FastifyRequest>().auth;
-  if (!auth) throw new Error('CurrentAuth used on a route that is not authenticated');
-  return auth;
-});
+export const CurrentAuth = createParamDecorator(
+  (_data: unknown, ctx: ExecutionContext): AuthContext => {
+    const auth = ctx.switchToHttp().getRequest<FastifyRequest>().auth;
+    if (!auth) throw new Error('CurrentAuth used on a route that is not authenticated');
+    return auth;
+  },
+);

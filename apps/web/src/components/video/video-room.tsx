@@ -1,6 +1,11 @@
 'use client';
 
-import type { IAgoraRTCClient, IAgoraRTCRemoteUser, ICameraVideoTrack, IMicrophoneAudioTrack } from 'agora-rtc-sdk-ng';
+import type {
+  IAgoraRTCClient,
+  IAgoraRTCRemoteUser,
+  ICameraVideoTrack,
+  IMicrophoneAudioTrack,
+} from 'agora-rtc-sdk-ng';
 import { Mic, MicOff, PhoneOff, UserRound, Video, VideoOff } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button, Notice, Spinner } from '@/components/ui';
@@ -14,20 +19,32 @@ type Phase = 'starting' | 'live' | 'left' | 'failed';
 /** How often the screen tells the server it is still here. The server treats 45 seconds of silence as gone. */
 const PING_MS = 12_000;
 
-const clock = (s: number) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+const clock = (s: number) =>
+  `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 
 /** Words for what went wrong with the camera or microphone, instead of the browser's own. */
 function deviceProblem(e: unknown, voice: boolean): string {
-  const name = (e as { name?: string; code?: string })?.name ?? (e as { code?: string })?.code ?? '';
+  const name =
+    (e as { name?: string; code?: string })?.name ?? (e as { code?: string })?.code ?? '';
   const device = voice ? 'microphone' : 'camera or microphone';
-  if (/NotAllowed|PERMISSION_DENIED/i.test(name)) return `The ${device} is blocked. Allow it in the browser (the lock icon beside the address) and try again.`;
+  if (/NotAllowed|PERMISSION_DENIED/i.test(name))
+    return `The ${device} is blocked. Allow it in the browser (the lock icon beside the address) and try again.`;
   if (/NotFound|DEVICES_NOT_FOUND/i.test(name)) return `No ${device} was found on this device.`;
-  if (/NotReadable|Busy/i.test(name)) return `The ${device} is being used by another program. Close it and try again.`;
+  if (/NotReadable|Busy/i.test(name))
+    return `The ${device} is being used by another program. Close it and try again.`;
   return `Could not start the call. Check your ${device} and internet, then try again.`;
 }
 
 /** One other person in the call: their picture, or a plain tile when they have no video (a voice call). */
-function RemoteTile({ user, version, voice }: { user: IAgoraRTCRemoteUser; version: number; voice: boolean }) {
+function RemoteTile({
+  user,
+  version,
+  voice,
+}: {
+  user: IAgoraRTCRemoteUser;
+  version: number;
+  voice: boolean;
+}) {
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const track = user.videoTrack;
@@ -35,8 +52,15 @@ function RemoteTile({ user, version, voice }: { user: IAgoraRTCRemoteUser; versi
     return () => track?.stop();
   }, [user, version, voice]);
   return (
-    <div ref={box} className="relative grid h-full min-h-0 w-full place-items-center overflow-hidden rounded-lg bg-[#10302e]">
-      {(voice || !user.hasVideo) && <span className="grid h-16 w-16 place-items-center rounded-full bg-white/15 text-white"><UserRound className="h-8 w-8" aria-hidden /></span>}
+    <div
+      ref={box}
+      className="relative grid h-full min-h-0 w-full place-items-center overflow-hidden rounded-lg bg-[#10302e]"
+    >
+      {(voice || !user.hasVideo) && (
+        <span className="grid h-16 w-16 place-items-center rounded-full bg-white/15 text-white">
+          <UserRound className="h-8 w-8" aria-hidden />
+        </span>
+      )}
     </div>
   );
 }
@@ -63,7 +87,10 @@ export function VideoRoom({ join, renew, report, onLeft, onSnapshot, label }: Ro
   const voice = join.kind === 'voice';
   const local = useRef<HTMLDivElement>(null);
   const client = useRef<IAgoraRTCClient | null>(null);
-  const tracks = useRef<{ mic: IMicrophoneAudioTrack | null; cam: ICameraVideoTrack | null }>({ mic: null, cam: null });
+  const tracks = useRef<{ mic: IMicrophoneAudioTrack | null; cam: ICameraVideoTrack | null }>({
+    mic: null,
+    cam: null,
+  });
   const [phase, setPhase] = useState<Phase>('starting');
   const [problem, setProblem] = useState<string | null>(null);
   const [micOn, setMicOn] = useState(true);
@@ -71,7 +98,10 @@ export function VideoRoom({ join, renew, report, onLeft, onSnapshot, label }: Ro
   const [remotes, setRemotes] = useState<IAgoraRTCRemoteUser[]>([]);
   const [version, setVersion] = useState(0);
   /** The recorder is a member of the channel but is not a person: it is not shown or counted. */
-  const [rec, setRec] = useState<{ status: string; botUid: number | null }>({ status: 'off', botUid: null });
+  const [rec, setRec] = useState<{ status: string; botUid: number | null }>({
+    status: 'off',
+    botUid: null,
+  });
   const [left, setLeft] = useState(join.secondsLeft);
   const finished = useRef(false);
   /** True once the server has been told this screen is connected, and until it is told that it left. */
@@ -144,22 +174,35 @@ export function VideoRoom({ join, renew, report, onLeft, onSnapshot, label }: Ro
         c.on('user-left', refresh);
         // A little before the token ends, ask for a new one. If the server says no, the call is over for this person.
         c.on('token-privilege-will-expire', () => {
-          latest.current.renew().then((fresh) => c.renewToken(fresh.token)).catch((e: unknown) => {
-            if (e instanceof ApiError && e.code === 'REMOVED') void leave('removed');
-            else if (e instanceof ApiError && (e.code === 'SESSION_ENDED' || e.code === 'NOT_FOUND')) void leave('ended');
-            else void leave('time');
-          });
+          latest.current
+            .renew()
+            .then((fresh) => c.renewToken(fresh.token))
+            .catch((e: unknown) => {
+              if (e instanceof ApiError && e.code === 'REMOVED') void leave('removed');
+              else if (
+                e instanceof ApiError &&
+                (e.code === 'SESSION_ENDED' || e.code === 'NOT_FOUND')
+              )
+                void leave('ended');
+              else void leave('time');
+            });
         });
         c.on('token-privilege-did-expire', () => void leave('time'));
-        c.on('connection-state-change', (now, before, reason) => console.info('call connection', before, '->', now, reason ?? ''));
+        c.on('connection-state-change', (now, before, reason) =>
+          console.info('call connection', before, '->', now, reason ?? ''),
+        );
         c.on('exception', (e) => console.warn('call exception', e.code, e.msg));
 
         // Voice: the microphone only. Video: 480p keeps the picture clear and the minutes in the cheapest video class.
         const mic = await AgoraRTC.createMicrophoneAudioTrack();
-        const cam = voice ? null : await AgoraRTC.createCameraVideoTrack({ encoderConfig: '480p_1' }).catch((e: unknown) => {
-          mic.close();
-          throw e;
-        });
+        const cam = voice
+          ? null
+          : await AgoraRTC.createCameraVideoTrack({ encoderConfig: '480p_1' }).catch(
+              (e: unknown) => {
+                mic.close();
+                throw e;
+              },
+            );
         if (cancelled) {
           mic.close();
           cam?.close();
@@ -178,7 +221,14 @@ export function VideoRoom({ join, renew, report, onLeft, onSnapshot, label }: Ro
         setPhase('live');
         reported.current = true;
         heard(await latest.current.report('joined').catch(() => null));
-        pinger = setInterval(() => void latest.current.report('ping').then(heard).catch(() => undefined), PING_MS);
+        pinger = setInterval(
+          () =>
+            void latest.current
+              .report('ping')
+              .then(heard)
+              .catch(() => undefined),
+          PING_MS,
+        );
       } catch (e) {
         if (cancelled) return;
         setProblem(deviceProblem(e, voice));
@@ -191,7 +241,8 @@ export function VideoRoom({ join, renew, report, onLeft, onSnapshot, label }: Ro
       cancelled = true;
       if (pinger) clearInterval(pinger);
       // The page was closed or left by navigating: say so now rather than leaving the others to wait for the silence to be noticed.
-      if (reported.current && !finished.current) void latest.current.report('left').catch(() => undefined);
+      if (reported.current && !finished.current)
+        void latest.current.report('left').catch(() => undefined);
       reported.current = false;
       tracks.current.mic?.close();
       tracks.current.cam?.close();
@@ -227,43 +278,100 @@ export function VideoRoom({ join, renew, report, onLeft, onSnapshot, label }: Ro
   if (phase === 'failed') return <Notice tone="bad">{problem}</Notice>;
 
   const people = remotes.filter((u) => u.uid !== rec.botUid);
-  const grid = people.length <= 1 ? 'grid-cols-1' : people.length <= 4 ? 'grid-cols-2' : 'grid-cols-3';
+  const grid =
+    people.length <= 1 ? 'grid-cols-1' : people.length <= 4 ? 'grid-cols-2' : 'grid-cols-3';
   return (
     <div className="space-y-3">
-      <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-[#0b1f1e] p-2" aria-label={label ?? (voice ? 'Voice call' : 'Video call')}>
+      <div
+        className="relative aspect-video w-full overflow-hidden rounded-xl bg-[#0b1f1e] p-2"
+        aria-label={label ?? (voice ? 'Voice call' : 'Video call')}
+      >
         {people.length > 0 && (
           <div className={`grid h-full w-full gap-2 ${grid}`}>
-            {people.map((u) => <RemoteTile key={String(u.uid)} user={u} version={version} voice={voice} />)}
+            {people.map((u) => (
+              <RemoteTile key={String(u.uid)} user={u} version={version} voice={voice} />
+            ))}
           </div>
         )}
-        {phase === 'starting' && <div className="absolute inset-0 grid place-items-center text-white"><Spinner label="Connecting" /></div>}
+        {phase === 'starting' && (
+          <div className="absolute inset-0 grid place-items-center text-white">
+            <Spinner label="Connecting" />
+          </div>
+        )}
         {phase === 'live' && people.length === 0 && (
-          <div className="absolute inset-0 grid place-items-center px-6 text-center text-sm text-white/85">Waiting for the other person to join…</div>
+          <div className="absolute inset-0 grid place-items-center px-6 text-center text-sm text-white/85">
+            Waiting for the other person to join…
+          </div>
         )}
         {voice ? (
-          phase === 'live' && <div className="absolute bottom-3 right-3 rounded-md bg-black/55 px-2 py-1 text-xs text-white">Voice · {people.length + 1} {people.length === 0 ? 'person' : 'people'}</div>
+          phase === 'live' && (
+            <div className="absolute bottom-3 right-3 rounded-md bg-black/55 px-2 py-1 text-xs text-white">
+              Voice · {people.length + 1} {people.length === 0 ? 'person' : 'people'}
+            </div>
+          )
         ) : (
-          <div ref={local} className="absolute bottom-3 right-3 h-28 w-40 overflow-hidden rounded-lg border border-white/30 bg-black/60 shadow-lg" />
+          <div
+            ref={local}
+            className="absolute bottom-3 right-3 h-28 w-40 overflow-hidden rounded-lg border border-white/30 bg-black/60 shadow-lg"
+          />
         )}
         {phase === 'live' && (
-          <div className="absolute left-3 top-3 rounded-md bg-black/55 px-2 py-1 text-xs tabular-nums text-white" role="timer" aria-label="Time left">{clock(left)} left</div>
-        )}
-        {phase === 'live' && (rec.status === 'recording' || rec.status === 'pending' || rec.status === 'starting') && (
-          <div className="absolute right-3 top-3 flex items-center gap-1.5 rounded-md bg-black/55 px-2 py-1 text-xs text-white" role="status">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" aria-hidden /> Recording
+          <div
+            className="absolute left-3 top-3 rounded-md bg-black/55 px-2 py-1 text-xs tabular-nums text-white"
+            role="timer"
+            aria-label="Time left"
+          >
+            {clock(left)} left
           </div>
         )}
+        {phase === 'live' &&
+          (rec.status === 'recording' || rec.status === 'pending' || rec.status === 'starting') && (
+            <div
+              className="absolute right-3 top-3 flex items-center gap-1.5 rounded-md bg-black/55 px-2 py-1 text-xs text-white"
+              role="status"
+            >
+              <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" aria-hidden />{' '}
+              Recording
+            </div>
+          )}
         {phase === 'live' && rec.status === 'failed' && (
-          <div className="absolute right-3 top-3 rounded-md bg-amber-600/90 px-2 py-1 text-xs text-white" role="status">Recording failed</div>
+          <div
+            className="absolute right-3 top-3 rounded-md bg-amber-600/90 px-2 py-1 text-xs text-white"
+            role="status"
+          >
+            Recording failed
+          </div>
         )}
       </div>
       <div className="flex items-center justify-center gap-3">
-        <Button variant="secondary" onClick={() => void toggleMic()} disabled={phase !== 'live'} aria-pressed={!micOn} aria-label={micOn ? 'Mute microphone' : 'Unmute microphone'}>
-          {micOn ? <Mic className="h-4 w-4" aria-hidden /> : <MicOff className="h-4 w-4 text-bad" aria-hidden />} {micOn ? 'Mute' : 'Unmute'}
+        <Button
+          variant="secondary"
+          onClick={() => void toggleMic()}
+          disabled={phase !== 'live'}
+          aria-pressed={!micOn}
+          aria-label={micOn ? 'Mute microphone' : 'Unmute microphone'}
+        >
+          {micOn ? (
+            <Mic className="h-4 w-4" aria-hidden />
+          ) : (
+            <MicOff className="h-4 w-4 text-bad" aria-hidden />
+          )}{' '}
+          {micOn ? 'Mute' : 'Unmute'}
         </Button>
         {!voice && (
-          <Button variant="secondary" onClick={() => void toggleCam()} disabled={phase !== 'live'} aria-pressed={!camOn} aria-label={camOn ? 'Turn camera off' : 'Turn camera on'}>
-            {camOn ? <Video className="h-4 w-4" aria-hidden /> : <VideoOff className="h-4 w-4 text-bad" aria-hidden />} {camOn ? 'Camera' : 'Camera off'}
+          <Button
+            variant="secondary"
+            onClick={() => void toggleCam()}
+            disabled={phase !== 'live'}
+            aria-pressed={!camOn}
+            aria-label={camOn ? 'Turn camera off' : 'Turn camera on'}
+          >
+            {camOn ? (
+              <Video className="h-4 w-4" aria-hidden />
+            ) : (
+              <VideoOff className="h-4 w-4 text-bad" aria-hidden />
+            )}{' '}
+            {camOn ? 'Camera' : 'Camera off'}
           </Button>
         )}
         <Button variant="danger" onClick={() => void leave('left')} disabled={phase === 'left'}>

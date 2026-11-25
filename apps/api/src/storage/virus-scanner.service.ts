@@ -13,7 +13,10 @@ import type { Env } from '../config/env.js';
 export class VirusScanner {
   private readonly logger = new Logger(VirusScanner.name);
 
-  constructor(@Inject(ENV) private readonly env: Pick<Env, 'CLAMAV_HOST' | 'CLAMAV_PORT' | 'CLAMAV_TIMEOUT_MS'>) {}
+  constructor(
+    @Inject(ENV)
+    private readonly env: Pick<Env, 'CLAMAV_HOST' | 'CLAMAV_PORT' | 'CLAMAV_TIMEOUT_MS'>,
+  ) {}
 
   get enabled(): boolean {
     return !!this.env.CLAMAV_HOST;
@@ -25,16 +28,30 @@ export class VirusScanner {
     try {
       reply = await this.instream(data);
     } catch (err) {
-      this.logger.error(`virus scan unavailable: ${err instanceof Error ? err.message : String(err)}`);
-      throw new AppError('SCAN_UNAVAILABLE', 'Files cannot be checked for viruses right now, so the upload was not accepted. Try again in a moment.', 503);
+      this.logger.error(
+        `virus scan unavailable: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      throw new AppError(
+        'SCAN_UNAVAILABLE',
+        'Files cannot be checked for viruses right now, so the upload was not accepted. Try again in a moment.',
+        503,
+      );
     }
     if (/\sFOUND$/.test(reply)) {
       this.logger.warn(`upload refused by virus scan: ${reply}`);
-      throw new AppError('VIRUS_FOUND', 'This file was blocked because it may contain a virus', 422);
+      throw new AppError(
+        'VIRUS_FOUND',
+        'This file was blocked because it may contain a virus',
+        422,
+      );
     }
     if (!/\sOK$/.test(reply)) {
       this.logger.error(`virus scan gave an unexpected answer: ${reply}`);
-      throw new AppError('SCAN_UNAVAILABLE', 'Files cannot be checked for viruses right now, so the upload was not accepted. Try again in a moment.', 503);
+      throw new AppError(
+        'SCAN_UNAVAILABLE',
+        'Files cannot be checked for viruses right now, so the upload was not accepted. Try again in a moment.',
+        503,
+      );
     }
   }
 
@@ -42,7 +59,9 @@ export class VirusScanner {
     return new Promise((resolve, reject) => {
       const socket = new Socket();
       const chunks: Buffer[] = [];
-      socket.setTimeout(this.env.CLAMAV_TIMEOUT_MS ?? 15_000, () => socket.destroy(new Error('clamd timed out')));
+      socket.setTimeout(this.env.CLAMAV_TIMEOUT_MS ?? 15_000, () =>
+        socket.destroy(new Error('clamd timed out')),
+      );
       socket.on('error', reject);
       socket.on('data', (c: Buffer) => chunks.push(c));
       socket.on('close', () => {

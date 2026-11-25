@@ -23,20 +23,27 @@ const MP3 = Buffer.concat([Buffer.from('ID3\u0004\u0000\u0000'), Buffer.alloc(30
 const WAV = Buffer.concat([Buffer.from('RIFF\u0000\u0000\u0000\u0000WAVEfmt '), Buffer.alloc(200)]);
 
 /** A stand-in for the provider's recording server. */
-const files: Record<string, { status?: number; type?: string; body?: Buffer; location?: string }> = {
-  '/good.mp3': { type: 'audio/mpeg', body: MP3 },
-  '/good.wav': { type: 'audio/wav', body: WAV },
-  '/page.mp3': { type: 'audio/mpeg', body: Buffer.from('<html><script>alert(1)</script></html>          ') },
-  '/missing.mp3': { status: 404, body: Buffer.from('nope') },
-  '/moved.mp3': { status: 302, location: '/good.mp3' },
-  '/huge.mp3': { type: 'audio/mpeg', body: Buffer.concat([MP3, Buffer.alloc(5000)]) },
-};
+const files: Record<string, { status?: number; type?: string; body?: Buffer; location?: string }> =
+  {
+    '/good.mp3': { type: 'audio/mpeg', body: MP3 },
+    '/good.wav': { type: 'audio/wav', body: WAV },
+    '/page.mp3': {
+      type: 'audio/mpeg',
+      body: Buffer.from('<html><script>alert(1)</script></html>          '),
+    },
+    '/missing.mp3': { status: 404, body: Buffer.from('nope') },
+    '/moved.mp3': { status: 302, location: '/good.mp3' },
+    '/huge.mp3': { type: 'audio/mpeg', body: Buffer.concat([MP3, Buffer.alloc(5000)]) },
+  };
 
 beforeAll(async () => {
   server = http.createServer((req, res) => {
     const f = files[req.url ?? ''];
     if (!f) return void res.writeHead(404).end();
-    res.writeHead(f.status ?? 200, { ...(f.type && { 'content-type': f.type }), ...(f.location && { location: f.location }) });
+    res.writeHead(f.status ?? 200, {
+      ...(f.type && { 'content-type': f.type }),
+      ...(f.location && { location: f.location }),
+    });
     res.end(f.body);
   });
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
@@ -48,12 +55,19 @@ beforeAll(async () => {
   app = await startApp({ LOGIN_IP_MAX_ATTEMPTS: '500', RECORDING_MAX_BYTES: '4096' });
   api = makeClient(app, fx);
   t.sa = await api.signIn('super');
-  for (const name of ['admin', 'admin2', 'lc1', 'lc2']) t[name] = await api.signIn(name, { office: true });
+  for (const name of ['admin', 'admin2', 'lc1', 'lc2'])
+    t[name] = await api.signIn(name, { office: true });
 
-  const saved = await api.call('PUT', '/telephony/connection', t.sa!, { provider: 'generic', config: { simulate: true } });
+  const saved = await api.call('PUT', '/telephony/connection', t.sa!, {
+    provider: 'generic',
+    config: { simulate: true },
+  });
   webhookKey = saved.json().webhookKey;
   // The test server is on 127.0.0.1, which the settings API rightly refuses as a host name.
-  await owner.query(`UPDATE telephony_connections SET recording_hosts = '{127.0.0.1}' WHERE tenant_id = $1`, [fx.tenantId]);
+  await owner.query(
+    `UPDATE telephony_connections SET recording_hosts = '{127.0.0.1}' WHERE tenant_id = $1`,
+    [fx.tenantId],
+  );
 });
 
 afterAll(async () => {
@@ -68,27 +82,70 @@ let counter = 0;
 const phone = () => `9${String(600_000_000 + ++counter).padStart(9, '0')}`;
 const errorCode = (res: { json: () => { error?: { code?: string } } }) => res.json().error?.code;
 const hook = (events: unknown[]) =>
-  app.inject({ method: 'POST', url: '/api/v1/telephony/webhook', payload: { events } as never, headers: { authorization: `Bearer ${webhookKey}` } });
+  app.inject({
+    method: 'POST',
+    url: '/api/v1/telephony/webhook',
+    payload: { events } as never,
+    headers: { authorization: `Bearer ${webhookKey}` },
+  });
 const fetcher = () => app.get(RecordingFetcher);
 
 /** A finished call of lc1's with a recording address, returning the call id. */
 async function callWithRecording(path: string, hostBase = base): Promise<string> {
-  const lead = await api.call('POST', '/leads', t.lc1!, { name: 'Recorded', phone: phone(), sourceId: fx.sourceId('Website') });
-  const customer = lead.json().phone ?? (await owner.query(`SELECT primary_phone FROM leads WHERE id = $1`, [lead.json().id])).rows[0].primary_phone;
+  const lead = await api.call('POST', '/leads', t.lc1!, {
+    name: 'Recorded',
+    phone: phone(),
+    sourceId: fx.sourceId('Website'),
+  });
+  const customer =
+    lead.json().phone ??
+    (await owner.query(`SELECT primary_phone FROM leads WHERE id = $1`, [lead.json().id])).rows[0]
+      .primary_phone;
   const id = `rec-${Date.now()}-${++counter}`;
   const at = new Date().toISOString();
   await owner.query(`UPDATE users SET phone = '9810000001' WHERE id = $1`, [fx.user('lc1').id]);
   const res = await hook([
-    { providerCallId: id, event: 'answered', direction: 'incoming', customerNumber: customer, agentNumber: '9810000001', at },
-    { providerCallId: id, event: 'ended', direction: 'incoming', customerNumber: customer, at, durationSec: 30 },
-    { providerCallId: id, event: 'recording', direction: 'incoming', customerNumber: customer, at, recordingUrl: `${hostBase}${path}` },
+    {
+      providerCallId: id,
+      event: 'answered',
+      direction: 'incoming',
+      customerNumber: customer,
+      agentNumber: '9810000001',
+      at,
+    },
+    {
+      providerCallId: id,
+      event: 'ended',
+      direction: 'incoming',
+      customerNumber: customer,
+      at,
+      durationSec: 30,
+    },
+    {
+      providerCallId: id,
+      event: 'recording',
+      direction: 'incoming',
+      customerNumber: customer,
+      at,
+      recordingUrl: `${hostBase}${path}`,
+    },
   ]);
   expect(res.statusCode, res.body).toBe(200);
-  return (await owner.query(`SELECT id FROM calls WHERE tenant_id = $1 AND provider_call_id = $2`, [fx.tenantId, id])).rows[0].id;
+  return (
+    await owner.query(`SELECT id FROM calls WHERE tenant_id = $1 AND provider_call_id = $2`, [
+      fx.tenantId,
+      id,
+    ])
+  ).rows[0].id;
 }
-const recording = async (callId: string) => (await owner.query(`SELECT * FROM call_recordings WHERE call_id = $1`, [callId])).rows[0];
+const recording = async (callId: string) =>
+  (await owner.query(`SELECT * FROM call_recordings WHERE call_id = $1`, [callId])).rows[0];
 /** Makes a waiting recording due for another try, as time passing would. */
-const makeDue = (callId: string) => owner.query(`UPDATE call_recordings SET last_attempt_at = now() - interval '1 day' WHERE call_id = $1`, [callId]);
+const makeDue = (callId: string) =>
+  owner.query(
+    `UPDATE call_recordings SET last_attempt_at = now() - interval '1 day' WHERE call_id = $1`,
+    [callId],
+  );
 
 // ================================================================ downloading
 
@@ -101,16 +158,37 @@ describe('downloading a recording', () => {
     const stored = await fetcher().runOnce();
     expect(stored, JSON.stringify(await recording(id))).toBeGreaterThanOrEqual(1);
     const row = await recording(id);
-    expect(row).toMatchObject({ status: 'stored', size_bytes: MP3.length, attempts: 1, last_error: null });
+    expect(row).toMatchObject({
+      status: 'stored',
+      size_bytes: MP3.length,
+      attempts: 1,
+      last_error: null,
+    });
     expect(row.file_key).toBe(`${fx.tenantId}/calls/${id}.mp3`);
     expect((await api.call('GET', `/calls/${id}`, t.lc1!)).json().recording).toBe('stored');
   });
 
   it('stores one recording per call even if the provider reports it twice', async () => {
     const id = await callWithRecording('/good.wav');
-    const call = (await owner.query(`SELECT provider_call_id, counterparty FROM calls WHERE id = $1`, [id])).rows[0];
-    await hook([{ providerCallId: call.provider_call_id, event: 'recording', direction: 'incoming', customerNumber: call.counterparty, at: new Date(Date.now() + 5000).toISOString(), recordingUrl: `${base}/good.mp3` }]);
-    expect(Number((await owner.query(`SELECT count(*) FROM call_recordings WHERE call_id = $1`, [id])).rows[0].count)).toBe(1);
+    const call = (
+      await owner.query(`SELECT provider_call_id, counterparty FROM calls WHERE id = $1`, [id])
+    ).rows[0];
+    await hook([
+      {
+        providerCallId: call.provider_call_id,
+        event: 'recording',
+        direction: 'incoming',
+        customerNumber: call.counterparty,
+        at: new Date(Date.now() + 5000).toISOString(),
+        recordingUrl: `${base}/good.mp3`,
+      },
+    ]);
+    expect(
+      Number(
+        (await owner.query(`SELECT count(*) FROM call_recordings WHERE call_id = $1`, [id])).rows[0]
+          .count,
+      ),
+    ).toBe(1);
     expect((await recording(id)).source_url).toBe(`${base}/good.wav`);
   });
 
@@ -182,7 +260,11 @@ describe('listening to a recording', () => {
   });
 
   it('returns the audio with headers that keep it from doing anything else', async () => {
-    const res = await app.inject({ method: 'GET', url: `/api/v1/calls/${callId}/recording`, headers: { authorization: `Bearer ${t.admin}` } });
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/calls/${callId}/recording`,
+      headers: { authorization: `Bearer ${t.admin}` },
+    });
     expect(res.statusCode).toBe(200);
     expect(res.rawPayload.equals(MP3)).toBe(true);
     expect(res.headers['content-type']).toBe('audio/mpeg');
@@ -192,7 +274,14 @@ describe('listening to a recording', () => {
   });
 
   it('gives a link a browser can play, and writes each use to the audit log', async () => {
-    const before = Number((await owner.query(`SELECT count(*) FROM audit_logs WHERE tenant_id = $1 AND action = 'call.listen'`, [fx.tenantId])).rows[0].count);
+    const before = Number(
+      (
+        await owner.query(
+          `SELECT count(*) FROM audit_logs WHERE tenant_id = $1 AND action = 'call.listen'`,
+          [fx.tenantId],
+        )
+      ).rows[0].count,
+    );
     const link = await api.call('POST', `/calls/${callId}/recording/link`, t.admin!);
     expect(link.statusCode).toBe(200);
     const play = await app.inject({ method: 'GET', url: link.json().url });
@@ -200,7 +289,12 @@ describe('listening to a recording', () => {
     expect(play.rawPayload.equals(MP3)).toBe(true);
     await api.call('GET', `/calls/${callId}/recording`, t.admin!);
 
-    const rows = (await owner.query(`SELECT actor_id, entity_id FROM audit_logs WHERE tenant_id = $1 AND action = 'call.listen' ORDER BY id DESC`, [fx.tenantId])).rows;
+    const rows = (
+      await owner.query(
+        `SELECT actor_id, entity_id FROM audit_logs WHERE tenant_id = $1 AND action = 'call.listen' ORDER BY id DESC`,
+        [fx.tenantId],
+      )
+    ).rows;
     expect(rows.length - before).toBe(2);
     expect(rows[0]).toEqual({ actor_id: fx.user('admin').id, entity_id: callId });
   });
@@ -209,24 +303,42 @@ describe('listening to a recording', () => {
     // A counsellor may listen to calls, but only their own: another counsellor's call is not found.
     expect((await api.call('GET', `/calls/${callId}/recording`, t.lc2!)).statusCode).toBe(404);
     // And a role without the permission cannot listen at all.
-    await owner.query(`DELETE FROM role_permissions WHERE tenant_id = $1 AND permission_id = (SELECT id FROM permissions WHERE code = 'call.listen') AND role_id = (SELECT id FROM roles WHERE tenant_id = $1 AND system_key = 'counsellor')`, [fx.tenantId]);
+    await owner.query(
+      `DELETE FROM role_permissions WHERE tenant_id = $1 AND permission_id = (SELECT id FROM permissions WHERE code = 'call.listen') AND role_id = (SELECT id FROM roles WHERE tenant_id = $1 AND system_key = 'counsellor')`,
+      [fx.tenantId],
+    );
     try {
       expect((await api.call('GET', `/calls/${callId}/recording`, t.lc2!)).statusCode).toBe(403);
     } finally {
-      await owner.query(`INSERT INTO role_permissions (tenant_id, role_id, permission_id) SELECT $1, (SELECT id FROM roles WHERE tenant_id = $1 AND system_key = 'counsellor'), id FROM permissions WHERE code = 'call.listen' ON CONFLICT DO NOTHING`, [fx.tenantId]);
+      await owner.query(
+        `INSERT INTO role_permissions (tenant_id, role_id, permission_id) SELECT $1, (SELECT id FROM roles WHERE tenant_id = $1 AND system_key = 'counsellor'), id FROM permissions WHERE code = 'call.listen' ON CONFLICT DO NOTHING`,
+        [fx.tenantId],
+      );
     }
     expect((await api.call('GET', `/calls/${callId}/recording`, t.admin2!)).statusCode).toBe(404); // another team's admin cannot see the call
     expect((await api.call('GET', `/calls/${callId}/recording`, t.sa!)).statusCode).toBe(200);
     // A counsellor can get a short playback link for their own call, never for another's.
-    expect((await api.call('POST', `/calls/${callId}/recording/link`, t.lc1!)).statusCode).toBe(200);
-    expect((await api.call('POST', `/calls/${callId}/recording/link`, t.lc2!)).statusCode).toBe(404);
-    expect((await app.inject({ method: 'GET', url: `/api/v1/calls/${callId}/recording` })).statusCode).toBe(401);
+    expect((await api.call('POST', `/calls/${callId}/recording/link`, t.lc1!)).statusCode).toBe(
+      200,
+    );
+    expect((await api.call('POST', `/calls/${callId}/recording/link`, t.lc2!)).statusCode).toBe(
+      404,
+    );
+    expect(
+      (await app.inject({ method: 'GET', url: `/api/v1/calls/${callId}/recording` })).statusCode,
+    ).toBe(401);
   });
 
   it('is not found for a call without a recording, and not ready while still waiting', async () => {
-    const lead = await api.call('POST', '/leads', t.lc1!, { name: 'No Rec', phone: phone(), sourceId: fx.sourceId('Website') });
+    const lead = await api.call('POST', '/leads', t.lc1!, {
+      name: 'No Rec',
+      phone: phone(),
+      sourceId: fx.sourceId('Website'),
+    });
     const placed = await api.call('POST', `/leads/${lead.json().id}/call`, t.lc1!, {});
-    expect((await api.call('GET', `/calls/${placed.json().id}/recording`, t.sa!)).statusCode).toBe(404);
+    expect((await api.call('GET', `/calls/${placed.json().id}/recording`, t.sa!)).statusCode).toBe(
+      404,
+    );
     await owner.query(`UPDATE calls SET outcome = 'failed' WHERE id = $1`, [placed.json().id]);
 
     const waiting = await callWithRecording('/good.mp3');

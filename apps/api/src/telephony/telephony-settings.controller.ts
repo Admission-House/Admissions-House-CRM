@@ -23,7 +23,11 @@ export class TelephonySettingsController {
 
   /** The webhook key appears in this response only, and only when the connection is first created. */
   @Put()
-  save(@CurrentAuth() auth: AuthContext, @Body() body: ConnectionDto, @Res({ passthrough: true }) reply: FastifyReply) {
+  save(
+    @CurrentAuth() auth: AuthContext,
+    @Body() body: ConnectionDto,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
     void reply.header('cache-control', 'no-store');
     return this.settings.save(auth, body);
   }

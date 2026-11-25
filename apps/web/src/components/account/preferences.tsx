@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { Avatar, Button, Notice, Panel } from '@/components/ui';
-import { api, ApiError } from '@/lib/api';
+import { api, ApiError, errorText } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { START_PAGE_LABELS, type StartPageKey } from '@/lib/start-page';
 import { shrinkPicture, usePhoto } from '@/lib/use-photo';
@@ -16,12 +16,21 @@ interface Prefs {
 }
 
 const KINDS: { key: keyof Prefs['notify']; label: string; hint: string }[] = [
-  { key: 'leads', label: 'Leads and follow-ups', hint: 'A new lead, a lead given to you, a follow-up that is due.' },
+  {
+    key: 'leads',
+    label: 'Leads and follow-ups',
+    hint: 'A new lead, a lead given to you, a follow-up that is due.',
+  },
   { key: 'calls', label: 'Calls and meetings', hint: 'Someone calling or inviting you.' },
-  { key: 'approvals', label: 'Approvals', hint: 'Leave and other requests waiting for a decision.' },
+  {
+    key: 'approvals',
+    label: 'Approvals',
+    hint: 'Leave and other requests waiting for a decision.',
+  },
 ];
 
-const message = (e: unknown) => (e instanceof Error && !(e instanceof ApiError) ? e.message : e instanceof ApiError ? e.message : 'Cannot reach the server. Try again.');
+const message = (e: unknown) =>
+  e instanceof Error && !(e instanceof ApiError) ? e.message : errorText(e);
 
 /** The person's own photo, the page they land on after signing in, and which alerts they want. The same for every role. */
 export function Preferences() {
@@ -50,7 +59,11 @@ export function Preferences() {
 
   const choose = (f: File | undefined) => {
     if (!f) return;
-    void run('photo', async () => api('/me/avatar', { method: 'PUT', body: { image: await shrinkPicture(f) } }), 'Your photo is saved.');
+    void run(
+      'photo',
+      async () => api('/me/avatar', { method: 'PUT', body: { image: await shrinkPicture(f) } }),
+      'Your photo is saved.',
+    );
     if (file.current) file.current.value = '';
   };
   const data = prefs.data;
@@ -63,32 +76,83 @@ export function Preferences() {
         <div className="flex flex-wrap items-center gap-4">
           <Avatar name={me.user.name} size={72} photo={photo} />
           <div>
-            <p className="max-w-md text-sm text-muted">Your colleagues see this next to your name. A square picture of your face works best. JPEG, PNG or WebP, up to 5 MB.</p>
+            <p className="max-w-md text-sm text-muted">
+              Your colleagues see this next to your name. A square picture of your face works best.
+              JPEG, PNG or WebP, up to 5 MB.
+            </p>
             <div className="mt-3 flex gap-2">
-              <input ref={file} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" id="photo-file" onChange={(e) => choose(e.target.files?.[0])} />
-              <Button type="button" loading={busy === 'photo'} onClick={() => file.current?.click()}>{data?.hasAvatar ? 'Change photo' : 'Choose a photo'}</Button>
-              {data?.hasAvatar && <Button type="button" variant="secondary" disabled={busy !== null} onClick={() => void run('photo', () => api('/me/avatar', { method: 'DELETE' }), 'Your photo is removed.')}>Remove</Button>}
+              <input
+                ref={file}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="sr-only"
+                id="photo-file"
+                onChange={(e) => choose(e.target.files?.[0])}
+              />
+              <Button
+                type="button"
+                loading={busy === 'photo'}
+                onClick={() => file.current?.click()}
+              >
+                {data?.hasAvatar ? 'Change photo' : 'Choose a photo'}
+              </Button>
+              {data?.hasAvatar && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={busy !== null}
+                  onClick={() =>
+                    void run(
+                      'photo',
+                      () => api('/me/avatar', { method: 'DELETE' }),
+                      'Your photo is removed.',
+                    )
+                  }
+                >
+                  Remove
+                </Button>
+              )}
             </div>
           </div>
         </div>
       </Panel>
 
       <Panel title="After I sign in">
-        <label htmlFor="start-page" className="block text-sm font-medium text-ink">Open this page first</label>
+        <label htmlFor="start-page" className="block text-sm font-medium text-ink">
+          Open this page first
+        </label>
         <select
           id="start-page"
           className="mt-1.5 h-10 w-full max-w-xs rounded-lg border border-line bg-white px-3 text-sm text-ink"
           value={data?.startPage ?? ''}
           disabled={!data || busy !== null}
-          onChange={(e) => void run('prefs', () => api('/me/preferences', { method: 'PUT', body: { startPage: e.target.value || null } }), 'Saved. You will land here next time you sign in.')}
+          onChange={(e) =>
+            void run(
+              'prefs',
+              () =>
+                api('/me/preferences', {
+                  method: 'PUT',
+                  body: { startPage: e.target.value || null },
+                }),
+              'Saved. You will land here next time you sign in.',
+            )
+          }
         >
           <option value="">Dashboard (default)</option>
-          {data?.startPages.filter((p) => p !== 'dashboard').map((p) => <option key={p} value={p}>{START_PAGE_LABELS[p]}</option>)}
+          {data?.startPages
+            .filter((p) => p !== 'dashboard')
+            .map((p) => (
+              <option key={p} value={p}>
+                {START_PAGE_LABELS[p]}
+              </option>
+            ))}
         </select>
       </Panel>
 
       <Panel title="Alerts I want">
-        <p className="max-w-xl text-sm text-muted">Switch off what you do not need. Security alerts and system messages always reach you.</p>
+        <p className="max-w-xl text-sm text-muted">
+          Switch off what you do not need. Security alerts and system messages always reach you.
+        </p>
         <ul className="mt-3 max-w-xl divide-y divide-line/60">
           {KINDS.map((k) => (
             <li key={k.key} className="flex items-start justify-between gap-4 py-3">
@@ -103,7 +167,17 @@ export function Preferences() {
                 className="mt-1 h-5 w-5 shrink-0 accent-brand"
                 checked={data?.notify[k.key] ?? true}
                 disabled={!data || busy !== null}
-                onChange={(e) => void run('prefs', () => api('/me/preferences', { method: 'PUT', body: { notify: { [k.key]: e.target.checked } } }), 'Saved.')}
+                onChange={(e) =>
+                  void run(
+                    'prefs',
+                    () =>
+                      api('/me/preferences', {
+                        method: 'PUT',
+                        body: { notify: { [k.key]: e.target.checked } },
+                      }),
+                    'Saved.',
+                  )
+                }
               />
             </li>
           ))}

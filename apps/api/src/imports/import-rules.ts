@@ -2,19 +2,79 @@ import { IntakeLead, parseIntake } from '../intake/intake-rules.js';
 import type { Table } from './spreadsheet.js';
 
 /** What a column of a lead spreadsheet can mean. */
-export const FIELDS = ['name', 'phone', 'email', 'level', 'mode', 'stream', 'city', 'interest', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'] as const;
+export const FIELDS = [
+  'name',
+  'phone',
+  'email',
+  'level',
+  'mode',
+  'stream',
+  'city',
+  'interest',
+  'utm_source',
+  'utm_medium',
+  'utm_campaign',
+  'utm_term',
+  'utm_content',
+] as const;
 export type Field = (typeof FIELDS)[number];
 
 /** Names people give these columns, written in lower case without spaces or marks. */
 const SYNONYMS: Record<Field, string[]> = {
-  name: ['name', 'fullname', 'studentname', 'leadname', 'candidatename', 'student', 'customername', 'naam', 'नाम'],
-  phone: ['phone', 'mobile', 'mobilenumber', 'mobileno', 'phonenumber', 'phoneno', 'contact', 'contactnumber', 'contactno', 'whatsapp', 'whatsappnumber', 'cell', 'mob'],
+  name: [
+    'name',
+    'fullname',
+    'studentname',
+    'leadname',
+    'candidatename',
+    'student',
+    'customername',
+    'naam',
+    'नाम',
+  ],
+  phone: [
+    'phone',
+    'mobile',
+    'mobilenumber',
+    'mobileno',
+    'phonenumber',
+    'phoneno',
+    'contact',
+    'contactnumber',
+    'contactno',
+    'whatsapp',
+    'whatsappnumber',
+    'cell',
+    'mob',
+  ],
   email: ['email', 'emailid', 'emailaddress', 'mail', 'mailid'],
   level: ['level', 'courselevel', 'programlevel', 'ugpg'],
   mode: ['mode', 'studymode', 'modeofstudy', 'coursemode', 'learningmode'],
   stream: ['stream', 'field', 'fieldofstudy', 'discipline'],
-  city: ['city', 'region', 'location', 'preferredcity', 'currentcity', 'town', 'area', 'locality', 'district', 'citytown', 'cityname', 'preferredlocation'],
-  interest: ['interest', 'course', 'coursename', 'program', 'programme', 'interestedin', 'interestedcourse', 'courseinterested'],
+  city: [
+    'city',
+    'region',
+    'location',
+    'preferredcity',
+    'currentcity',
+    'town',
+    'area',
+    'locality',
+    'district',
+    'citytown',
+    'cityname',
+    'preferredlocation',
+  ],
+  interest: [
+    'interest',
+    'course',
+    'coursename',
+    'program',
+    'programme',
+    'interestedin',
+    'interestedcourse',
+    'courseinterested',
+  ],
   utm_source: ['utmsource', 'campaignsource'],
   utm_medium: ['utmmedium', 'campaignmedium'],
   utm_campaign: ['utmcampaign', 'campaign', 'campaignname'],
@@ -22,7 +82,11 @@ const SYNONYMS: Record<Field, string[]> = {
   utm_content: ['utmcontent', 'adcontent'],
 };
 
-export const normalizeHeader = (h: string): string => h.toLowerCase().normalize('NFKC').replace(/[^\p{L}\p{N}]+/gu, '');
+export const normalizeHeader = (h: string): string =>
+  h
+    .toLowerCase()
+    .normalize('NFKC')
+    .replace(/[^\p{L}\p{N}]+/gu, '');
 
 export type Mapping = Partial<Record<Field, number>>;
 
@@ -45,11 +109,15 @@ export function detectMapping(header: readonly string[]): { mapping: Mapping; un
 }
 
 /** A row that names a phone column is taken as the header, so a title or blank banner above it is skipped. */
-export const leadHeaderRow = (cells: readonly string[]): boolean => detectMapping(cells).mapping.phone !== undefined;
+export const leadHeaderRow = (cells: readonly string[]): boolean =>
+  detectMapping(cells).mapping.phone !== undefined;
 
 /** Lets a person say "the phone is in column Mobile No." when the guess is wrong or missing. */
 export function applyColumnOverride<F extends string>(
-  header: readonly string[], base: Partial<Record<F, number>>, override: Partial<Record<F, string>> | undefined, allowed: readonly F[],
+  header: readonly string[],
+  base: Partial<Record<F, number>>,
+  override: Partial<Record<F, string>> | undefined,
+  allowed: readonly F[],
 ): Partial<Record<F, number>> {
   const mapping = { ...base };
   for (const [field, columnName] of Object.entries(override ?? {}) as [F, string][]) {
@@ -60,8 +128,11 @@ export function applyColumnOverride<F extends string>(
   return mapping;
 }
 
-export const applyOverride = (header: readonly string[], base: Mapping, override: Partial<Record<Field, string>> | undefined): Mapping =>
-  applyColumnOverride(header, base, override, FIELDS);
+export const applyOverride = (
+  header: readonly string[],
+  base: Mapping,
+  override: Partial<Record<Field, string>> | undefined,
+): Mapping => applyColumnOverride(header, base, override, FIELDS);
 
 export interface Record_ {
   /** Row number in the spreadsheet, counting the header as row 1. */
@@ -75,13 +146,19 @@ const MAX_DETAIL_VALUE = 200;
 const MAX_DETAILS = 1500;
 
 /** The cells of a row that no field claims, in the order of the sheet, kept as one line of text. */
-export function detailsOf(header: readonly string[], cells: readonly string[], mapping: Mapping): string | undefined {
+export function detailsOf(
+  header: readonly string[],
+  cells: readonly string[],
+  mapping: Mapping,
+): string | undefined {
   const used = new Set(Object.values(mapping));
   const parts: string[] = [];
   header.forEach((heading, at) => {
     const value = (cells[at] ?? '').trim();
     if (used.has(at) || heading === '' || value === '') return;
-    parts.push(`${heading}: ${value.length > MAX_DETAIL_VALUE ? `${value.slice(0, MAX_DETAIL_VALUE)}…` : value}`);
+    parts.push(
+      `${heading}: ${value.length > MAX_DETAIL_VALUE ? `${value.slice(0, MAX_DETAIL_VALUE)}…` : value}`,
+    );
   });
   if (parts.length === 0) return undefined;
   const text = parts.join('; ');
@@ -122,22 +199,51 @@ export interface InvalidRow {
  * Applies the rules every lead goes through (the same as a lead from the website) to each row, and
  * sorts the rows into those that can be filed and those that cannot, with the reason.
  */
-export function validateRecords(records: readonly Record_[], formName: string): { valid: ValidRow[]; invalid: InvalidRow[] } {
+export function validateRecords(
+  records: readonly Record_[],
+  formName: string,
+): { valid: ValidRow[]; invalid: InvalidRow[] } {
   const valid: ValidRow[] = [];
   const invalid: InvalidRow[] = [];
   for (const { row, raw, details } of records) {
     const missing = (['name', 'phone'] as const).filter((f) => !raw[f]);
     if (missing.length > 0) {
-      invalid.push({ row, name: raw.name, phone: raw.phone, problem: missing.map((f) => `${f}: ${f === 'name' ? 'Name' : 'Phone number'} is required`).join('; ') });
+      invalid.push({
+        row,
+        name: raw.name,
+        phone: raw.phone,
+        problem: missing
+          .map((f) => `${f}: ${f === 'name' ? 'Name' : 'Phone number'} is required`)
+          .join('; '),
+      });
       continue;
     }
     const parsed = parseIntake({
-      name: raw.name, phone: raw.phone, email: raw.email, level: raw.level, mode: raw.mode, stream: raw.stream, city: raw.city,
-      interest: raw.interest, source: formName,
-      utm: { source: raw.utm_source, medium: raw.utm_medium, campaign: raw.utm_campaign, term: raw.utm_term, content: raw.utm_content },
+      name: raw.name,
+      phone: raw.phone,
+      email: raw.email,
+      level: raw.level,
+      mode: raw.mode,
+      stream: raw.stream,
+      city: raw.city,
+      interest: raw.interest,
+      source: formName,
+      utm: {
+        source: raw.utm_source,
+        medium: raw.utm_medium,
+        campaign: raw.utm_campaign,
+        term: raw.utm_term,
+        content: raw.utm_content,
+      },
     });
     if (parsed.ok) valid.push({ row, lead: details ? { ...parsed.lead, details } : parsed.lead });
-    else invalid.push({ row, name: raw.name, phone: raw.phone, problem: parsed.errors.map((e) => `${e.field}: ${e.message}`).join('; ') });
+    else
+      invalid.push({
+        row,
+        name: raw.name,
+        phone: raw.phone,
+        problem: parsed.errors.map((e) => `${e.field}: ${e.message}`).join('; '),
+      });
   }
   return { valid, invalid };
 }
@@ -152,4 +258,3 @@ export function repeatsInFile(valid: readonly ValidRow[]): number {
   }
   return repeats;
 }
-

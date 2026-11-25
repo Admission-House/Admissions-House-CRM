@@ -70,4 +70,6 @@ export class ApiKeyGuard implements CanActivate {
 }
 
 const tooMany = (seconds: number) =>
-  new AppError('RATE_LIMITED', 'Too many requests. Please slow down.', 429, undefined, { 'retry-after': String(seconds) });
+  new AppError('RATE_LIMITED', 'Too many requests. Please slow down.', 429, undefined, {
+    'retry-after': String(seconds),
+  });

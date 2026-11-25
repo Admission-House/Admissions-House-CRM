@@ -55,7 +55,10 @@ export const settingsSchema = z
       .max(7)
       .transform((days) => [...new Set(days)].sort()),
   })
-  .refine((v) => v.shiftEnd > v.shiftStart, { message: 'The shift must end after it starts', path: ['shiftEnd'] });
+  .refine((v) => v.shiftEnd > v.shiftStart, {
+    message: 'The shift must end after it starts',
+    path: ['shiftEnd'],
+  });
 export class UpdateSettingsDto extends createZodDto(settingsSchema) {}
 
 export const createBreakTypeSchema = z.object({

@@ -81,10 +81,16 @@ const schema = z.object({
    * The phone's own check is not fully reliable and can wrongly flag a normal phone, so a company can
    * switch this off with BLOCK_ROOTED_DEVICES=false if that happens.
    */
-  BLOCK_ROOTED_DEVICES: z.enum(['true', 'false']).default('true').transform((v) => v === 'true'),
+  BLOCK_ROOTED_DEVICES: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
 
   /** Live updates over a WebSocket (/api/v1/ws). Without them screens still refresh by themselves, a little later. */
-  REALTIME_ENABLED: z.enum(['true', 'false']).default('true').transform((v) => v === 'true'),
+  REALTIME_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
   /** How often connections of sessions that have ended are closed, in seconds. */
   REALTIME_RECHECK_SEC: z.coerce.number().int().min(1).max(600).default(60),
 
@@ -226,15 +232,29 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   }
   const env = parsed.data;
   if (env.NODE_ENV === 'production' && /\/\/(postgres|admin|root)[:@]/.test(env.DATABASE_URL)) {
-    throw new Error('DATABASE_URL must use the restricted application role, not an owner or admin account');
+    throw new Error(
+      'DATABASE_URL must use the restricted application role, not an owner or admin account',
+    );
   }
-  if (env.STORAGE_DRIVER === 's3' && (!env.S3_BUCKET || !env.S3_ACCESS_KEY_ID || !env.S3_SECRET_ACCESS_KEY)) throw new Error('S3_BUCKET, S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY are required when STORAGE_DRIVER=s3');
-  if (env.STORAGE_DRIVER === 'blob' && !env.BLOB_READ_WRITE_TOKEN && !env.BLOB_STORE_ID) throw new Error('BLOB_READ_WRITE_TOKEN or BLOB_STORE_ID is required when STORAGE_DRIVER=blob');
-  if (env.MAIL_DRIVER === 'smtp' && !env.SMTP_HOST) throw new Error('SMTP_HOST is required when MAIL_DRIVER=smtp');
+  if (
+    env.STORAGE_DRIVER === 's3' &&
+    (!env.S3_BUCKET || !env.S3_ACCESS_KEY_ID || !env.S3_SECRET_ACCESS_KEY)
+  )
+    throw new Error(
+      'S3_BUCKET, S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY are required when STORAGE_DRIVER=s3',
+    );
+  if (env.STORAGE_DRIVER === 'blob' && !env.BLOB_READ_WRITE_TOKEN && !env.BLOB_STORE_ID)
+    throw new Error('BLOB_READ_WRITE_TOKEN or BLOB_STORE_ID is required when STORAGE_DRIVER=blob');
+  if (env.MAIL_DRIVER === 'smtp' && !env.SMTP_HOST)
+    throw new Error('SMTP_HOST is required when MAIL_DRIVER=smtp');
   if (env.COLLEGE_API_URL) {
-    if (env.NODE_ENV === 'production' && !env.COLLEGE_API_URL.startsWith('https://')) throw new Error('COLLEGE_API_URL must use https in production');
+    if (env.NODE_ENV === 'production' && !env.COLLEGE_API_URL.startsWith('https://'))
+      throw new Error('COLLEGE_API_URL must use https in production');
     parseFieldMap(env.COLLEGE_API_FIELD_MAP);
   }
-  if (env.NODE_ENV === 'production' && env.MAIL_DRIVER !== 'smtp') throw new Error('MAIL_DRIVER must be smtp in production, or password reset emails are never delivered');
+  if (env.NODE_ENV === 'production' && env.MAIL_DRIVER !== 'smtp')
+    throw new Error(
+      'MAIL_DRIVER must be smtp in production, or password reset emails are never delivered',
+    );
   return env;
 }

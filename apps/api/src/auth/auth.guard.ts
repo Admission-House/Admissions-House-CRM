@@ -6,7 +6,15 @@ import { SlidingWindowLimiter } from '../common/rate-limiter.js';
 import { ENV } from '../config/config.module.js';
 import type { Env } from '../config/env.js';
 import { AuthService } from './auth.service.js';
-import { ALLOW_MFA_SETUP, ALLOW_PASSWORD_CHANGE, BACKGROUND, HEAVY, IS_PUBLIC, PERMISSIONS, PERMISSIONS_ANY } from './decorators.js';
+import {
+  ALLOW_MFA_SETUP,
+  ALLOW_PASSWORD_CHANGE,
+  BACKGROUND,
+  HEAVY,
+  IS_PUBLIC,
+  PERMISSIONS,
+  PERMISSIONS_ANY,
+} from './decorators.js';
 
 /**
  * Applied to every route. A route is closed unless it is marked @Public(). For the rest it checks,
@@ -34,7 +42,8 @@ export class AuthGuard implements CanActivate {
 
     const request = context.switchToHttp().getRequest<FastifyRequest>();
     const header = request.headers.authorization;
-    const match = typeof header === 'string' ? /^Bearer ([\w-]+\.[\w-]+\.[\w-]+)$/.exec(header) : null;
+    const match =
+      typeof header === 'string' ? /^Bearer ([\w-]+\.[\w-]+\.[\w-]+)$/.exec(header) : null;
     if (!match) throw AppError.unauthorized('Please sign in');
 
     const background = this.reflector.getAllAndOverride<boolean>(BACKGROUND, targets) === true;
@@ -48,23 +57,50 @@ export class AuthGuard implements CanActivate {
     // Every request counts against the user's allowance; expensive ones count against a second,
     // smaller one. Asking for a report or list as a file is expensive whichever route it is.
     const format = (request.query as { format?: unknown } | undefined)?.format;
-    const heavy = this.reflector.getAllAndOverride<boolean>(HEAVY, targets) || format === 'csv' || format === 'xlsx';
+    const heavy =
+      this.reflector.getAllAndOverride<boolean>(HEAVY, targets) ||
+      format === 'csv' ||
+      format === 'xlsx';
     const wait = this.perUser.hit(auth.userId) || (heavy ? this.heavyPerUser.hit(auth.userId) : 0);
-    if (wait) throw new AppError('RATE_LIMITED', 'Too many requests. Please slow down and try again shortly.', 429, undefined, { 'retry-after': String(wait) });
+    if (wait)
+      throw new AppError(
+        'RATE_LIMITED',
+        'Too many requests. Please slow down and try again shortly.',
+        429,
+        undefined,
+        { 'retry-after': String(wait) },
+      );
 
-    if (auth.mustChangePassword && !this.reflector.getAllAndOverride<boolean>(ALLOW_PASSWORD_CHANGE, targets)) {
-      throw new AppError('PASSWORD_CHANGE_REQUIRED', 'Choose a new password before you continue', 403);
+    if (
+      auth.mustChangePassword &&
+      !this.reflector.getAllAndOverride<boolean>(ALLOW_PASSWORD_CHANGE, targets)
+    ) {
+      throw new AppError(
+        'PASSWORD_CHANGE_REQUIRED',
+        'Choose a new password before you continue',
+        403,
+      );
     }
 
-    if (auth.mfaSetupRequired && !this.reflector.getAllAndOverride<boolean>(ALLOW_MFA_SETUP, targets)) {
-      throw new AppError('MFA_SETUP_REQUIRED', 'Your company requires two-step sign-in. Set it up before you continue.', 403);
+    if (
+      auth.mfaSetupRequired &&
+      !this.reflector.getAllAndOverride<boolean>(ALLOW_MFA_SETUP, targets)
+    ) {
+      throw new AppError(
+        'MFA_SETUP_REQUIRED',
+        'Your company requires two-step sign-in. Set it up before you continue.',
+        403,
+      );
     }
 
-    const required = this.reflector.getAllAndOverride<string[] | undefined>(PERMISSIONS, targets) ?? [];
+    const required =
+      this.reflector.getAllAndOverride<string[] | undefined>(PERMISSIONS, targets) ?? [];
     if (required.some((code) => !auth.permissions.has(code))) throw AppError.forbidden();
 
-    const any = this.reflector.getAllAndOverride<string[] | undefined>(PERMISSIONS_ANY, targets) ?? [];
-    if (any.length > 0 && !any.some((code) => auth.permissions.has(code))) throw AppError.forbidden();
+    const any =
+      this.reflector.getAllAndOverride<string[] | undefined>(PERMISSIONS_ANY, targets) ?? [];
+    if (any.length > 0 && !any.some((code) => auth.permissions.has(code)))
+      throw AppError.forbidden();
     return true;
   }
 }

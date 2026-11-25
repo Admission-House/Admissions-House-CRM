@@ -4,5 +4,9 @@ import { LeadsModule } from '../leads/leads.module.js';
 import { ReportsController } from './reports.controller.js';
 import { ReportsService } from './reports.service.js';
 
-@Module({ imports: [LeadsModule, AttendanceModule], controllers: [ReportsController], providers: [ReportsService] })
+@Module({
+  imports: [LeadsModule, AttendanceModule],
+  controllers: [ReportsController],
+  providers: [ReportsService],
+})
 export class ReportsModule {}

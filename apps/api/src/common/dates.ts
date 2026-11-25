@@ -10,4 +10,6 @@ export const calendarDate = z
   }, 'Not a real date');
 
 /** A time of day as HH:MM (24 hour). */
-export const timeOfDay = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Use the format HH:MM (24 hour)');
+export const timeOfDay = z
+  .string()
+  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Use the format HH:MM (24 hour)');

@@ -19,7 +19,8 @@ declare module 'fastify' {
 
 const KEY_FORMAT = /^ahw_[A-Za-z0-9_-]{20,80}$/;
 
-export const hashWebhookKey = (key: string): string => createHash('sha256').update(key).digest('hex');
+export const hashWebhookKey = (key: string): string =>
+  createHash('sha256').update(key).digest('hex');
 
 /**
  * Lets a telephony provider in with the company's webhook key, sent as "Authorization: Bearer ahw_..."
@@ -39,11 +40,21 @@ export class TelephonyKeyGuard implements CanActivate {
     const header = request.headers['x-webhook-key'];
     // Some providers (Exotel) cannot send headers, so their route carries the key as the last part of the address.
     const fromPath = (request.params as { key?: unknown } | undefined)?.key;
-    const key = bearer ?? (typeof header === 'string' ? header : undefined) ?? (typeof fromPath === 'string' ? fromPath : undefined);
+    const key =
+      bearer ??
+      (typeof header === 'string' ? header : undefined) ??
+      (typeof fromPath === 'string' ? fromPath : undefined);
 
     const found =
       key && KEY_FORMAT.test(key)
-        ? (await sql<{ tenant_id: string; provider: string }>`SELECT * FROM resolve_telephony_key(${hashWebhookKey(key)})`.execute(this.db.unscoped())).rows[0]
+        ? (
+            await sql<{
+              tenant_id: string;
+              provider: string;
+            }>`SELECT * FROM resolve_telephony_key(${hashWebhookKey(key)})`.execute(
+              this.db.unscoped(),
+            )
+          ).rows[0]
         : undefined;
     if (!found) {
       const wait = this.badKeysPerAddress.hit(request.ip);
@@ -58,4 +69,6 @@ export class TelephonyKeyGuard implements CanActivate {
 }
 
 const tooMany = (seconds: number) =>
-  new AppError('RATE_LIMITED', 'Too many requests. Please slow down.', 429, undefined, { 'retry-after': String(seconds) });
+  new AppError('RATE_LIMITED', 'Too many requests. Please slow down.', 429, undefined, {
+    'retry-after': String(seconds),
+  });

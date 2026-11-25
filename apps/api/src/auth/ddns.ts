@@ -1,7 +1,8 @@
 import { lookup } from 'node:dns/promises';
 
 /** A hostname as a router's dynamic DNS service gives it: letters, digits, dots and hyphens, at least one dot or "localhost". */
-const HOSTNAME = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/;
+const HOSTNAME =
+  /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/;
 
 export function normalizeHostname(raw: string): string | null {
   const h = raw.trim().toLowerCase().replace(/\.$/, '');
@@ -23,7 +24,9 @@ export async function addressesOf(host: string, now = Date.now()): Promise<strin
   try {
     const found = await Promise.race([
       lookup(host, { all: true }),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 2_000).unref()),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('timeout')), 2_000).unref(),
+      ),
     ]);
     ips = found.map((a) => a.address.replace(/^::ffff:/i, ''));
   } catch {

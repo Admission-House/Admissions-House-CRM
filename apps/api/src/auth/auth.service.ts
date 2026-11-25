@@ -16,7 +16,11 @@ import type { LoginInput } from './dto/auth.dto.js';
 import { MfaService } from './mfa.service.js';
 import { parseTwoStepPolicy, twoStepRequired } from './two-step-policy.js';
 import { evaluateOffice, normalizeIp, OfficeFailure } from './office-rules.js';
-import { computerLabel, hashComputerToken, OfficeComputersService } from './office-computers.service.js';
+import {
+  computerLabel,
+  hashComputerToken,
+  OfficeComputersService,
+} from './office-computers.service.js';
 import { canAskForApproval, RemoteSigninService } from './remote-signin.service.js';
 import { passwordProblem, PasswordService } from './password.service.js';
 import { hashToken, safeEqualHex, TokenService } from './token.service.js';
@@ -65,7 +69,8 @@ const INVALID_CREDENTIALS = () =>
 
 const OFFICE_MESSAGES: Record<OfficeFailure, string> = {
   network: 'You can sign in only from the office.',
-  computer: 'This computer is not registered for the office yet. We have asked your Super Admin to approve it. Please try again once it is approved.',
+  computer:
+    'This computer is not registered for the office yet. We have asked your Super Admin to approve it. Please try again once it is approved.',
   gps_far: 'You can sign in only from the office.',
   gps_missing: 'Turn on location and try again.',
   gps_inaccurate: 'Your location is not accurate enough. Move closer to a window and try again.',
@@ -113,7 +118,9 @@ export class AuthService {
       await this.passwords.verifyDecoy(input.password);
       throw INVALID_CREDENTIALS();
     }
-    return unwrap(await this.db.withTenant(tenant.id, (trx) => this.attemptLogin(trx, tenant, input, meta)));
+    return unwrap(
+      await this.db.withTenant(tenant.id, (trx) => this.attemptLogin(trx, tenant, input, meta)),
+    );
   }
 
   private async attemptLogin(
@@ -123,7 +130,10 @@ export class AuthService {
     meta: RequestMeta,
   ): Promise<Outcome<LoginResult>> {
     const ip = normalizeIp(meta.ip);
-    const attempt = (userId: string | null, result: Parameters<AuthRepository['recordAttempt']>[1]['result']) =>
+    const attempt = (
+      userId: string | null,
+      result: Parameters<AuthRepository['recordAttempt']>[1]['result'],
+    ) =>
       this.repo.recordAttempt(trx, {
         tenantId: tenant.id,
         userId,
@@ -148,7 +158,12 @@ export class AuthService {
     if (!passwordOk) {
       // A locked account is not counted again, and a guesser is not told it is locked.
       if (!user.locked) {
-        await this.repo.registerFailure(trx, user.id, this.env.LOGIN_MAX_FAILURES, this.env.LOGIN_LOCK_MINUTES);
+        await this.repo.registerFailure(
+          trx,
+          user.id,
+          this.env.LOGIN_MAX_FAILURES,
+          this.env.LOGIN_LOCK_MINUTES,
+        );
       }
       await attempt(user.id, 'bad_password');
       return fail(INVALID_CREDENTIALS());
@@ -156,29 +171,59 @@ export class AuthService {
     if (user.locked) {
       await attempt(user.id, 'locked');
       return fail(
-        new AppError('ACCOUNT_LOCKED', 'Too many wrong passwords. Please try again in a few minutes.', 423),
+        new AppError(
+          'ACCOUNT_LOCKED',
+          'Too many wrong passwords. Please try again in a few minutes.',
+          423,
+        ),
       );
     }
     if (user.status !== 'active') {
       await attempt(user.id, 'inactive');
-      return fail(new AppError('ACCOUNT_INACTIVE', 'This account is not active. Please contact your administrator.', 403));
+      return fail(
+        new AppError(
+          'ACCOUNT_INACTIVE',
+          'This account is not active. Please contact your administrator.',
+          403,
+        ),
+      );
     }
 
     // Two-step sign-in, for people who turned it on. Asked after the password is right, so nobody
     // learns that an account has it without knowing the password.
     if (await this.mfa.isEnabled(trx, user.id)) {
       if (!input.mfaCode) {
-        return fail(new AppError('MFA_REQUIRED', 'Enter the 6-digit code from your authenticator app.', 401));
+        return fail(
+          new AppError('MFA_REQUIRED', 'Enter the 6-digit code from your authenticator app.', 401),
+        );
       }
       const checked = await this.mfa.verifyLoginCode(trx, user.id, input.mfaCode);
       if (checked === 'bad') {
         // A guessed code counts like a guessed password, so it locks the account after a few tries.
-        await this.repo.registerFailure(trx, user.id, this.env.LOGIN_MAX_FAILURES, this.env.LOGIN_LOCK_MINUTES);
+        await this.repo.registerFailure(
+          trx,
+          user.id,
+          this.env.LOGIN_MAX_FAILURES,
+          this.env.LOGIN_LOCK_MINUTES,
+        );
         await attempt(user.id, 'bad_code');
-        return fail(new AppError('MFA_CODE_WRONG', 'The code is not correct. Use the newest code in your app.', 401));
+        return fail(
+          new AppError(
+            'MFA_CODE_WRONG',
+            'The code is not correct. Use the newest code in your app.',
+            401,
+          ),
+        );
       }
       if (checked === 'recovery') {
-        await this.audit.write(trx, { tenantId: tenant.id, actorId: user.id, action: 'auth.mfa_recovery_used', entity: 'user', entityId: user.id, ip });
+        await this.audit.write(trx, {
+          tenantId: tenant.id,
+          actorId: user.id,
+          action: 'auth.mfa_recovery_used',
+          entity: 'user',
+          entityId: user.id,
+          ip,
+        });
       }
     }
 
@@ -187,27 +232,62 @@ export class AuthService {
     let remoteApproval: string | null = null;
     if (user.requires_office) {
       const office = await this.checkOffice(trx, tenant.id, user, input, ip, meta);
-      const officeReason = office.ok ? null : String(office.error.details?.reason ?? 'outside_office');
+      const officeReason = office.ok
+        ? null
+        : String(office.error.details?.reason ?? 'outside_office');
       // Outside the office: an approval for today lets the person in, from the web; without one they may ask for it.
-      const remoteRoute = !office.ok && input.clientType === 'web' && canAskForApproval(officeReason!);
+      const remoteRoute =
+        !office.ok && input.clientType === 'web' && canAskForApproval(officeReason!);
       if (remoteRoute) remoteApproval = await this.remote.approvedToday(trx, user.id);
       // The approvers see where the person is: a request goes ahead with a position, or when the browser says it cannot give one.
-      if (!office.ok && remoteRoute && !remoteApproval && input.remoteReason && (input.location || input.locationUnavailable)) {
+      if (
+        !office.ok &&
+        remoteRoute &&
+        !remoteApproval &&
+        input.remoteReason &&
+        (input.location || input.locationUnavailable)
+      ) {
         await attempt(user.id, 'outside_office');
         const asked = await this.remote.request(trx, {
-          tenantId: tenant.id, userId: user.id, branchId: user.branch_id, reason: input.remoteReason, officeReason: officeReason!, ip, location: input.location,
+          tenantId: tenant.id,
+          userId: user.id,
+          branchId: user.branch_id,
+          reason: input.remoteReason,
+          officeReason: officeReason!,
+          ip,
+          location: input.location,
         });
         if (asked.created) {
           await this.notifications.notifyOversight(trx, {
             tenantId: tenant.id,
             payload: {
-              event: 'remote_signin_request', requestId: asked.id, userId: user.id, userName: user.name, reason: input.remoteReason,
-              distanceM: asked.distanceM, officeReason, ip, expiresAt: asked.expiresAt.toISOString(),
+              event: 'remote_signin_request',
+              requestId: asked.id,
+              userId: user.id,
+              userName: user.name,
+              reason: input.remoteReason,
+              distanceM: asked.distanceM,
+              officeReason,
+              ip,
+              expiresAt: asked.expiresAt.toISOString(),
             },
           });
         }
-        const details = { requestId: asked.id, pollToken: asked.pollToken, expiresAt: asked.expiresAt.toISOString() };
-        return fail(new AppError('REMOTE_APPROVAL_PENDING', 'Your request has been sent. You will be signed in as soon as it is approved.', 403, undefined, undefined, details));
+        const details = {
+          requestId: asked.id,
+          pollToken: asked.pollToken,
+          expiresAt: asked.expiresAt.toISOString(),
+        };
+        return fail(
+          new AppError(
+            'REMOTE_APPROVAL_PENDING',
+            'Your request has been sent. You will be signed in as soon as it is approved.',
+            403,
+            undefined,
+            undefined,
+            details,
+          ),
+        );
       }
       if (!office.ok && !remoteApproval) {
         await attempt(user.id, 'outside_office');
@@ -215,16 +295,30 @@ export class AuthService {
         const reason = office.error.details?.reason ?? 'outside_office';
         // "No location" is how the web asks for the position: it signs in without one, and only office staff are then asked for it.
         // It is recorded above but is no news, and an alert for it would also hush (quietMinutes) the real reason a moment later.
-        if (reason !== 'gps_missing') await this.notifications.notifyOversight(trx, {
-          tenantId: tenant.id, quietMinutes: 10,
-          payload: reason === 'computer'
-            ? { event: 'computer_request', userId: user.id, userName: user.name, ip, label: computerLabel(meta.userAgent) }
-            : { event: 'login_refused', userId: user.id, userName: user.name, reason, ip },
-        });
+        if (reason !== 'gps_missing')
+          await this.notifications.notifyOversight(trx, {
+            tenantId: tenant.id,
+            quietMinutes: 10,
+            payload:
+              reason === 'computer'
+                ? {
+                    event: 'computer_request',
+                    userId: user.id,
+                    userName: user.name,
+                    ip,
+                    label: computerLabel(meta.userAgent),
+                  }
+                : { event: 'login_refused', userId: user.id, userName: user.name, reason, ip },
+          });
         // The browser may offer "ask for approval" instead (the password and code were right).
         if (!remoteRoute) return fail(office.error);
         const { code, message, status, details } = office.error;
-        return fail(new AppError(code, message, status, undefined, undefined, { ...details, canRequestApproval: true }));
+        return fail(
+          new AppError(code, message, status, undefined, undefined, {
+            ...details,
+            canRequestApproval: true,
+          }),
+        );
       }
       if (input.clientType === 'mobile') {
         const device = await this.checkDevice(trx, tenant.id, user.id, input);
@@ -232,8 +326,15 @@ export class AuthService {
           await attempt(user.id, 'device_blocked');
           if (device.error.code === 'DEVICE_ROOTED') {
             await this.notifications.notifyOversight(trx, {
-              tenantId: tenant.id, quietMinutes: 10,
-              payload: { event: 'login_refused', userId: user.id, userName: user.name, reason: 'device_rooted', ip },
+              tenantId: tenant.id,
+              quietMinutes: 10,
+              payload: {
+                event: 'login_refused',
+                userId: user.id,
+                userName: user.name,
+                reason: 'device_rooted',
+                ip,
+              },
             });
           }
           return fail(device.error);
@@ -259,8 +360,17 @@ export class AuthService {
     await attempt(user.id, 'success');
     // The Super Admins are told who signed in (a repeat within 30 minutes is not sent again, so the bell stays readable).
     await this.notifications.notifyOversight(trx, {
-      tenantId: tenant.id, exceptUserId: user.id, quietMinutes: 30,
-      payload: { event: 'login_ok', userId: user.id, userName: user.name, role: user.role_name, ip, clientType: input.clientType },
+      tenantId: tenant.id,
+      exceptUserId: user.id,
+      quietMinutes: 30,
+      payload: {
+        event: 'login_ok',
+        userId: user.id,
+        userName: user.name,
+        role: user.role_name,
+        ip,
+        clientType: input.clientType,
+      },
     });
     // Signing in is the attendance for every role that records it (the office roles, and the Super Admin, who signs in
     // from anywhere): checked in here, and checked out when their last session ends (see migration 013).
@@ -279,11 +389,21 @@ export class AuthService {
     if (remoteApproval) {
       await this.remote.markUsed(trx, remoteApproval);
       await this.audit.write(trx, {
-        tenantId: tenant.id, actorId: user.id, action: 'auth.remote_signin', entity: 'user', entityId: user.id, after: { requestId: remoteApproval }, ip,
+        tenantId: tenant.id,
+        actorId: user.id,
+        action: 'auth.remote_signin',
+        entity: 'user',
+        entityId: user.id,
+        after: { requestId: remoteApproval },
+        ip,
       });
     }
 
-    const access = await this.tokens.signAccess({ userId: user.id, tenantId: tenant.id, sessionId });
+    const access = await this.tokens.signAccess({
+      userId: user.id,
+      tenantId: tenant.id,
+      sessionId,
+    });
     return ok({
       accessToken: access.token,
       expiresIn: access.expiresInSec,
@@ -304,8 +424,20 @@ export class AuthService {
    * office list, or it is a registered office computer. The first time a computer is on an address that is not on the list, but the
    * position is right, a request goes to the people who approve computers instead of the person being turned away for good.
    */
-  private async checkOffice(trx: Trx, tenantId: string, user: LoginUser, input: LoginInput, ip: string, meta: RequestMeta): Promise<Outcome<true>> {
-    const refuse = (reason: OfficeFailure) => fail(new AppError('OUTSIDE_OFFICE', OFFICE_MESSAGES[reason], 403, undefined, undefined, { reason }));
+  private async checkOffice(
+    trx: Trx,
+    tenantId: string,
+    user: LoginUser,
+    input: LoginInput,
+    ip: string,
+    meta: RequestMeta,
+  ): Promise<Outcome<true>> {
+    const refuse = (reason: OfficeFailure) =>
+      fail(
+        new AppError('OUTSIDE_OFFICE', OFFICE_MESSAGES[reason], 403, undefined, undefined, {
+          reason,
+        }),
+      );
     if (!user.branch_id) return refuse('not_configured');
 
     const facts = await this.repo.officeFacts(trx, user.branch_id, ip, input.wifiId);
@@ -313,27 +445,64 @@ export class AuthService {
 
     // An office that has chosen to go by position alone does not look at the internet address at all.
     const locationOnly = facts.branch.office_check === 'location_only';
-    const onOfficeNetwork = locationOnly || facts.networkMatches || (facts.ddnsHosts.length > 0 && (await ddnsMatches(facts.ddnsHosts, ip)));
+    const onOfficeNetwork =
+      locationOnly ||
+      facts.networkMatches ||
+      (facts.ddnsHosts.length > 0 && (await ddnsMatches(facts.ddnsHosts, ip)));
     const web = input.clientType === 'web' && !!meta.computerToken;
     const tokenHash = web ? hashComputerToken(meta.computerToken!) : null;
-    const known = tokenHash ? await this.softly(trx, () => this.computers.find(trx, user.id, tokenHash), undefined) : undefined;
+    const known = tokenHash
+      ? await this.softly(trx, () => this.computers.find(trx, user.id, tokenHash), undefined)
+      : undefined;
     // A computer that has not been used for months must be vouched for again (a laptop that was given away, an old browser).
     const registered = known?.state === 'approved' && known.fresh;
 
-    const base = { branch: facts.branch, hasNetworks: facts.hasNetworks || locationOnly, location: input.location, maxAccuracyM: this.env.GPS_MAX_ACCURACY_M };
+    const base = {
+      branch: facts.branch,
+      hasNetworks: facts.hasNetworks || locationOnly,
+      location: input.location,
+      maxAccuracyM: this.env.GPS_MAX_ACCURACY_M,
+    };
     const result = evaluateOffice({ ...base, networkMatches: onOfficeNetwork || registered });
     if (result.ok) {
-      if (tokenHash && registered) await this.softly(trx, () => this.computers.touch(trx, known!.id, ip), undefined);
+      if (tokenHash && registered)
+        await this.softly(trx, () => this.computers.touch(trx, known!.id, ip), undefined);
       else if (tokenHash && onOfficeNetwork && !locationOnly) {
-        await this.softly(trx, () => this.computers.registerFromOfficeNetwork(trx, { tenantId, userId: user.id, tokenHash, label: computerLabel(meta.userAgent), ip }), undefined);
+        await this.softly(
+          trx,
+          () =>
+            this.computers.registerFromOfficeNetwork(trx, {
+              tenantId,
+              userId: user.id,
+              tokenHash,
+              label: computerLabel(meta.userAgent),
+              ip,
+            }),
+          undefined,
+        );
       }
       return ok(true);
     }
 
     // Not on an office address and not a registered computer. If the position is right, this may simply be an office computer on the
     // address the provider gave today: ask for approval. If the position is wrong too, say nothing new: it is not the office.
-    if (result.reason === 'network' && tokenHash && evaluateOffice({ ...base, networkMatches: true }).ok) {
-      const asked = await this.softly(trx, () => this.computers.requestApproval(trx, { tenantId, userId: user.id, tokenHash, label: computerLabel(meta.userAgent), ip }), 'rejected' as const);
+    if (
+      result.reason === 'network' &&
+      tokenHash &&
+      evaluateOffice({ ...base, networkMatches: true }).ok
+    ) {
+      const asked = await this.softly(
+        trx,
+        () =>
+          this.computers.requestApproval(trx, {
+            tenantId,
+            userId: user.id,
+            tokenHash,
+            label: computerLabel(meta.userAgent),
+            ip,
+          }),
+        'rejected' as const,
+      );
       if (asked !== 'rejected') return refuse('computer');
     }
     return refuse(result.reason);
@@ -352,7 +521,9 @@ export class AuthService {
       return value;
     } catch (err) {
       await sql`ROLLBACK TO SAVEPOINT office_computer`.execute(trx);
-      this.logger.warn(`office computer step skipped: ${err instanceof Error ? err.message : String(err)}`);
+      this.logger.warn(
+        `office computer step skipped: ${err instanceof Error ? err.message : String(err)}`,
+      );
       return fallback;
     }
   }
@@ -364,12 +535,18 @@ export class AuthService {
     input: LoginInput,
   ): Promise<Outcome<string>> {
     if (!input.device) {
-      return fail(AppError.badRequest('DEVICE_REQUIRED', 'The app must identify this phone to sign in'));
+      return fail(
+        AppError.badRequest('DEVICE_REQUIRED', 'The app must identify this phone to sign in'),
+      );
     }
     // A rooted or jailbroken phone can hide a fake location, so it is refused before it is even registered.
     if (input.device.rooted && this.env.BLOCK_ROOTED_DEVICES) {
       return fail(
-        new AppError('DEVICE_ROOTED', 'This phone has been modified (rooted or jailbroken), so it cannot be used to sign in. Use another phone or ask your Admin.', 403),
+        new AppError(
+          'DEVICE_ROOTED',
+          'This phone has been modified (rooted or jailbroken), so it cannot be used to sign in. Use another phone or ask your Admin.',
+          403,
+        ),
       );
     }
     const device = await this.repo.findOrCreateDevice(trx, {
@@ -381,7 +558,11 @@ export class AuthService {
     });
     if (!device.approved) {
       return fail(
-        new AppError('DEVICE_NOT_APPROVED', 'This phone is waiting for approval from your Admin.', 403),
+        new AppError(
+          'DEVICE_NOT_APPROVED',
+          'This phone is waiting for approval from your Admin.',
+          403,
+        ),
       );
     }
     return ok(device.id);
@@ -401,14 +582,25 @@ export class AuthService {
         const presented = hashToken(rawToken);
         // An old token that is presented again means two parties hold the same token. End the
         // session, so neither the owner nor a thief can carry on with it.
-        if (session.prev_refresh_token_hash && safeEqualHex(presented, session.prev_refresh_token_hash)) {
+        if (
+          session.prev_refresh_token_hash &&
+          safeEqualHex(presented, session.prev_refresh_token_hash)
+        ) {
           // Two tabs of one browser renewed together: the token was replaced a moment ago and this is the same web
           // session. The browser already has the new cookie, so give this tab a fresh access token and leave the cookie.
           if (!session.ended && session.client_type === 'web' && session.rotated_recently) {
             const stopped = await this.sessionProblem(trx, session);
             if (stopped) return fail(stopped);
-            const access = await this.tokens.signAccess({ userId: session.user_id, tenantId: parts.tenantId, sessionId: session.id });
-            return ok({ accessToken: access.token, expiresIn: access.expiresInSec, clientType: 'web' });
+            const access = await this.tokens.signAccess({
+              userId: session.user_id,
+              tenantId: parts.tenantId,
+              sessionId: session.id,
+            });
+            return ok({
+              accessToken: access.token,
+              expiresIn: access.expiresInSec,
+              clientType: 'web',
+            });
           }
           if (!session.ended) {
             await this.repo.endSession(trx, session.id, 'reuse_detected');
@@ -429,7 +621,10 @@ export class AuthService {
         const stopped = await this.sessionProblem(trx, session);
         if (stopped) return fail(stopped);
 
-        const next = this.tokens.newRefreshToken({ tenantId: parts.tenantId, sessionId: session.id });
+        const next = this.tokens.newRefreshToken({
+          tenantId: parts.tenantId,
+          sessionId: session.id,
+        });
         await this.repo.rotateRefreshToken(trx, session.id, session.refresh_token_hash, next.hash);
         const access = await this.tokens.signAccess({
           userId: session.user_id,
@@ -453,7 +648,11 @@ export class AuthService {
    * Checks a token and its session. `touch: false` does not count the call as activity, for a live
    * connection that must not keep an idle session open.
    */
-  async authenticate(accessToken: string, meta: RequestMeta, options: { touch?: boolean } = {}): Promise<AuthContext> {
+  async authenticate(
+    accessToken: string,
+    meta: RequestMeta,
+    options: { touch?: boolean } = {},
+  ): Promise<AuthContext> {
     const claims = await this.tokens.verifyAccess(accessToken);
     return unwrap(
       await this.db.withTenant(claims.tenantId, async (trx): Promise<Outcome<AuthContext>> => {
@@ -475,7 +674,9 @@ export class AuthService {
           dataScope: row.data_scope,
           permissions: new Set(row.permissions),
           mustChangePassword: row.must_change_password,
-          mfaSetupRequired: twoStepRequired(parseTwoStepPolicy(row.require_two_step), row.role_key) && !row.two_step_on,
+          mfaSetupRequired:
+            twoStepRequired(parseTwoStepPolicy(row.require_two_step), row.role_key) &&
+            !row.two_step_on,
           tracksAttendance: row.tracks_attendance,
           requiresOffice: row.requires_office,
           ip: normalizeIp(meta.ip),
@@ -491,12 +692,25 @@ export class AuthService {
    */
   private async sessionProblem(
     trx: Trx,
-    s: { id: string; ended: boolean; expired: boolean; idle_seconds: number; idle_limit_min: number; user_status: string; tenant_status: string },
+    s: {
+      id: string;
+      ended: boolean;
+      expired: boolean;
+      idle_seconds: number;
+      idle_limit_min: number;
+      user_status: string;
+      tenant_status: string;
+    },
   ): Promise<AppError | null> {
-    if (s.ended) return new AppError('SESSION_ENDED', 'You have been signed out. Please sign in again.', 401);
+    if (s.ended)
+      return new AppError('SESSION_ENDED', 'You have been signed out. Please sign in again.', 401);
     if (s.user_status !== 'active' || s.tenant_status !== 'active') {
       await this.repo.endSession(trx, s.id, 'revoked');
-      return new AppError('ACCOUNT_INACTIVE', 'This account is not active. Please contact your administrator.', 401);
+      return new AppError(
+        'ACCOUNT_INACTIVE',
+        'This account is not active. Please contact your administrator.',
+        401,
+      );
     }
     if (s.expired) {
       await this.repo.endSession(trx, s.id, 'expired');
@@ -525,46 +739,79 @@ export class AuthService {
     auth: AuthContext,
     input: { currentPassword: string; newPassword: string },
   ): Promise<{ otherSessionsEnded: number }> {
-    const outcome = await this.db.withTenant(auth.tenantId, async (trx): Promise<Outcome<number>> => {
-      const currentHash = await this.repo.findPasswordHash(trx, auth.userId);
-      if (!currentHash) return fail(AppError.notFound('Account'));
+    const outcome = await this.db.withTenant(
+      auth.tenantId,
+      async (trx): Promise<Outcome<number>> => {
+        const currentHash = await this.repo.findPasswordHash(trx, auth.userId);
+        if (!currentHash) return fail(AppError.notFound('Account'));
 
-      if (!(await this.passwords.verify(currentHash, input.currentPassword))) {
-        // Someone holding a stolen session must not be able to guess the password here.
-        await this.repo.registerFailure(trx, auth.userId, this.env.LOGIN_MAX_FAILURES, this.env.LOGIN_LOCK_MINUTES);
-        return fail(new AppError('CURRENT_PASSWORD_WRONG', 'The current password is not correct', 403));
-      }
-      const problem = passwordProblem(input.newPassword, auth.email);
-      if (problem) {
-        return fail(AppError.badRequest('PASSWORD_REJECTED', problem, [{ field: 'newPassword', message: problem }]));
-      }
-      if (await this.passwords.verify(currentHash, input.newPassword)) {
-        const message = 'Choose a password you have not used just now';
-        return fail(AppError.badRequest('PASSWORD_REJECTED', message, [{ field: 'newPassword', message }]));
-      }
+        if (!(await this.passwords.verify(currentHash, input.currentPassword))) {
+          // Someone holding a stolen session must not be able to guess the password here.
+          await this.repo.registerFailure(
+            trx,
+            auth.userId,
+            this.env.LOGIN_MAX_FAILURES,
+            this.env.LOGIN_LOCK_MINUTES,
+          );
+          return fail(
+            new AppError('CURRENT_PASSWORD_WRONG', 'The current password is not correct', 403),
+          );
+        }
+        const problem = passwordProblem(input.newPassword, auth.email);
+        if (problem) {
+          return fail(
+            AppError.badRequest('PASSWORD_REJECTED', problem, [
+              { field: 'newPassword', message: problem },
+            ]),
+          );
+        }
+        if (await this.passwords.verify(currentHash, input.newPassword)) {
+          const message = 'Choose a password you have not used just now';
+          return fail(
+            AppError.badRequest('PASSWORD_REJECTED', message, [{ field: 'newPassword', message }]),
+          );
+        }
 
-      await this.repo.changePassword(trx, auth.userId, await this.passwords.hash(input.newPassword));
-      const ended = await this.repo.endOtherSessions(trx, auth.userId, auth.sessionId, 'revoked');
-      await this.audit.write(trx, {
-        tenantId: auth.tenantId,
-        actorId: auth.userId,
-        action: 'auth.password_changed',
-        entity: 'user',
-        entityId: auth.userId,
-        ip: auth.ip,
-        requestId: auth.requestId,
-      });
-      return ok(ended);
-    });
+        await this.repo.changePassword(
+          trx,
+          auth.userId,
+          await this.passwords.hash(input.newPassword),
+        );
+        const ended = await this.repo.endOtherSessions(trx, auth.userId, auth.sessionId, 'revoked');
+        await this.audit.write(trx, {
+          tenantId: auth.tenantId,
+          actorId: auth.userId,
+          action: 'auth.password_changed',
+          entity: 'user',
+          entityId: auth.userId,
+          ip: auth.ip,
+          requestId: auth.requestId,
+        });
+        return ok(ended);
+      },
+    );
     return { otherSessionsEnded: unwrap(outcome) };
   }
 
   async profile(auth: AuthContext) {
     const { company, own } = await this.db.withTenant(auth.tenantId, async (trx) => ({
       company: await this.repo.companyProfile(trx),
-      own: (await sql<{ start_page: string | null; avatar_updated_at: Date | null }>`SELECT start_page, avatar_updated_at FROM user_preferences WHERE user_id = ${auth.userId}::uuid`.execute(trx)).rows[0],
+      own: (
+        await sql<{
+          start_page: string | null;
+          avatar_updated_at: Date | null;
+        }>`SELECT start_page, avatar_updated_at FROM user_preferences WHERE user_id = ${auth.userId}::uuid`.execute(
+          trx,
+        )
+      ).rows[0],
     }));
-    const settings = (company.settings ?? {}) as { product_name?: string; contact_email?: string; brand_color?: string; accent_color?: string; logo_key?: string };
+    const settings = (company.settings ?? {}) as {
+      product_name?: string;
+      contact_email?: string;
+      brand_color?: string;
+      accent_color?: string;
+      logo_key?: string;
+    };
     return {
       user: {
         id: auth.userId,
@@ -574,7 +821,11 @@ export class AuthService {
         mustChangePassword: auth.mustChangePassword,
         mfaSetupRequired: auth.mfaSetupRequired,
         // Their chosen first page, only if they may still open it (a role change can take that away).
-        startPage: own?.start_page && allowedStartPages(auth.permissions).includes(own.start_page as StartPage) ? own.start_page : null,
+        startPage:
+          own?.start_page &&
+          allowedStartPages(auth.permissions).includes(own.start_page as StartPage)
+            ? own.start_page
+            : null,
         avatarVersion: own?.avatar_updated_at ? new Date(own.avatar_updated_at).getTime() : null,
       },
       permissions: [...auth.permissions].sort(),
@@ -590,7 +841,9 @@ export class AuthService {
   }
 
   async listSessions(auth: AuthContext) {
-    const rows = await this.db.withTenant(auth.tenantId, (trx) => this.repo.listActiveSessions(trx, auth.userId));
+    const rows = await this.db.withTenant(auth.tenantId, (trx) =>
+      this.repo.listActiveSessions(trx, auth.userId),
+    );
     return rows.map((r) => ({
       id: r.id,
       current: r.id === auth.sessionId,
@@ -615,7 +868,9 @@ export class AuthService {
         if (!auth.permissions.has('user.manage')) throw AppError.notFound('Session');
         const { rows } = await sql<{ user_id: string; name: string }>`
           SELECT s.user_id, u.name FROM user_sessions s JOIN users u ON u.id = s.user_id
-          WHERE s.id = ${sessionId}::uuid AND s.ended_at IS NULL AND s.expires_at > now()`.execute(trx);
+          WHERE s.id = ${sessionId}::uuid AND s.ended_at IS NULL AND s.expires_at > now()`.execute(
+          trx,
+        );
         if (!rows[0]) throw AppError.notFound('Session');
         target = { userId: rows[0].user_id, userName: rows[0].name };
       }
@@ -632,8 +887,14 @@ export class AuthService {
       });
       if (target) {
         await this.notifications.notifyOversight(trx, {
-          tenantId: auth.tenantId, exceptUserId: auth.userId,
-          payload: { event: 'forced_logout', userId: target.userId, userName: target.userName, byUserId: auth.userId },
+          tenantId: auth.tenantId,
+          exceptUserId: auth.userId,
+          payload: {
+            event: 'forced_logout',
+            userId: target.userId,
+            userName: target.userName,
+            byUserId: auth.userId,
+          },
         });
       }
     });
@@ -642,21 +903,41 @@ export class AuthService {
   /** Every active session in the company, for those who manage users. */
   async listTenantSessions(auth: AuthContext, userId?: string) {
     const { rows } = await this.db.withTenant(auth.tenantId, (trx) =>
-      sql<{ id: string; user_id: string; user_name: string; role_name: string; client_type: string; ip: string | null; user_agent: string | null; created_at: Date; last_active_at: Date }>`
+      sql<{
+        id: string;
+        user_id: string;
+        user_name: string;
+        role_name: string;
+        client_type: string;
+        ip: string | null;
+        user_agent: string | null;
+        created_at: Date;
+        last_active_at: Date;
+      }>`
         SELECT s.id, s.user_id, u.name AS user_name, r.name AS role_name, s.client_type, s.ip::text AS ip, s.user_agent, s.created_at, s.last_active_at
         FROM user_sessions s JOIN users u ON u.id = s.user_id JOIN roles r ON r.id = u.role_id
         WHERE s.ended_at IS NULL AND s.expires_at > now() ${userId ? sql`AND s.user_id = ${userId}::uuid` : sql``}
         ORDER BY s.last_active_at DESC LIMIT 300`.execute(trx),
     );
-    return rows.map((r) => ({ id: r.id, current: r.id === auth.sessionId, user: { id: r.user_id, name: r.user_name, role: r.role_name }, clientType: r.client_type, ip: r.ip, userAgent: r.user_agent, signedInAt: r.created_at, lastActiveAt: r.last_active_at }));
+    return rows.map((r) => ({
+      id: r.id,
+      current: r.id === auth.sessionId,
+      user: { id: r.user_id, name: r.user_name, role: r.role_name },
+      clientType: r.client_type,
+      ip: r.ip,
+      userAgent: r.user_agent,
+      signedInAt: r.created_at,
+      lastActiveAt: r.last_active_at,
+    }));
   }
 
   // ---------------------------------------------------------------- helpers
 
   private async findTenant(slug: string): Promise<TenantRow | undefined> {
-    const { rows } = await sql<TenantRow>`SELECT id, name, status FROM find_tenant_by_slug(${slug})`.execute(
-      this.db.unscoped(),
-    );
+    const { rows } =
+      await sql<TenantRow>`SELECT id, name, status FROM find_tenant_by_slug(${slug})`.execute(
+        this.db.unscoped(),
+      );
     return rows[0];
   }
 

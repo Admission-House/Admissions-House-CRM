@@ -19,7 +19,12 @@ const WHY: Record<UnavailableReason, string> = {
 @Injectable()
 export class Assignees {
   /** Someone a lead can be given to: active, able to work with leads, and inside the caller's scope. */
-  async ensure(trx: Trx, auth: AuthContext, userId: string, opts: { allowUnavailable?: boolean } = {}): Promise<{ id: string; name: string }> {
+  async ensure(
+    trx: Trx,
+    auth: AuthContext,
+    userId: string,
+    opts: { allowUnavailable?: boolean } = {},
+  ): Promise<{ id: string; name: string }> {
     const scoped = scopeCondition(auth, 'u.id');
     const { rows } = await sql<{ id: string; name: string }>`
       SELECT u.id, u.name FROM users u
@@ -28,14 +33,28 @@ export class Assignees {
                     WHERE rp.role_id = u.role_id AND p.code = 'lead.read')
         ${scoped ? sql`AND ${scoped}` : sql``}`.execute(trx);
     if (!rows[0]) {
-      throw AppError.badRequest('ASSIGNEE_INVALID', 'Choose an active person from your team who works with leads', [
-        { field: 'userId', message: 'Choose an active person from your team who works with leads' },
-      ]);
+      throw AppError.badRequest(
+        'ASSIGNEE_INVALID',
+        'Choose an active person from your team who works with leads',
+        [
+          {
+            field: 'userId',
+            message: 'Choose an active person from your team who works with leads',
+          },
+        ],
+      );
     }
     if (!opts.allowUnavailable) {
       const reason = await this.unavailableReason(trx, userId);
       if (reason) {
-        throw new AppError('ASSIGNEE_UNAVAILABLE', `${rows[0].name} ${WHY[reason]}. Choose someone who is working now, or confirm to assign anyway.`, 409, undefined, undefined, { reason, name: rows[0].name });
+        throw new AppError(
+          'ASSIGNEE_UNAVAILABLE',
+          `${rows[0].name} ${WHY[reason]}. Choose someone who is working now, or confirm to assign anyway.`,
+          409,
+          undefined,
+          undefined,
+          { reason, name: rows[0].name },
+        );
       }
     }
     return rows[0];
@@ -47,7 +66,13 @@ export class Assignees {
    * tracked by attendance, so they are never refused.
    */
   async unavailableReason(trx: Trx, userId: string): Promise<UnavailableReason | null> {
-    const { rows } = await sql<{ tracked: boolean; checked_in: boolean; open_day: boolean; on_leave: boolean; on_break: boolean }>`
+    const { rows } = await sql<{
+      tracked: boolean;
+      checked_in: boolean;
+      open_day: boolean;
+      on_leave: boolean;
+      on_break: boolean;
+    }>`
       SELECT (r.system_key = 'counsellor') AS tracked,
              EXISTS (SELECT 1 FROM attendance_records a WHERE a.user_id = u.id AND a.work_date = (now() AT TIME ZONE t.timezone)::date) AS checked_in,
              EXISTS (SELECT 1 FROM attendance_records a WHERE a.user_id = u.id AND a.work_date = (now() AT TIME ZONE t.timezone)::date AND a.check_out_at IS NULL) AS open_day,

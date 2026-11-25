@@ -21,17 +21,22 @@ describe('SecretBox', () => {
     const [v, iv, tag, data] = box.seal('secret-value', 'row-1').split('.');
     const flipped = Buffer.from(data!, 'base64url');
     flipped[0] = flipped[0]! ^ 1;
-    expect(() => box.open([v, iv, tag, flipped.toString('base64url')].join('.'), 'row-1')).toThrow();
+    expect(() =>
+      box.open([v, iv, tag, flipped.toString('base64url')].join('.'), 'row-1'),
+    ).toThrow();
     expect(() => box.open([v, iv, 'AAAAAAAAAAAAAAAAAAAAAA', data].join('.'), 'row-1')).toThrow();
   });
 
   it('refuses a value moved to another place', () => {
-    expect(() => box.open(box.seal('secret-value', 'tenant-a:config'), 'tenant-b:config')).toThrow();
+    expect(() =>
+      box.open(box.seal('secret-value', 'tenant-a:config'), 'tenant-b:config'),
+    ).toThrow();
   });
 
   it('refuses a value sealed with another key, or not sealed at all', () => {
     const other = new SecretBox({ DATA_ENCRYPTION_KEY: 'cd'.repeat(32) });
     expect(() => other.open(box.seal('secret-value', 'c'), 'c')).toThrow();
-    for (const bad of ['', 'plain text', 'v2.a.b.c', 'v1.a.b', 'v1.a.b.c.d']) expect(() => box.open(bad, 'c')).toThrow();
+    for (const bad of ['', 'plain text', 'v2.a.b.c', 'v1.a.b', 'v1.a.b.c.d'])
+      expect(() => box.open(bad, 'c')).toThrow();
   });
 });

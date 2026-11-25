@@ -28,7 +28,10 @@ export class JobsController {
   ) {}
 
   @Get(':group')
-  async run(@Param('group') group: string, @Headers('authorization') authorization: string | undefined): Promise<{ group: JobGroup; results: JobOutcome[] }> {
+  async run(
+    @Param('group') group: string,
+    @Headers('authorization') authorization: string | undefined,
+  ): Promise<{ group: JobGroup; results: JobOutcome[] }> {
     const secret = this.env.CRON_SECRET;
     if (this.env.JOBS_MODE !== 'cron' || !secret) throw AppError.notFound();
     const given = /^Bearer (\S+)$/.exec(authorization ?? '')?.[1] ?? '';

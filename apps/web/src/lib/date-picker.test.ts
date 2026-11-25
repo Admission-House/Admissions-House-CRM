@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { fromLocalValue, monthGrid, quickChoices, timeLabel, toLocalValue, TIME_SLOTS } from './date-picker';
+import {
+  fromLocalValue,
+  monthGrid,
+  quickChoices,
+  timeLabel,
+  toLocalValue,
+  TIME_SLOTS,
+} from './date-picker';
 
 describe('date picker arithmetic', () => {
   it('writes and reads the datetime-local format in local time', () => {
@@ -27,7 +34,12 @@ describe('date picker arithmetic', () => {
   it('offers only quick choices still ahead', () => {
     const now = new Date(2026, 10, 24, 19, 10); // Tuesday 7:10 pm
     const q = quickChoices(now, now);
-    expect(q.map((c) => c.label)).toEqual(['In 1 hour', 'Tomorrow, 11 am', 'Tomorrow, 4 pm', 'Next Monday, 11 am']);
+    expect(q.map((c) => c.label)).toEqual([
+      'In 1 hour',
+      'Tomorrow, 11 am',
+      'Tomorrow, 4 pm',
+      'Next Monday, 11 am',
+    ]);
     expect(q[0]!.value).toBe('2026-11-24T20:10');
     expect(q.at(-1)!.value).toBe('2026-11-30T11:00');
   });

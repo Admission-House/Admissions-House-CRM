@@ -15,7 +15,9 @@ export abstract class StorageService {
 
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 /** company/lead/document.extension, company/calls/call.extension or company/brand/logo.extension. All server-made. */
-export const KEY = new RegExp(`^${UUID}/(?:${UUID}|calls|brand)/${UUID}\.(jpg|png|pdf|mp3|wav|ogg|m4a)$`);
+export const KEY = new RegExp(
+  `^${UUID}/(?:${UUID}|calls|brand)/${UUID}\.(jpg|png|pdf|mp3|wav|ogg|m4a)$`,
+);
 
 /** Files in a folder on the server. Fine for one server; use a cloud store when there are several. */
 export class LocalDiskStorage extends StorageService {
@@ -30,7 +32,8 @@ export class LocalDiskStorage extends StorageService {
   private pathFor(key: string): string {
     if (!KEY.test(key)) throw new Error('not a valid storage key');
     const full = resolve(join(this.root, key));
-    if (!full.startsWith(this.root + sep)) throw new Error('storage key escapes the storage folder');
+    if (!full.startsWith(this.root + sep))
+      throw new Error('storage key escapes the storage folder');
     return full;
   }
 

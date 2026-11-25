@@ -1,16 +1,37 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Put, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Put,
+  Query,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import type { AuthContext } from '../auth/auth-context.js';
 import { CurrentAuth, RequireAnyPermission, RequirePermissions } from '../auth/decorators.js';
 import {
-  CreateCollegeDto, CreateCourseDto, CreateStreamDto, ListCollegesDto, ListCoursesDto, ListLocationsDto, ReviewDto, SetOfferedCourseDto,
-  UpdateCollegeDto, UpdateCourseDto,
+  CreateCollegeDto,
+  CreateCourseDto,
+  CreateStreamDto,
+  ListCollegesDto,
+  ListCoursesDto,
+  ListLocationsDto,
+  ReviewDto,
+  SetOfferedCourseDto,
+  UpdateCollegeDto,
+  UpdateCourseDto,
 } from './masters.dto.js';
 import { MastersService } from './masters.service.js';
 
-class CollegeQueryDto extends createZodDto(z.object({ mode: z.enum(['online', 'regular', 'any']).default('any') })) {}
+class CollegeQueryDto extends createZodDto(
+  z.object({ mode: z.enum(['online', 'regular', 'any']).default('any') }),
+) {}
 
 @ApiTags('masters')
 @ApiBearerAuth()
@@ -57,7 +78,11 @@ export class MastersController {
 
   @RequirePermissions('master.manage')
   @Patch('courses/:id')
-  updateCourse(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: UpdateCourseDto) {
+  updateCourse(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: UpdateCourseDto,
+  ) {
     return this.masters.updateCourse(auth, id, body);
   }
 
@@ -70,7 +95,11 @@ export class MastersController {
 
   @RequirePermissions('master.read')
   @Get('colleges/:id')
-  college(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Query() query: CollegeQueryDto) {
+  college(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query() query: CollegeQueryDto,
+  ) {
     return this.masters.college(auth, id, query.mode);
   }
 
@@ -83,7 +112,11 @@ export class MastersController {
 
   @RequirePermissions('master.manage')
   @Patch('colleges/:id')
-  updateCollege(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: UpdateCollegeDto) {
+  updateCollege(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: UpdateCollegeDto,
+  ) {
     return this.masters.updateCollege(auth, id, body);
   }
 
@@ -100,13 +133,21 @@ export class MastersController {
 
   @RequirePermissions('master.manage')
   @Delete('colleges/:id/courses/:courseId')
-  removeOfferedCourse(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Param('courseId', ParseUUIDPipe) courseId: string) {
+  removeOfferedCourse(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('courseId', ParseUUIDPipe) courseId: string,
+  ) {
     return this.masters.removeOfferedCourse(auth, id, courseId);
   }
 
   @RequirePermissions('master.review')
   @Post('colleges/:id/review')
-  review(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: ReviewDto) {
+  review(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: ReviewDto,
+  ) {
     return this.masters.review(auth, id, body.decision);
   }
 }

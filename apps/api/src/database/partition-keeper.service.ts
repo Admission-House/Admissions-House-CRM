@@ -24,11 +24,19 @@ export class PartitionKeeperService implements OnModuleInit {
   onModuleInit(): void {
     // Not in tests: they run against a throw-away setup and must stay quiet.
     const everySec = process.env.NODE_ENV === 'test' ? 0 : SIX_HOURS_MS / 1000;
-    this.jobs.register({ name: 'partition-keeper', group: 'daily', everySec, firstRunMs: 0, run: () => this.runSafely() });
+    this.jobs.register({
+      name: 'partition-keeper',
+      group: 'daily',
+      everySec,
+      firstRunMs: 0,
+      run: () => this.runSafely(),
+    });
   }
 
   async ensureOnce(): Promise<number> {
-    const { rows } = await sql<{ n: number }>`SELECT ensure_partitions(${MONTHS_AHEAD}) AS n`.execute(this.db.unscoped());
+    const { rows } = await sql<{
+      n: number;
+    }>`SELECT ensure_partitions(${MONTHS_AHEAD}) AS n`.execute(this.db.unscoped());
     return rows[0]?.n ?? 0;
   }
 
@@ -36,7 +44,9 @@ export class PartitionKeeperService implements OnModuleInit {
     try {
       await this.ensureOnce();
     } catch (err) {
-      this.logger.error(`could not create the next monthly partitions: ${err instanceof Error ? err.message : String(err)}`);
+      this.logger.error(
+        `could not create the next monthly partitions: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 }

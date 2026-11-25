@@ -3,7 +3,16 @@ import { z } from 'zod';
 
 export const createSourceSchema = z.object({
   name: z.string().trim().min(2).max(60),
-  channelType: z.enum(['website', 'ads', 'portal', 'call', 'referral', 'walk_in', 'import', 'other']),
+  channelType: z.enum([
+    'website',
+    'ads',
+    'portal',
+    'call',
+    'referral',
+    'walk_in',
+    'import',
+    'other',
+  ]),
 });
 export class CreateSourceDto extends createZodDto(createSourceSchema) {}
 
@@ -24,7 +33,10 @@ const ruleBase = z.object({
   studyMode: z.enum(['online', 'regular']).nullable().default(null),
   strategy: z.enum(['round_robin', 'least_busy', 'fixed']),
   /** The people who can receive leads from this rule. Empty means every counsellor. */
-  userIds: z.array(z.uuid()).max(200).transform((ids) => [...new Set(ids)]),
+  userIds: z
+    .array(z.uuid())
+    .max(200)
+    .transform((ids) => [...new Set(ids)]),
   isActive: z.boolean().default(true),
 });
 export const createRuleSchema = ruleBase;
@@ -39,7 +51,10 @@ export const updateRuleSchema = z
     locationId: z.uuid().nullable(),
     studyMode: z.enum(['online', 'regular']).nullable(),
     strategy: z.enum(['round_robin', 'least_busy', 'fixed']),
-    userIds: z.array(z.uuid()).max(200).transform((ids) => [...new Set(ids)]),
+    userIds: z
+      .array(z.uuid())
+      .max(200)
+      .transform((ids) => [...new Set(ids)]),
     isActive: z.boolean(),
   })
   .partial()
@@ -52,6 +67,10 @@ export const policySchema = z.object({
   /** Give new leads to counsellors automatically. */
   autoAssign: z.boolean(),
   /** Words in a website form's name that mean a download ("brochure"). Super Admins are told when one arrives. Leave out to keep the current list. */
-  downloadForms: z.array(z.string().trim().min(2).max(40)).max(20).transform((v) => [...new Set(v.map((x) => x.toLowerCase()))]).optional(),
+  downloadForms: z
+    .array(z.string().trim().min(2).max(40))
+    .max(20)
+    .transform((v) => [...new Set(v.map((x) => x.toLowerCase()))])
+    .optional(),
 });
 export class PolicyDto extends createZodDto(policySchema) {}

@@ -33,8 +33,22 @@ export function CompanyLogo({ size = 36 }: { size?: number }) {
   }, [wanted]);
 
   if (wanted && url) {
-    // eslint-disable-next-line @next/next/no-img-element
-    return <img src={url} alt={me?.company.name ?? 'Logo'} style={{ height: size, width: 'auto', maxWidth: size * 3 }} className="rounded-md object-contain" />;
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={url}
+        alt={me?.company.name ?? 'Logo'}
+        style={{ height: size, width: 'auto', maxWidth: size * 3 }}
+        className="rounded-md object-contain"
+      />
+    );
   }
-  return <span className="grid place-items-center rounded-lg bg-mint" style={{ width: size, height: size }}><Logo size={Math.round(size * 0.72)} /></span>;
+  return (
+    <span
+      className="grid place-items-center rounded-lg bg-mint"
+      style={{ width: size, height: size }}
+    >
+      <Logo size={Math.round(size * 0.72)} />
+    </span>
+  );
 }

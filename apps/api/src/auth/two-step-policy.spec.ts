@@ -2,7 +2,8 @@ import { parseTwoStepPolicy, twoStepRequired } from './two-step-policy.js';
 
 describe('who must use two-step sign-in', () => {
   it('requires nobody when the company leaves it to each person', () => {
-    for (const role of ['super_admin', 'admin', 'counsellor', null] as const) expect(twoStepRequired('none', role)).toBe(false);
+    for (const role of ['super_admin', 'admin', 'counsellor', null] as const)
+      expect(twoStepRequired('none', role)).toBe(false);
   });
 
   it('can require only the Super Admins', () => {

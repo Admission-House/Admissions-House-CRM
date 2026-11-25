@@ -1,5 +1,19 @@
 import {
-  BarChart3, CalendarCheck, CalendarClock, CheckCircle2, Clock3, FileSpreadsheet, GraduationCap, LayoutDashboard, PhoneCall, PhoneMissed, Settings, Sparkles, Users, Video, Wallet,
+  BarChart3,
+  CalendarCheck,
+  CalendarClock,
+  CheckCircle2,
+  Clock3,
+  FileSpreadsheet,
+  GraduationCap,
+  LayoutDashboard,
+  PhoneCall,
+  PhoneMissed,
+  Settings,
+  Sparkles,
+  Users,
+  Video,
+  Wallet,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -30,11 +44,41 @@ const ALL: NavItem[] = [
     icon: Users,
     any: ['lead.read'],
     children: [
-      { label: 'Fresh leads', href: '/leads?queue=fresh', icon: Sparkles, any: ['lead.read'], count: 'fresh' },
-      { label: 'Missed leads', href: '/leads?queue=missed', icon: PhoneMissed, any: ['lead.read'], count: 'missed' },
-      { label: 'Follow-up leads', href: '/leads?queue=followup', icon: CalendarClock, any: ['lead.read'], count: 'followup' },
-      { label: 'Counselled leads', href: '/leads?queue=counselled', icon: Clock3, any: ['lead.read'], count: 'counselled' },
-      { label: 'Application fee paid', href: '/leads?queue=fee_paid', icon: CheckCircle2, any: ['lead.read'], count: 'fee_paid' },
+      {
+        label: 'Fresh leads',
+        href: '/leads?queue=fresh',
+        icon: Sparkles,
+        any: ['lead.read'],
+        count: 'fresh',
+      },
+      {
+        label: 'Missed leads',
+        href: '/leads?queue=missed',
+        icon: PhoneMissed,
+        any: ['lead.read'],
+        count: 'missed',
+      },
+      {
+        label: 'Follow-up leads',
+        href: '/leads?queue=followup',
+        icon: CalendarClock,
+        any: ['lead.read'],
+        count: 'followup',
+      },
+      {
+        label: 'Counselled leads',
+        href: '/leads?queue=counselled',
+        icon: Clock3,
+        any: ['lead.read'],
+        count: 'counselled',
+      },
+      {
+        label: 'Application fee paid',
+        href: '/leads?queue=fee_paid',
+        icon: CheckCircle2,
+        any: ['lead.read'],
+        count: 'fee_paid',
+      },
       { label: 'All leads', href: '/leads', icon: Users, any: ['lead.read'], count: 'total' },
     ],
   },
@@ -53,29 +97,87 @@ const ALL: NavItem[] = [
   {
     label: 'People',
     icon: CalendarCheck,
-    any: ['attendance.self', 'attendance.read', 'leave.request', 'leave.read', 'leave.settings', 'salary.read', 'salary.read_own'],
+    any: [
+      'attendance.self',
+      'attendance.read',
+      'leave.request',
+      'leave.read',
+      'leave.settings',
+      'salary.read',
+      'salary.read_own',
+    ],
     children: [
-      { label: 'Attendance', href: '/attendance', icon: CalendarCheck, any: ['attendance.self', 'attendance.read'] },
-      { label: 'Leave', href: '/leave', icon: CalendarCheck, any: ['leave.request', 'leave.read', 'leave.settings'] },
+      {
+        label: 'Attendance',
+        href: '/attendance',
+        icon: CalendarCheck,
+        any: ['attendance.self', 'attendance.read'],
+      },
+      {
+        label: 'Leave',
+        href: '/leave',
+        icon: CalendarCheck,
+        any: ['leave.request', 'leave.read', 'leave.settings'],
+      },
       { label: 'Salary', href: '/salary', icon: Wallet, any: ['salary.read', 'salary.read_own'] },
     ],
   },
   { label: 'Reports', href: '/reports', icon: BarChart3, any: ['report.read'] },
-  { label: 'Import and export', href: '/imports', icon: FileSpreadsheet, any: ['lead.import', 'lead.export', 'master.manage'] },
+  {
+    label: 'Import and export',
+    href: '/imports',
+    icon: FileSpreadsheet,
+    any: ['lead.import', 'lead.export', 'master.manage'],
+  },
   {
     label: 'Settings',
     icon: Settings,
-    any: ['settings.manage', 'user.read', 'user.manage', 'role.manage', 'branch.read', 'device.approve', 'integration.manage', 'audit.read', 'recording.manage'],
+    any: [
+      'settings.manage',
+      'user.read',
+      'user.manage',
+      'role.manage',
+      'branch.read',
+      'device.approve',
+      'integration.manage',
+      'audit.read',
+      'recording.manage',
+    ],
     children: [
-      { label: 'Company and logo', href: '/settings/company', icon: Settings, any: ['settings.manage'] },
+      {
+        label: 'Company and logo',
+        href: '/settings/company',
+        icon: Settings,
+        any: ['settings.manage'],
+      },
       { label: 'Users', href: '/settings/users', icon: Users, any: ['user.read', 'user.manage'] },
       { label: 'Security', href: '/settings/security', icon: Settings, any: ['settings.manage'] },
       { label: 'Roles', href: '/settings/roles', icon: Settings, any: ['role.manage'] },
-      { label: 'Branches', href: '/settings/branches', icon: Settings, any: ['branch.read', 'branch.manage'] },
+      {
+        label: 'Branches',
+        href: '/settings/branches',
+        icon: Settings,
+        any: ['branch.read', 'branch.manage'],
+      },
       { label: 'Lead settings', href: '/settings/leads', icon: Settings, any: ['settings.manage'] },
-      { label: 'Integrations', href: '/settings/integrations', icon: Settings, any: ['integration.manage'] },
-      { label: 'Telephony', href: '/settings/telephony', icon: Settings, any: ['integration.manage'] },
-      { label: 'Call recording', href: '/settings/recording', icon: Settings, any: ['recording.manage'] },
+      {
+        label: 'Integrations',
+        href: '/settings/integrations',
+        icon: Settings,
+        any: ['integration.manage'],
+      },
+      {
+        label: 'Telephony',
+        href: '/settings/telephony',
+        icon: Settings,
+        any: ['integration.manage'],
+      },
+      {
+        label: 'Call recording',
+        href: '/settings/recording',
+        icon: Settings,
+        any: ['recording.manage'],
+      },
       { label: 'Sign-ins', href: '/settings/sessions', icon: Settings, any: ['user.manage'] },
       { label: 'Audit log', href: '/settings/audit', icon: Settings, any: ['audit.read'] },
       { label: 'Devices', href: '/settings/devices', icon: Settings, any: ['device.approve'] },
@@ -84,13 +186,39 @@ const ALL: NavItem[] = [
 ];
 
 /** Screens that exist so far (the part of the address before "?"). */
-const BUILT = new Set(['/dashboard', '/colleges','/settings/security', '/imports', '/settings/integrations', '/settings/telephony', '/settings/recording', '/settings/sessions', '/settings/audit', '/settings/company', '/account', '/notifications', '/settings/devices', '/salary', '/leave', '/attendance', '/reports', '/calls', '/dialer', '/leads', '/communications', '/settings/users', '/settings/roles', '/settings/branches', '/settings/leads']);
+const BUILT = new Set([
+  '/dashboard',
+  '/colleges',
+  '/settings/security',
+  '/imports',
+  '/settings/integrations',
+  '/settings/telephony',
+  '/settings/recording',
+  '/settings/sessions',
+  '/settings/audit',
+  '/settings/company',
+  '/account',
+  '/notifications',
+  '/settings/devices',
+  '/salary',
+  '/leave',
+  '/attendance',
+  '/reports',
+  '/calls',
+  '/dialer',
+  '/leads',
+  '/communications',
+  '/settings/users',
+  '/settings/roles',
+  '/settings/branches',
+  '/settings/leads',
+]);
 
 const built = (href?: string) => !!href && BUILT.has(href.split('?')[0]!);
 
-export const NAV: NavItem[] = ALL.map((item) => (item.children ? { ...item, children: item.children.filter((c) => built(c.href)) } : item)).filter((item) =>
-  item.children ? item.children.length > 0 : built(item.href),
-);
+export const NAV: NavItem[] = ALL.map((item) =>
+  item.children ? { ...item, children: item.children.filter((c) => built(c.href)) } : item,
+).filter((item) => (item.children ? item.children.length > 0 : built(item.href)));
 
 /**
  * The permissions a screen needs, read from the menu so there is one list and it cannot drift: the most specific menu

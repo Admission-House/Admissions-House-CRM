@@ -32,7 +32,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
         requestId: request.id,
       },
     };
-    for (const [name, value] of Object.entries(mapped.headers ?? {})) void reply.header(name, value);
+    for (const [name, value] of Object.entries(mapped.headers ?? {}))
+      void reply.header(name, value);
     this.adapterHost.httpAdapter.reply(reply, body, mapped.status);
   }
 }

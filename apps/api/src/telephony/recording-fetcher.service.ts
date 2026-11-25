@@ -39,12 +39,17 @@ export class RecordingFetcher implements OnModuleInit {
     private readonly settings: TelephonySettingsService,
     private readonly storage: StorageService,
     @Inject(ENV) private readonly env: Env,
-  
+
     private readonly jobs: JobRegistry,
   ) {}
 
   onModuleInit(): void {
-    this.jobs.register({ name: 'call-recordings', group: 'quarter', everySec: this.env.RECORDING_INTERVAL_SEC, run: () => this.runSafely() });
+    this.jobs.register({
+      name: 'call-recordings',
+      group: 'quarter',
+      everySec: this.env.RECORDING_INTERVAL_SEC,
+      run: () => this.runSafely(),
+    });
   }
 
   async runSafely(): Promise<void> {
@@ -54,7 +59,9 @@ export class RecordingFetcher implements OnModuleInit {
       const done = await this.runOnce();
       if (done > 0) this.logger.log(`stored ${done} call recordings`);
     } catch (err) {
-      this.logger.error(`recording download failed: ${err instanceof Error ? err.message : String(err)}`);
+      this.logger.error(
+        `recording download failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
     } finally {
       this.running = false;
     }
@@ -62,7 +69,9 @@ export class RecordingFetcher implements OnModuleInit {
 
   /** One pass over every active company. Returns how many recordings were stored. */
   async runOnce(): Promise<number> {
-    const { rows: tenants } = await sql<{ id: string }>`SELECT list_active_tenant_ids() AS id`.execute(this.db.unscoped());
+    const { rows: tenants } = await sql<{
+      id: string;
+    }>`SELECT list_active_tenant_ids() AS id`.execute(this.db.unscoped());
     let stored = 0;
     for (const { id } of tenants) {
       for (const job of await this.claim(id)) if (await this.fetchOne(id, job)) stored++;
@@ -87,7 +96,9 @@ export class RecordingFetcher implements OnModuleInit {
 
   private async fetchOne(tenantId: string, job: Waiting): Promise<boolean> {
     try {
-      const connection = await this.db.withTenant(tenantId, (trx) => this.settings.credentials(trx, tenantId));
+      const connection = await this.db.withTenant(tenantId, (trx) =>
+        this.settings.credentials(trx, tenantId),
+      );
       if (!connection) throw new Error('no telephony connection');
       const insecure = this.env.RECORDING_ALLOW_INSECURE;
       const verdict = checkRecordingUrl(job.source_url, connection.recordingHosts, insecure);
@@ -100,14 +111,18 @@ export class RecordingFetcher implements OnModuleInit {
       const key = `${tenantId}/calls/${job.call_id}.${kind.ext}`;
       await this.storage.put(key, data);
       await this.db.withTenant(tenantId, (trx) =>
-        sql`UPDATE call_recordings SET status = 'stored', file_key = ${key}, size_bytes = ${data.length}, last_error = NULL WHERE id = ${job.id}`.execute(trx),
+        sql`UPDATE call_recordings SET status = 'stored', file_key = ${key}, size_bytes = ${data.length}, last_error = NULL WHERE id = ${job.id}`.execute(
+          trx,
+        ),
       );
       return true;
     } catch (err) {
       const message = (err instanceof Error ? err.message : String(err)).slice(0, 300);
       this.logger.warn(`recording ${job.id} attempt ${job.attempts}: ${message}`);
       await this.db.withTenant(tenantId, (trx) =>
-        sql`UPDATE call_recordings SET last_error = ${message}, status = ${job.attempts >= MAX_ATTEMPTS ? 'failed' : 'pending'} WHERE id = ${job.id}`.execute(trx),
+        sql`UPDATE call_recordings SET last_error = ${message}, status = ${job.attempts >= MAX_ATTEMPTS ? 'failed' : 'pending'} WHERE id = ${job.id}`.execute(
+          trx,
+        ),
       );
       return false;
     }
@@ -127,10 +142,16 @@ export class RecordingFetcher implements OnModuleInit {
             dnsLookup(host, { all: true }, (err, addresses) => {
               if (err) return callback(err, '', 4);
               if (!insecure && addresses.some((a) => isPrivateAddress(a.address))) {
-                return callback(new Error('the recording host resolves to a private address'), '', 4);
+                return callback(
+                  new Error('the recording host resolves to a private address'),
+                  '',
+                  4,
+                );
               }
               const first = addresses[0]!;
-              return options.all ? callback(null, addresses as never, undefined as never) : callback(null, first.address, first.family);
+              return options.all
+                ? callback(null, addresses as never, undefined as never)
+                : callback(null, first.address, first.family);
             });
           },
         },

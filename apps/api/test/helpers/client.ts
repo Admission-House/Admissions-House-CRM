@@ -11,17 +11,32 @@ export function makeClient(app: NestFastifyApplication, fx: Fixture) {
   const login = (body: Body, ip = OUTSIDE_IP) =>
     app.inject({ method: 'POST', url: '/api/v1/auth/login', payload: body, remoteAddress: ip });
 
-  const credentials = (name: string, password = PASSWORD) => ({ tenant: fx.slug, email: fx.user(name).email, password });
+  const credentials = (name: string, password = PASSWORD) => ({
+    tenant: fx.slug,
+    email: fx.user(name).email,
+    password,
+  });
 
   /** Signs in and returns the access token. Admins and counsellors sign in from the office. */
-  async function signIn(name: string, opts: { office?: boolean; extra?: Body } = {}): Promise<string> {
-    const body = opts.office ? { ...credentials(name), location: inOffice, ...opts.extra } : { ...credentials(name), ...opts.extra };
+  async function signIn(
+    name: string,
+    opts: { office?: boolean; extra?: Body } = {},
+  ): Promise<string> {
+    const body = opts.office
+      ? { ...credentials(name), location: inOffice, ...opts.extra }
+      : { ...credentials(name), ...opts.extra };
     const res = await login(body, opts.office ? OFFICE_IP : OUTSIDE_IP);
     expect(res.statusCode, `sign-in of ${name}: ${res.body}`).toBe(200);
     return res.json().accessToken as string;
   }
 
-  const call = (method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE', url: string, token: string, payload?: Body, ip = OUTSIDE_IP) =>
+  const call = (
+    method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE',
+    url: string,
+    token: string,
+    payload?: Body,
+    ip = OUTSIDE_IP,
+  ) =>
     app.inject({
       method,
       url: `/api/v1${url}`,

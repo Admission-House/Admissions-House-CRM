@@ -81,17 +81,33 @@ export class PayrollPolicyService {
 
   /** The rules in force for a month (YYYY-MM-01): the latest version that starts on or before it. */
   async effective(trx: Trx, monthDate: string): Promise<PolicyView> {
-    const { rows } = await sql<Row>`SELECT ${COLUMNS} FROM payroll_policies WHERE effective_from <= ${monthDate}::date ORDER BY effective_from DESC LIMIT 1`.execute(trx);
-    return rows[0] ? { ...toPolicy(rows[0]), effectiveFrom: monthLabel(rows[0].effective_from), isDefault: false } : { ...DEFAULT_POLICY, effectiveFrom: null, isDefault: true };
+    const { rows } =
+      await sql<Row>`SELECT ${COLUMNS} FROM payroll_policies WHERE effective_from <= ${monthDate}::date ORDER BY effective_from DESC LIMIT 1`.execute(
+        trx,
+      );
+    return rows[0]
+      ? {
+          ...toPolicy(rows[0]),
+          effectiveFrom: monthLabel(rows[0].effective_from),
+          isDefault: false,
+        }
+      : { ...DEFAULT_POLICY, effectiveFrom: null, isDefault: true };
   }
 
   current(auth: AuthContext): Promise<{ current: PolicyView; history: PolicyView[] }> {
     return this.db.withTenant(auth.tenantId, async (trx) => {
       const month = await this.companyMonth(trx, auth);
-      const { rows } = await sql<Row>`SELECT ${COLUMNS} FROM payroll_policies ORDER BY effective_from DESC LIMIT 24`.execute(trx);
+      const { rows } =
+        await sql<Row>`SELECT ${COLUMNS} FROM payroll_policies ORDER BY effective_from DESC LIMIT 24`.execute(
+          trx,
+        );
       return {
         current: await this.effective(trx, `${month}-01`),
-        history: rows.map((r) => ({ ...toPolicy(r), effectiveFrom: monthLabel(r.effective_from), isDefault: false })),
+        history: rows.map((r) => ({
+          ...toPolicy(r),
+          effectiveFrom: monthLabel(r.effective_from),
+          isDefault: false,
+        })),
       };
     });
   }
@@ -102,11 +118,22 @@ export class PayrollPolicyService {
    */
   save(auth: AuthContext, input: PolicyInput): Promise<PolicyView> {
     const start = monthStart(input.effectiveFrom);
-    if (!start) throw AppError.badRequest('MONTH_INVALID', 'Give the month as YYYY-MM', [{ field: 'effectiveFrom', message: 'Give the month as YYYY-MM' }]);
+    if (!start)
+      throw AppError.badRequest('MONTH_INVALID', 'Give the month as YYYY-MM', [
+        { field: 'effectiveFrom', message: 'Give the month as YYYY-MM' },
+      ]);
     return this.db.withTenant(auth.tenantId, async (trx) => {
-      const { rows: approved } = await sql<{ month: string }>`SELECT month::text AS month FROM payroll_runs WHERE status = 'approved' AND month >= ${start}::date ORDER BY month DESC LIMIT 1`.execute(trx);
+      const { rows: approved } = await sql<{
+        month: string;
+      }>`SELECT month::text AS month FROM payroll_runs WHERE status = 'approved' AND month >= ${start}::date ORDER BY month DESC LIMIT 1`.execute(
+        trx,
+      );
       if (approved[0]) {
-        throw AppError.conflict('POLICY_AFFECTS_APPROVED_RUN', `The ${monthLabel(approved[0].month)} payroll is already approved, so rules cannot start before ${nextMonth(approved[0].month)}`, { approvedMonth: monthLabel(approved[0].month) });
+        throw AppError.conflict(
+          'POLICY_AFFECTS_APPROVED_RUN',
+          `The ${monthLabel(approved[0].month)} payroll is already approved, so rules cannot start before ${nextMonth(approved[0].month)}`,
+          { approvedMonth: monthLabel(approved[0].month) },
+        );
       }
       const before = await this.effective(trx, start);
       await sql`
@@ -121,15 +148,26 @@ export class PayrollPolicyService {
           created_by = EXCLUDED.created_by`.execute(trx);
       const after = await this.effective(trx, start);
       await this.audit.write(trx, {
-        tenantId: auth.tenantId, actorId: auth.userId, action: 'payroll.policy_change', entity: 'payroll_policy', entityId: null,
-        before: before.isDefault ? null : before, after, ip: auth.ip, requestId: auth.requestId,
+        tenantId: auth.tenantId,
+        actorId: auth.userId,
+        action: 'payroll.policy_change',
+        entity: 'payroll_policy',
+        entityId: null,
+        before: before.isDefault ? null : before,
+        after,
+        ip: auth.ip,
+        requestId: auth.requestId,
       });
       return after;
     });
   }
 
   private async companyMonth(trx: Trx, auth: AuthContext): Promise<string> {
-    const { rows } = await sql<{ m: string }>`SELECT to_char(now() AT TIME ZONE timezone, 'YYYY-MM') AS m FROM tenants WHERE id = ${auth.tenantId}`.execute(trx);
+    const { rows } = await sql<{
+      m: string;
+    }>`SELECT to_char(now() AT TIME ZONE timezone, 'YYYY-MM') AS m FROM tenants WHERE id = ${auth.tenantId}`.execute(
+      trx,
+    );
     return rows[0]!.m;
   }
 }

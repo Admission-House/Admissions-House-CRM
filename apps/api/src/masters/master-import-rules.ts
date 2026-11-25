@@ -1,12 +1,31 @@
 import { normalizeHeader } from '../imports/import-rules.js';
 import type { Table } from '../imports/spreadsheet.js';
 
-export const FIELDS = ['college', 'city', 'state', 'course', 'level', 'stream', 'mode', 'cafFee', 'annualFee', 'duration'] as const;
+export const FIELDS = [
+  'college',
+  'city',
+  'state',
+  'course',
+  'level',
+  'stream',
+  'mode',
+  'cafFee',
+  'annualFee',
+  'duration',
+] as const;
 export type MasterField = (typeof FIELDS)[number];
 export type MasterMapping = Partial<Record<MasterField, number>>;
 
 const SYNONYMS: Record<MasterField, string[]> = {
-  college: ['college', 'collegename', 'university', 'universityname', 'institute', 'institutename', 'institution'],
+  college: [
+    'college',
+    'collegename',
+    'university',
+    'universityname',
+    'institute',
+    'institutename',
+    'institution',
+  ],
   city: ['city', 'location', 'town'],
   state: ['state'],
   course: ['course', 'coursename', 'program', 'programme', 'programname'],
@@ -55,10 +74,25 @@ export interface MasterProblem {
 }
 
 const LEVELS: Record<string, 'UG' | 'PG' | 'Diploma'> = {
-  ug: 'UG', undergraduate: 'UG', bachelor: 'UG', bachelors: 'UG', pg: 'PG', postgraduate: 'PG', master: 'PG', masters: 'PG', diploma: 'Diploma',
+  ug: 'UG',
+  undergraduate: 'UG',
+  bachelor: 'UG',
+  bachelors: 'UG',
+  pg: 'PG',
+  postgraduate: 'PG',
+  master: 'PG',
+  masters: 'PG',
+  diploma: 'Diploma',
 };
 const MODES: Record<string, MasterRow['mode']> = {
-  online: 'online', distance: 'online', regular: 'regular', offline: 'regular', campus: 'regular', oncampus: 'regular', both: 'both', hybrid: 'both',
+  online: 'online',
+  distance: 'online',
+  regular: 'regular',
+  offline: 'regular',
+  campus: 'regular',
+  oncampus: 'regular',
+  both: 'both',
+  hybrid: 'both',
 };
 
 const key = (text: string) => text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
@@ -73,10 +107,14 @@ export function parseAmount(text: string): number | null | undefined {
   return n <= 99_999_999 ? n : undefined;
 }
 
-export function parseMasterRows(table: Table, mapping: MasterMapping): { rows: MasterRow[]; problems: MasterProblem[] } {
+export function parseMasterRows(
+  table: Table,
+  mapping: MasterMapping,
+): { rows: MasterRow[]; problems: MasterProblem[] } {
   const rows: MasterRow[] = [];
   const problems: MasterProblem[] = [];
-  const cell = (cells: string[], f: MasterField) => (mapping[f] === undefined ? '' : (cells[mapping[f]!] ?? '').trim());
+  const cell = (cells: string[], f: MasterField) =>
+    mapping[f] === undefined ? '' : (cells[mapping[f]!] ?? '').trim();
 
   table.rows.forEach((cells, i) => {
     const row = i + 2;
@@ -86,8 +124,10 @@ export function parseMasterRows(table: Table, mapping: MasterMapping): { rows: M
     const college = get('college');
     const course = get('course');
     const fail: string[] = [];
-    if (college.length < 2 || college.length > 150) fail.push('college: Give the college name (2 to 150 characters)');
-    if (course.length < 2 || course.length > 100) fail.push('course: Give the course name (2 to 100 characters)');
+    if (college.length < 2 || college.length > 150)
+      fail.push('college: Give the college name (2 to 150 characters)');
+    if (course.length < 2 || course.length > 100)
+      fail.push('course: Give the course name (2 to 100 characters)');
 
     let level: MasterRow['level'];
     if (get('level')) {
@@ -110,12 +150,26 @@ export function parseMasterRows(table: Table, mapping: MasterMapping): { rows: M
     }
 
     if (fail.length > 0 || !mode) {
-      problems.push({ row, college: college || undefined, course: course || undefined, problem: fail.join('; ') });
+      problems.push({
+        row,
+        college: college || undefined,
+        course: course || undefined,
+        problem: fail.join('; '),
+      });
       return;
     }
     rows.push({
-      row, college, course, level, mode, duration, cafFee: cafFee ?? null, annualFee: annualFee ?? null,
-      city: get('city') || undefined, state: get('state') || undefined, stream: get('stream') || undefined,
+      row,
+      college,
+      course,
+      level,
+      mode,
+      duration,
+      cafFee: cafFee ?? null,
+      annualFee: annualFee ?? null,
+      city: get('city') || undefined,
+      state: get('state') || undefined,
+      stream: get('stream') || undefined,
     });
   });
   return { rows, problems };

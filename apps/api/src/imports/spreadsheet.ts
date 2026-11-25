@@ -31,50 +31,82 @@ export interface ReadOptions {
 const HEADER_SEARCH_ROWS = 15;
 
 export async function readTable(data: Buffer, options: ReadOptions = {}): Promise<Table> {
-  const grid = data.subarray(0, 4).equals(ZIP) ? await fromXlsx(data) : data.subarray(0, 4).equals(OLE) ? oldExcel() : fromCsv(data);
+  const grid = data.subarray(0, 4).equals(ZIP)
+    ? await fromXlsx(data)
+    : data.subarray(0, 4).equals(OLE)
+      ? oldExcel()
+      : fromCsv(data);
 
   const filled = (row: string[]) => row.some((c) => c !== '');
   let firstFilled = grid.findIndex(filled);
   if (firstFilled < 0) throw bad('EMPTY_SHEET', 'The file has no data');
   if (options.looksLikeHeader) {
     const test = options.looksLikeHeader;
-    const at = grid.slice(0, firstFilled + HEADER_SEARCH_ROWS).findIndex((row) => filled(row) && test(row.map((c) => c.trim())));
+    const at = grid
+      .slice(0, firstFilled + HEADER_SEARCH_ROWS)
+      .findIndex((row) => filled(row) && test(row.map((c) => c.trim())));
     if (at >= 0) firstFilled = at;
   }
   const header = grid[firstFilled]!.map((c) => c.trim());
   while (header.length > 0 && header.at(-1) === '') header.pop();
   if (header.length === 0) throw bad('NO_HEADER', 'The first row must name the columns');
-  if (header.length > MAX_COLUMNS) throw bad('TOO_MANY_COLUMNS', `The file has more than ${MAX_COLUMNS} columns`);
+  if (header.length > MAX_COLUMNS)
+    throw bad('TOO_MANY_COLUMNS', `The file has more than ${MAX_COLUMNS} columns`);
 
   const rows = grid.slice(firstFilled + 1).map((row) => header.map((_h, i) => row[i] ?? ''));
-  if (rows.length > MAX_ROWS) throw bad('TOO_MANY_ROWS', `The file has more than ${MAX_ROWS.toLocaleString('en-IN')} rows. Save it as a CSV file and upload that: a CSV is split into parts of ${MAX_ROWS.toLocaleString('en-IN')} automatically.`, 413);
+  if (rows.length > MAX_ROWS)
+    throw bad(
+      'TOO_MANY_ROWS',
+      `The file has more than ${MAX_ROWS.toLocaleString('en-IN')} rows. Save it as a CSV file and upload that: a CSV is split into parts of ${MAX_ROWS.toLocaleString('en-IN')} automatically.`,
+      413,
+    );
   return { header, rows };
 }
 
 function oldExcel(): never {
-  throw bad('OLD_EXCEL', 'This is an old .xls file. Save it as .xlsx or CSV and upload again.', 415);
+  throw bad(
+    'OLD_EXCEL',
+    'This is an old .xls file. Save it as .xlsx or CSV and upload again.',
+    415,
+  );
 }
 
 function fromCsv(data: Buffer): string[][] {
   // Text has no zero bytes. A program or an image does, and "save as UTF-8" would be the wrong advice for it.
-  if (data.subarray(0, 8192).includes(0)) throw bad('NOT_A_SPREADSHEET', 'This does not look like a spreadsheet', 415);
+  if (data.subarray(0, 8192).includes(0))
+    throw bad('NOT_A_SPREADSHEET', 'This does not look like a spreadsheet', 415);
 
   let text: string;
   try {
     text = new TextDecoder('utf-8', { fatal: true }).decode(data);
   } catch {
-    throw bad('NOT_UTF8', 'Save the file as "CSV UTF-8" and upload again. Names in Hindi are lost in other encodings.');
+    throw bad(
+      'NOT_UTF8',
+      'Save the file as "CSV UTF-8" and upload again. Names in Hindi are lost in other encodings.',
+    );
   }
-  if (text.includes('\u0000')) throw bad('NOT_A_SPREADSHEET', 'This does not look like a spreadsheet', 415);
+  if (text.includes('\u0000'))
+    throw bad('NOT_A_SPREADSHEET', 'This does not look like a spreadsheet', 415);
 
   // Excel in some regions separates with ";" or a tab. Use whichever the first line has most of.
   const firstLine = text.split(/\r?\n/, 1)[0] ?? '';
-  const delimiter = [',', ';', '\t'].map((d) => ({ d, n: firstLine.split(d).length })).sort((a, b) => b.n - a.n)[0]!.d;
+  const delimiter = [',', ';', '\t']
+    .map((d) => ({ d, n: firstLine.split(d).length }))
+    .sort((a, b) => b.n - a.n)[0]!.d;
   try {
-    const records: unknown[][] = parse(text, { delimiter, bom: true, relax_column_count: true, skip_empty_lines: true, relax_quotes: true });
+    const records: unknown[][] = parse(text, {
+      delimiter,
+      bom: true,
+      relax_column_count: true,
+      skip_empty_lines: true,
+      relax_quotes: true,
+    });
     return records.map((r) => r.map(cell));
   } catch (err) {
-    throw bad('BAD_CSV', `The file could not be read as CSV: ${err instanceof Error ? err.message : 'unknown problem'}`);
+    throw bad(
+      'BAD_CSV',
+      `The file could not be read as CSV: ${err instanceof Error ? err.message : 'unknown problem'}`,
+    );
   }
 }
 
@@ -87,11 +119,20 @@ async function fromXlsx(data: Buffer): Promise<string[][]> {
     const sheets = (await readExcelFile(data)) as { sheet: string; data: unknown[][] }[];
     const grids = sheets.map((s) => s.data.map((r) => r.map(cell)));
     const rowsWithData = (g: string[][]) => g.filter((r) => r.some((c) => c !== '')).length;
-    return grids.find((g) => rowsWithData(g) >= 2) ?? grids.find((g) => rowsWithData(g) >= 1) ?? grids[0] ?? [];
+    return (
+      grids.find((g) => rowsWithData(g) >= 2) ??
+      grids.find((g) => rowsWithData(g) >= 1) ??
+      grids[0] ??
+      []
+    );
   } catch (err) {
     const code = (err as { code?: string }).code;
     if (code === 'XLS_FILE_NOT_SUPPORTED') return oldExcel();
-    throw bad('BAD_XLSX', 'The Excel file could not be read. Check that it opens in Excel and is not password protected.', 415);
+    throw bad(
+      'BAD_XLSX',
+      'The Excel file could not be read. Check that it opens in Excel and is not password protected.',
+      415,
+    );
   }
 }
 
@@ -99,6 +140,7 @@ async function fromXlsx(data: Buffer): Promise<string[][]> {
 function cell(value: unknown): string {
   if (value === null || value === undefined) return '';
   if (value instanceof Date) return value.toISOString().slice(0, 10);
-  if (typeof value === 'number') return Number.isInteger(value) ? BigInt(value).toString() : String(value);
+  if (typeof value === 'number')
+    return Number.isInteger(value) ? BigInt(value).toString() : String(value);
   return String(value).trim().slice(0, MAX_CELL);
 }

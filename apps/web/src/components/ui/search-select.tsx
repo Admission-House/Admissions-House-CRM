@@ -17,7 +17,13 @@ export interface SearchOption {
  * Escape closes.
  */
 export function SearchSelect({
-  id, value, onChange, load, placeholder = 'Type to search', emptyText = 'Nothing matches', disabled,
+  id,
+  value,
+  onChange,
+  load,
+  placeholder = 'Type to search',
+  emptyText = 'Nothing matches',
+  disabled,
 }: {
   id?: string;
   /** The chosen option, or null. */
@@ -44,18 +50,34 @@ export function SearchSelect({
   useEffect(() => {
     if (!open) return;
     const ctl = new AbortController();
-    const t = setTimeout(() => {
-      setLoading(true);
-      load(text.trim(), ctl.signal)
-        .then((r) => { setOptions(r); setActive(0); })
-        .catch(() => undefined)
-        .finally(() => { if (!ctl.signal.aborted) setLoading(false); });
-    }, text ? 200 : 0);
-    return () => { clearTimeout(t); ctl.abort(); };
+    const t = setTimeout(
+      () => {
+        setLoading(true);
+        load(text.trim(), ctl.signal)
+          .then((r) => {
+            setOptions(r);
+            setActive(0);
+          })
+          .catch(() => undefined)
+          .finally(() => {
+            if (!ctl.signal.aborted) setLoading(false);
+          });
+      },
+      text ? 200 : 0,
+    );
+    return () => {
+      clearTimeout(t);
+      ctl.abort();
+    };
   }, [text, open, load]);
 
   useEffect(() => {
-    const close = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) { setOpen(false); setText(''); } };
+    const close = (e: MouseEvent) => {
+      if (!box.current?.contains(e.target as Node)) {
+        setOpen(false);
+        setText('');
+      }
+    };
     document.addEventListener('mousedown', close);
     return () => document.removeEventListener('mousedown', close);
   }, []);
@@ -67,10 +89,26 @@ export function SearchSelect({
   };
 
   function key(e: KeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setActive((i) => Math.min(i + 1, options.length - 1)); }
-    else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((i) => Math.max(i - 1, 0)); }
-    else if (e.key === 'Enter') { if (open && options[active]) { e.preventDefault(); pick(options[active]); } }
-    else if (e.key === 'Escape') { if (open) { e.preventDefault(); e.stopPropagation(); setOpen(false); setText(''); } }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setOpen(true);
+      setActive((i) => Math.min(i + 1, options.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActive((i) => Math.max(i - 1, 0));
+    } else if (e.key === 'Enter') {
+      if (open && options[active]) {
+        e.preventDefault();
+        pick(options[active]);
+      }
+    } else if (e.key === 'Escape') {
+      if (open) {
+        e.preventDefault();
+        e.stopPropagation();
+        setOpen(false);
+        setText('');
+      }
+    }
   }
 
   useEffect(() => {
@@ -80,7 +118,12 @@ export function SearchSelect({
 
   return (
     <div ref={box} className="relative">
-      <div className={cx('flex h-9 items-center rounded-md border border-line-strong bg-surface pl-3 pr-1 focus-within:border-teal-600', disabled && 'opacity-60')}>
+      <div
+        className={cx(
+          'flex h-9 items-center rounded-md border border-line-strong bg-surface pl-3 pr-1 focus-within:border-teal-600',
+          disabled && 'opacity-60',
+        )}
+      >
         <input
           ref={input}
           id={id}
@@ -92,7 +135,10 @@ export function SearchSelect({
           disabled={disabled}
           value={open ? text : (value?.label ?? '')}
           placeholder={value && open ? value.label : placeholder}
-          onChange={(e) => { setText(e.target.value); setOpen(true); }}
+          onChange={(e) => {
+            setText(e.target.value);
+            setOpen(true);
+          }}
           onFocus={() => setOpen(true)}
           onClick={() => setOpen(true)}
           onKeyDown={key}
@@ -100,16 +146,39 @@ export function SearchSelect({
           className="h-full min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-subtle"
         />
         {value && !disabled && (
-          <button type="button" onClick={() => { onChange(null); setText(''); input.current?.focus(); }} aria-label="Clear" className="grid h-7 w-7 place-items-center rounded text-subtle hover:text-ink">
+          <button
+            type="button"
+            onClick={() => {
+              onChange(null);
+              setText('');
+              input.current?.focus();
+            }}
+            aria-label="Clear"
+            className="grid h-7 w-7 place-items-center rounded text-subtle hover:text-ink"
+          >
             <X className="h-3.5 w-3.5" />
           </button>
         )}
-        <button type="button" tabIndex={-1} disabled={disabled} onClick={() => { setOpen((o) => !o); input.current?.focus(); }} aria-label="Show the list" className="grid h-7 w-7 place-items-center rounded text-subtle hover:text-ink">
+        <button
+          type="button"
+          tabIndex={-1}
+          disabled={disabled}
+          onClick={() => {
+            setOpen((o) => !o);
+            input.current?.focus();
+          }}
+          aria-label="Show the list"
+          className="grid h-7 w-7 place-items-center rounded text-subtle hover:text-ink"
+        >
           <ChevronDown className="h-4 w-4" />
         </button>
       </div>
       {open && (
-        <ul id={listId} role="listbox" className="absolute z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-md border border-line bg-surface py-1 shadow-lg">
+        <ul
+          id={listId}
+          role="listbox"
+          className="absolute z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-md border border-line bg-surface py-1 shadow-lg"
+        >
           {options.map((o, i) => (
             <li key={o.id} id={`${listId}-${i}`} role="option" aria-selected={value?.id === o.id}>
               <button
@@ -117,14 +186,20 @@ export function SearchSelect({
                 onMouseDown={(e) => e.preventDefault()}
                 onMouseEnter={() => setActive(i)}
                 onClick={() => pick(o)}
-                className={cx('flex w-full items-center justify-between gap-3 px-3 py-1.5 text-left text-sm', i === active ? 'bg-head' : '', value?.id === o.id && 'font-semibold text-brand')}
+                className={cx(
+                  'flex w-full items-center justify-between gap-3 px-3 py-1.5 text-left text-sm',
+                  i === active ? 'bg-head' : '',
+                  value?.id === o.id && 'font-semibold text-brand',
+                )}
               >
                 <span className="truncate">{o.label}</span>
                 {o.note && <span className="shrink-0 text-xs text-subtle">{o.note}</span>}
               </button>
             </li>
           ))}
-          {options.length === 0 && <li className="px-3 py-2 text-sm text-subtle">{loading ? 'Searching…' : emptyText}</li>}
+          {options.length === 0 && (
+            <li className="px-3 py-2 text-sm text-subtle">{loading ? 'Searching…' : emptyText}</li>
+          )}
         </ul>
       )}
     </div>

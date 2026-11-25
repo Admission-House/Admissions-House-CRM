@@ -1,11 +1,27 @@
-import { base32Decode, base32Encode, hashRecoveryCode, hotp, looksLikeRecoveryCode, newRecoveryCode, newSecret, otpauthUrl, stepOf, verifyTotp } from './totp.js';
+import {
+  base32Decode,
+  base32Encode,
+  hashRecoveryCode,
+  hotp,
+  looksLikeRecoveryCode,
+  newRecoveryCode,
+  newSecret,
+  otpauthUrl,
+  stepOf,
+  verifyTotp,
+} from './totp.js';
 
 // RFC 6238 appendix B: the secret is the ASCII text 12345678901234567890 and the codes are 8 digits.
 // Ours are 6 digits: the last six of the RFC's eight.
 const RFC_SECRET = Buffer.from('12345678901234567890');
 const RFC_SECRET_B32 = base32Encode(RFC_SECRET);
 const RFC_CASES: [seconds: number, code: string][] = [
-  [59, '287082'], [1111111109, '081804'], [1111111111, '050471'], [1234567890, '005924'], [2000000000, '279037'], [20000000000, '353130'],
+  [59, '287082'],
+  [1111111109, '081804'],
+  [1111111111, '050471'],
+  [1234567890, '005924'],
+  [2000000000, '279037'],
+  [20000000000, '353130'],
 ];
 
 describe('TOTP', () => {
@@ -34,7 +50,8 @@ describe('TOTP', () => {
   it('ignores spaces and refuses anything that is not six digits', () => {
     const now = 59 * 1000;
     expect(verifyTotp(RFC_SECRET_B32, '287 082', now, null)).toBe(1);
-    for (const bad of ['', '28708', '2870820', 'abcdef', '287-082']) expect(verifyTotp(RFC_SECRET_B32, bad, now, null)).toBeNull();
+    for (const bad of ['', '28708', '2870820', 'abcdef', '287-082'])
+      expect(verifyTotp(RFC_SECRET_B32, bad, now, null)).toBeNull();
   });
 
   it('reads back the secret it wrote, and makes a new one each time', () => {
@@ -47,8 +64,14 @@ describe('TOTP', () => {
   });
 
   it('builds the address an authenticator app reads', () => {
-    const url = otpauthUrl({ issuer: 'Admissions House CRM', account: 'asha@example.com', secret: 'ABC234' });
-    expect(url).toBe('otpauth://totp/Admissions%20House%20CRM:asha%40example.com?secret=ABC234&issuer=Admissions+House+CRM&algorithm=SHA1&digits=6&period=30');
+    const url = otpauthUrl({
+      issuer: 'Admissions House CRM',
+      account: 'asha@example.com',
+      secret: 'ABC234',
+    });
+    expect(url).toBe(
+      'otpauth://totp/Admissions%20House%20CRM:asha%40example.com?secret=ABC234&issuer=Admissions+House+CRM&algorithm=SHA1&digits=6&period=30',
+    );
   });
 });
 

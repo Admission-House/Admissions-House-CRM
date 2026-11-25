@@ -8,13 +8,23 @@ describe('mergeOrder', () => {
     expect(mergeOrder(null, defaults)).toEqual(defaults);
   });
   it('uses the saved order', () => {
-    expect(mergeOrder(['status', 'lead', 'course', 'email'], defaults)).toEqual(['status', 'lead', 'course', 'email']);
+    expect(mergeOrder(['status', 'lead', 'course', 'email'], defaults)).toEqual([
+      'status',
+      'lead',
+      'course',
+      'email',
+    ]);
   });
   it('puts a column that is newer than the saved order at the end', () => {
     expect(mergeOrder(['status', 'lead'], defaults)).toEqual(['status', 'lead', 'email', 'course']);
   });
   it('drops a saved column that no longer exists, and repeats', () => {
-    expect(mergeOrder(['gone', 'lead', 'lead', 'status'], defaults)).toEqual(['lead', 'status', 'email', 'course']);
+    expect(mergeOrder(['gone', 'lead', 'lead', 'status'], defaults)).toEqual([
+      'lead',
+      'status',
+      'email',
+      'course',
+    ]);
   });
 });
 

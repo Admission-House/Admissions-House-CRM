@@ -34,7 +34,9 @@ export interface ColumnOrder {
 }
 
 export function useColumnOrder(table: string, defaults: readonly string[]): ColumnOrder {
-  const [saved, setSaved] = useState<string[] | null>(() => (typeof window === 'undefined' ? null : read(table)));
+  const [saved, setSaved] = useState<string[] | null>(() =>
+    typeof window === 'undefined' ? null : read(table),
+  );
   const order = mergeOrder(saved, defaults);
 
   const store = useCallback(
@@ -65,7 +67,21 @@ export function useColumnOrder(table: string, defaults: readonly string[]): Colu
 }
 
 /** A column heading with a grip to drag it. Dropping it on another heading puts it in that place. */
-export function MovableTh({ id, columns, className, children, label: name, ariaSort }: { id: string; columns: ColumnOrder; className?: string; children: ReactNode; label?: string; ariaSort?: 'ascending' | 'descending' | 'none' }) {
+export function MovableTh({
+  id,
+  columns,
+  className,
+  children,
+  label: name,
+  ariaSort,
+}: {
+  id: string;
+  columns: ColumnOrder;
+  className?: string;
+  children: ReactNode;
+  label?: string;
+  ariaSort?: 'ascending' | 'descending' | 'none';
+}) {
   const [over, setOver] = useState(false);
   const type = 'application/x-ah-column';
   const label = name ?? (typeof children === 'string' ? children : id);
@@ -87,15 +103,25 @@ export function MovableTh({ id, columns, className, children, label: name, ariaS
     }
   }
   function key(e: KeyboardEvent) {
-    if (e.key === 'ArrowLeft') { e.preventDefault(); columns.shift(id, -1); }
-    else if (e.key === 'ArrowRight') { e.preventDefault(); columns.shift(id, 1); }
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      columns.shift(id, -1);
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      columns.shift(id, 1);
+    }
   }
 
   return (
     <th
       aria-sort={ariaSort}
       className={cx(className, over && 'bg-mint-soft')}
-      onDragOver={(e) => { if (e.dataTransfer.types.includes(type)) { e.preventDefault(); setOver(true); } }}
+      onDragOver={(e) => {
+        if (e.dataTransfer.types.includes(type)) {
+          e.preventDefault();
+          setOver(true);
+        }
+      }}
       onDragLeave={() => setOver(false)}
       onDrop={drop}
     >

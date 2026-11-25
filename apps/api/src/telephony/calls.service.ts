@@ -40,9 +40,23 @@ export interface CallView {
 }
 
 interface Row {
-  id: string; direction: 'incoming' | 'outgoing'; counterparty: string; started_at: Date; answered_at: Date | null; ended_at: Date | null;
-  duration_sec: number | null; outcome: string; lead_id: string | null; lead_no: string | null; lead_name: string | null; user_id: string | null;
-  user_name: string | null; wrapped_up_at: Date | null; remark: string | null; recording: string | null; started_text: string;
+  id: string;
+  direction: 'incoming' | 'outgoing';
+  counterparty: string;
+  started_at: Date;
+  answered_at: Date | null;
+  ended_at: Date | null;
+  duration_sec: number | null;
+  outcome: string;
+  lead_id: string | null;
+  lead_no: string | null;
+  lead_name: string | null;
+  user_id: string | null;
+  user_name: string | null;
+  wrapped_up_at: Date | null;
+  remark: string | null;
+  recording: string | null;
+  started_text: string;
   via?: string;
 }
 
@@ -108,10 +122,19 @@ export class CallsService {
                 ${talkSec !== null ? sql`clock_timestamp() - make_interval(secs => ${talkSec})` : null},
                 clock_timestamp(), ${talkSec}, ${dto.outcome}, true, clock_timestamp(), ${auth.userId})
         RETURNING id`.execute(trx);
-      const label = { connected: 'connected', not_picked: 'not picked', busy: 'busy', failed: 'switched off or not reachable', missed: 'missed' }[dto.outcome];
+      const label = {
+        connected: 'connected',
+        not_picked: 'not picked',
+        busy: 'busy',
+        failed: 'switched off or not reachable',
+        missed: 'missed',
+      }[dto.outcome];
       const talk = talkSec ? `, ${dto.minutes} min` : '';
       await this.writer.activity(trx, {
-        tenantId: auth.tenantId, leadId: lead.id, userId: auth.userId, type: 'call',
+        tenantId: auth.tenantId,
+        leadId: lead.id,
+        userId: auth.userId,
+        type: 'call',
         remark: `${dto.direction === 'incoming' ? 'Call from the student' : 'Called from mobile'}: ${label}${talk}`,
       });
       return { callId: rows[0]!.id };
@@ -123,23 +146,45 @@ export class CallsService {
   /** Rings the counsellor's own phone through the provider, which then connects the student. */
   /** Whether the company has connected a calling provider. Until it has, the phone call buttons are hidden: pressing them could only fail. */
   ready(auth: AuthContext): Promise<{ ready: boolean }> {
-    return this.db.withTenant(auth.tenantId, async (trx) => ({ ready: !!(await this.settings.credentials(trx, auth.tenantId))?.isEnabled }));
+    return this.db.withTenant(auth.tenantId, async (trx) => ({
+      ready: !!(await this.settings.credentials(trx, auth.tenantId))?.isEnabled,
+    }));
   }
 
-  async place(auth: AuthContext, leadId: string, input: { phone?: string }, dialerSessionId?: string): Promise<CallView> {
+  async place(
+    auth: AuthContext,
+    leadId: string,
+    input: { phone?: string },
+    dialerSessionId?: string,
+  ): Promise<CallView> {
     const pending = await this.db.withTenant(auth.tenantId, async (trx) => {
       const lead = await this.access.get(trx, auth, leadId);
       const connection = await this.settings.credentials(trx, auth.tenantId);
-      if (!connection?.isEnabled) throw new AppError('TELEPHONY_NOT_CONFIGURED', 'Calling is not set up for this company yet', 409);
+      if (!connection?.isEnabled)
+        throw new AppError(
+          'TELEPHONY_NOT_CONFIGURED',
+          'Calling is not set up for this company yet',
+          409,
+        );
 
-      const agent = await trx.selectFrom('users').select('phone').where('id', '=', auth.userId).executeTakeFirst();
-      if (!agent?.phone) throw new AppError('NO_AGENT_NUMBER', 'Add your own mobile number to your profile first. The call rings your phone.', 422);
+      const agent = await trx
+        .selectFrom('users')
+        .select('phone')
+        .where('id', '=', auth.userId)
+        .executeTakeFirst();
+      if (!agent?.phone)
+        throw new AppError(
+          'NO_AGENT_NUMBER',
+          'Add your own mobile number to your profile first. The call rings your phone.',
+          422,
+        );
 
       const customer = await this.numberFor(trx, lead.id, lead.primary_phone, input.phone);
       const { rows: busy } = await sql<{ id: string }>`
         SELECT id FROM calls WHERE user_id = ${auth.userId} AND outcome IN ('requested', 'ringing')
           AND started_at > now() - make_interval(secs => ${STALE_AFTER_SEC}) LIMIT 1`.execute(trx);
-      if (busy[0]) throw new AppError('CALL_IN_PROGRESS', 'You already have a call in progress', 409);
+      if (busy[0])
+        throw new AppError('CALL_IN_PROGRESS', 'You already have a call in progress', 409);
 
       const { rows } = await sql<{ id: string }>`
         INSERT INTO calls (tenant_id, lead_id, user_id, direction, provider_call_id, counterparty, started_at, outcome, dialer_session_id)
@@ -152,26 +197,56 @@ export class CallsService {
     try {
       const provider = this.registry.get(pending.connection.provider);
       const { providerCallId } = await provider.placeCall(pending.connection.config, {
-        callId: pending.callId, agentNumber: pending.agentNumber, customerNumber: pending.customer,
+        callId: pending.callId,
+        agentNumber: pending.agentNumber,
+        customerNumber: pending.customer,
       });
-      await this.db.withTenant(auth.tenantId, (trx) => sql`UPDATE calls SET provider_call_id = ${providerCallId} WHERE id = ${pending.callId}`.execute(trx));
+      await this.db.withTenant(auth.tenantId, (trx) =>
+        sql`UPDATE calls SET provider_call_id = ${providerCallId} WHERE id = ${pending.callId}`.execute(
+          trx,
+        ),
+      );
     } catch (err) {
       await this.db.withTenant(auth.tenantId, (trx) =>
-        sql`UPDATE calls SET outcome = 'failed', ended_at = clock_timestamp() WHERE id = ${pending.callId}`.execute(trx),
+        sql`UPDATE calls SET outcome = 'failed', ended_at = clock_timestamp() WHERE id = ${pending.callId}`.execute(
+          trx,
+        ),
       );
       if (err instanceof AppError) throw err;
-      throw new AppError('PROVIDER_ERROR', 'The calling service did not accept the call. Try again in a moment.', 502);
+      throw new AppError(
+        'PROVIDER_ERROR',
+        'The calling service did not accept the call. Try again in a moment.',
+        502,
+      );
     }
     return this.get(auth, pending.callId);
   }
 
-  private async numberFor(trx: Trx, leadId: string, primary: string, chosen: string | undefined): Promise<string> {
+  private async numberFor(
+    trx: Trx,
+    leadId: string,
+    primary: string,
+    chosen: string | undefined,
+  ): Promise<string> {
     if (!chosen) return primary;
     const phone = normalizePhone(chosen);
-    if (!phone) throw AppError.badRequest('PHONE_INVALID', 'Enter a valid mobile number', [{ field: 'phone', message: 'Enter a valid mobile number' }]);
+    if (!phone)
+      throw AppError.badRequest('PHONE_INVALID', 'Enter a valid mobile number', [
+        { field: 'phone', message: 'Enter a valid mobile number' },
+      ]);
     if (phone === primary) return phone;
-    const own = await trx.selectFrom('lead_phones').select('phone').where('lead_id', '=', leadId).where('phone', '=', phone).executeTakeFirst();
-    if (!own) throw AppError.badRequest('PHONE_NOT_ON_LEAD', 'That number is not one of this lead\'s numbers', [{ field: 'phone', message: 'Choose one of the lead\'s numbers' }]);
+    const own = await trx
+      .selectFrom('lead_phones')
+      .select('phone')
+      .where('lead_id', '=', leadId)
+      .where('phone', '=', phone)
+      .executeTakeFirst();
+    if (!own)
+      throw AppError.badRequest(
+        'PHONE_NOT_ON_LEAD',
+        "That number is not one of this lead's numbers",
+        [{ field: 'phone', message: "Choose one of the lead's numbers" }],
+      );
     return phone;
   }
 
@@ -187,20 +262,39 @@ export class CallsService {
       if (query.userId) c.push(sql<SqlBool>`c.user_id = ${query.userId}::uuid`);
       if (query.direction) c.push(sql<SqlBool>`c.direction = ${query.direction}`);
       if (query.outcome) c.push(sql<SqlBool>`c.outcome = ${query.outcome}`);
-      if (query.from) c.push(sql<SqlBool>`c.started_at >= (${query.from}::date::timestamp AT TIME ZONE t.timezone)`);
-      if (query.to) c.push(sql<SqlBool>`c.started_at < ((${query.to}::date + 1)::timestamp AT TIME ZONE t.timezone)`);
+      if (query.from)
+        c.push(
+          sql<SqlBool>`c.started_at >= (${query.from}::date::timestamp AT TIME ZONE t.timezone)`,
+        );
+      if (query.to)
+        c.push(
+          sql<SqlBool>`c.started_at < ((${query.to}::date + 1)::timestamp AT TIME ZONE t.timezone)`,
+        );
       // Only a phone call has an after-call form.
-      if (query.unwrapped !== undefined) c.push(query.unwrapped ? sql<SqlBool>`(c.via = 'phone' AND p.wrapped_up_at IS NULL AND c.lead_id IS NOT NULL AND c.outcome = 'connected')` : sql<SqlBool>`p.wrapped_up_at IS NOT NULL`);
-      if (after) c.push(sql<SqlBool>`(c.started_at, c.id) < (${after.t}::timestamptz, ${after.i}::uuid)`);
+      if (query.unwrapped !== undefined)
+        c.push(
+          query.unwrapped
+            ? sql<SqlBool>`(c.via = 'phone' AND p.wrapped_up_at IS NULL AND c.lead_id IS NOT NULL AND c.outcome = 'connected')`
+            : sql<SqlBool>`p.wrapped_up_at IS NOT NULL`,
+        );
+      if (after)
+        c.push(sql<SqlBool>`(c.started_at, c.id) < (${after.t}::timestamptz, ${after.i}::uuid)`);
 
-      const { rows } = await sql<Row>`${LIST_SELECT} WHERE ${sql.join(c, sql` AND `)} ORDER BY c.started_at DESC, c.id DESC LIMIT ${query.limit + 1}`.execute(trx);
+      const { rows } =
+        await sql<Row>`${LIST_SELECT} WHERE ${sql.join(c, sql` AND `)} ORDER BY c.started_at DESC, c.id DESC LIMIT ${query.limit + 1}`.execute(
+          trx,
+        );
       const page = toPage(rows, query.limit, (last) => ({ t: last.started_text, i: last.id }));
       return { items: page.items.map(toView), nextCursor: page.nextCursor };
     });
   }
 
   /** The calls with one lead, for the lead's page. Anyone who may see the lead sees its calls. */
-  forLead(auth: AuthContext, leadId: string, query: { limit: number; cursor?: string }): Promise<Page<CallView>> {
+  forLead(
+    auth: AuthContext,
+    leadId: string,
+    query: { limit: number; cursor?: string },
+  ): Promise<Page<CallView>> {
     return this.db.withTenant(auth.tenantId, async (trx) => {
       await this.access.get(trx, auth, leadId);
       const after = decodeCursor(query.cursor, cursorShape);
@@ -218,7 +312,10 @@ export class CallsService {
 
   private async one(trx: Trx, auth: AuthContext, id: string): Promise<Row> {
     const scoped = scopeCondition(auth, 'c.user_id');
-    const { rows } = await sql<Row>`${SELECT} WHERE c.id = ${id}::uuid ${scoped ? sql`AND ${scoped}` : sql``}`.execute(trx);
+    const { rows } =
+      await sql<Row>`${SELECT} WHERE c.id = ${id}::uuid ${scoped ? sql`AND ${scoped}` : sql``}`.execute(
+        trx,
+      );
     if (!rows[0]) throw AppError.notFound('Call');
     return rows[0];
   }
@@ -236,11 +333,18 @@ export class CallsService {
   /** A short-lived link a browser audio player can use without a login header. */
   async recordingLink(auth: AuthContext, id: string): Promise<{ url: string; expiresAt: Date }> {
     const file = await this.recordingFile(auth, id);
-    const { token, expiresAt } = this.links.sign({ key: file.key, type: file.type, name: file.name });
+    const { token, expiresAt } = this.links.sign({
+      key: file.key,
+      type: file.type,
+      name: file.name,
+    });
     return { url: `/api/v1/files/${token}`, expiresAt };
   }
 
-  private recordingFile(auth: AuthContext, id: string): Promise<{ key: string; type: string; name: string }> {
+  private recordingFile(
+    auth: AuthContext,
+    id: string,
+  ): Promise<{ key: string; type: string; name: string }> {
     return this.db.withTenant(auth.tenantId, async (trx) => {
       const call = await this.one(trx, auth, id);
       const { rows } = await sql<{ file_key: string | null; status: string }>`
@@ -248,15 +352,36 @@ export class CallsService {
       const rec = rows[0];
       if (!rec) throw AppError.notFound('Recording');
       if (rec.status !== 'stored' || !rec.file_key) {
-        throw new AppError('RECORDING_NOT_READY', rec.status === 'failed' ? 'This recording could not be downloaded from the provider' : 'This recording is still being downloaded. Try again in a minute.', 409);
+        throw new AppError(
+          'RECORDING_NOT_READY',
+          rec.status === 'failed'
+            ? 'This recording could not be downloaded from the provider'
+            : 'This recording is still being downloaded. Try again in a minute.',
+          409,
+        );
       }
       await this.audit.write(trx, {
-        tenantId: auth.tenantId, actorId: auth.userId, action: 'call.listen', entity: 'call', entityId: id,
-        after: { lead: call.lead_id, number: call.counterparty }, ip: auth.ip, requestId: auth.requestId,
+        tenantId: auth.tenantId,
+        actorId: auth.userId,
+        action: 'call.listen',
+        entity: 'call',
+        entityId: id,
+        after: { lead: call.lead_id, number: call.counterparty },
+        ip: auth.ip,
+        requestId: auth.requestId,
       });
       const ext = rec.file_key.split('.').pop() ?? 'bin';
-      const mime: Record<string, string> = { mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg', m4a: 'audio/mp4' };
-      return { key: rec.file_key, type: mime[ext] ?? 'application/octet-stream', name: `call-${call.counterparty}-${call.started_at.toISOString().slice(0, 10)}.${ext}` };
+      const mime: Record<string, string> = {
+        mp3: 'audio/mpeg',
+        wav: 'audio/wav',
+        ogg: 'audio/ogg',
+        m4a: 'audio/mp4',
+      };
+      return {
+        key: rec.file_key,
+        type: mime[ext] ?? 'application/octet-stream',
+        name: `call-${call.counterparty}-${call.started_at.toISOString().slice(0, 10)}.${ext}`,
+      };
     });
   }
 
@@ -272,8 +397,11 @@ export class CallsService {
       if (!call.lead_id) throw new AppError('NO_LEAD', 'This call is not linked to a lead', 409);
       const claimed = await sql<{ id: string }>`
         UPDATE calls SET wrapped_up_at = now(), wrapped_up_by = ${auth.userId}, remark = ${dto.remark ?? null}
-        WHERE id = ${id}::uuid AND started_at = ${call.started_text}::timestamptz AND wrapped_up_at IS NULL RETURNING id`.execute(trx);
-      if (!claimed.rows[0]) throw new AppError('ALREADY_WRAPPED_UP', 'This call already has its after-call form', 409);
+        WHERE id = ${id}::uuid AND started_at = ${call.started_text}::timestamptz AND wrapped_up_at IS NULL RETURNING id`.execute(
+        trx,
+      );
+      if (!claimed.rows[0])
+        throw new AppError('ALREADY_WRAPPED_UP', 'This call already has its after-call form', 409);
 
       await this.leads.changeStatusIn(trx, auth, call.lead_id, dto);
       return { call: toView(await this.one(trx, auth, id)) };
@@ -283,11 +411,19 @@ export class CallsService {
 
 function toView(r: Row): CallView {
   return {
-    id: r.id, direction: r.direction, number: r.counterparty, startedAt: r.started_at, answeredAt: r.answered_at, endedAt: r.ended_at,
-    durationSec: r.duration_sec, outcome: r.outcome,
+    id: r.id,
+    direction: r.direction,
+    number: r.counterparty,
+    startedAt: r.started_at,
+    answeredAt: r.answered_at,
+    endedAt: r.ended_at,
+    durationSec: r.duration_sec,
+    outcome: r.outcome,
     lead: r.lead_id ? { id: r.lead_id, leadNo: r.lead_no ?? '', name: r.lead_name ?? '' } : null,
     user: r.user_id ? { id: r.user_id, name: r.user_name ?? '' } : null,
-    wrappedUp: r.wrapped_up_at !== null, remark: r.remark, recording: (r.recording as CallView['recording'] | null) ?? 'none',
+    wrappedUp: r.wrapped_up_at !== null,
+    remark: r.remark,
+    recording: (r.recording as CallView['recording'] | null) ?? 'none',
     via: r.via === 'app' ? 'app' : r.via === 'manual' ? 'manual' : 'phone',
   };
 }

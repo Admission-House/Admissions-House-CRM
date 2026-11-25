@@ -11,9 +11,17 @@ import { assertCanGrant, assertRoleEditable, assertScopeNotWider } from './role-
  * Whether a role records attendance. A role that must sign in from the office always does, so asking it not to is an
  * error rather than something to quietly ignore. `fallback` is what applies when nothing was asked.
  */
-function attendanceSetting(requiresOffice: boolean, asked: boolean | undefined, fallback: boolean): boolean {
+function attendanceSetting(
+  requiresOffice: boolean,
+  asked: boolean | undefined,
+  fallback: boolean,
+): boolean {
   if (requiresOffice && asked === false) {
-    throw AppError.badRequest('OFFICE_ROLE_TRACKS_ATTENDANCE', 'A role that signs in from the office always records attendance', [{ field: 'tracksAttendance', message: 'Switch off "sign in from the office" first' }]);
+    throw AppError.badRequest(
+      'OFFICE_ROLE_TRACKS_ATTENDANCE',
+      'A role that signs in from the office always records attendance',
+      [{ field: 'tracksAttendance', message: 'Switch off "sign in from the office" first' }],
+    );
   }
   return requiresOffice ? true : (asked ?? fallback);
 }
@@ -40,7 +48,12 @@ export class RolesService {
   /** Every permission a role can hold, grouped by area, for the role editor. */
   listPermissions(auth: AuthContext) {
     return this.db.withTenant(auth.tenantId, async (trx) => {
-      const rows = await trx.selectFrom('permissions').select(['code', 'module', 'description']).orderBy('module').orderBy('code').execute();
+      const rows = await trx
+        .selectFrom('permissions')
+        .select(['code', 'module', 'description'])
+        .orderBy('module')
+        .orderBy('code')
+        .execute();
       const grouped = new Map<string, { code: string; description: string }[]>();
       for (const r of rows) {
         const list = grouped.get(r.module) ?? [];
@@ -54,8 +67,15 @@ export class RolesService {
   list(auth: AuthContext): Promise<RoleSummary[]> {
     return this.db.withTenant(auth.tenantId, async (trx) => {
       const { rows } = await sql<{
-        id: string; name: string; system_key: string | null; data_scope: string; requires_office: boolean; tracks_attendance: boolean;
-        is_system: boolean; permission_count: string; user_count: string;
+        id: string;
+        name: string;
+        system_key: string | null;
+        data_scope: string;
+        requires_office: boolean;
+        tracks_attendance: boolean;
+        is_system: boolean;
+        permission_count: string;
+        user_count: string;
       }>`
         SELECT r.id, r.name, r.system_key, r.data_scope, r.requires_office, r.tracks_attendance, r.is_system,
                (SELECT count(*) FROM role_permissions rp WHERE rp.role_id = r.id) AS permission_count,
@@ -63,8 +83,15 @@ export class RolesService {
         FROM roles r
         ORDER BY r.is_system DESC, r.name`.execute(trx);
       return rows.map((r) => ({
-        id: r.id, name: r.name, key: r.system_key, dataScope: r.data_scope, requiresOffice: r.requires_office, tracksAttendance: r.tracks_attendance,
-        isSystem: r.is_system, permissionCount: Number(r.permission_count), userCount: Number(r.user_count),
+        id: r.id,
+        name: r.name,
+        key: r.system_key,
+        dataScope: r.data_scope,
+        requiresOffice: r.requires_office,
+        tracksAttendance: r.tracks_attendance,
+        isSystem: r.is_system,
+        permissionCount: Number(r.permission_count),
+        userCount: Number(r.user_count),
       }));
     });
   }
@@ -83,19 +110,40 @@ export class RolesService {
       const permissionIds = await this.permissionIds(trx, dto.permissions);
       assertCanGrant(auth.permissions, dto.permissions);
       await this.assertNameFree(trx, dto.name);
-      const tracks = attendanceSetting(dto.requiresOffice, dto.tracksAttendance, dto.requiresOffice);
+      const tracks = attendanceSetting(
+        dto.requiresOffice,
+        dto.tracksAttendance,
+        dto.requiresOffice,
+      );
 
       const role = await trx
         .insertInto('roles')
-        .values({ tenant_id: auth.tenantId, name: dto.name, data_scope: dto.dataScope, requires_office: dto.requiresOffice, tracks_attendance: tracks })
+        .values({
+          tenant_id: auth.tenantId,
+          name: dto.name,
+          data_scope: dto.dataScope,
+          requires_office: dto.requiresOffice,
+          tracks_attendance: tracks,
+        })
         .returning('id')
         .executeTakeFirstOrThrow();
       await this.setPermissions(trx, auth.tenantId, role.id, permissionIds);
 
       await this.audit.write(trx, {
-        tenantId: auth.tenantId, actorId: auth.userId, action: 'role.create', entity: 'role', entityId: role.id,
-        after: { name: dto.name, dataScope: dto.dataScope, requiresOffice: dto.requiresOffice, tracksAttendance: tracks, permissions: dto.permissions },
-        ip: auth.ip, requestId: auth.requestId,
+        tenantId: auth.tenantId,
+        actorId: auth.userId,
+        action: 'role.create',
+        entity: 'role',
+        entityId: role.id,
+        after: {
+          name: dto.name,
+          dataScope: dto.dataScope,
+          requiresOffice: dto.requiresOffice,
+          tracksAttendance: tracks,
+          permissions: dto.permissions,
+        },
+        ip: auth.ip,
+        requestId: auth.requestId,
       });
       const created = await this.load(trx, role.id);
       return { ...created.summary, permissions: created.permissions };
@@ -110,20 +158,30 @@ export class RolesService {
         {
           permissions: dto.permissions !== undefined,
           name: dto.name !== undefined && dto.name !== current.summary.name,
-          scope: (dto.dataScope !== undefined && dto.dataScope !== current.summary.dataScope) ||
-            (dto.requiresOffice !== undefined && dto.requiresOffice !== current.summary.requiresOffice) ||
-            (dto.tracksAttendance !== undefined && dto.tracksAttendance !== current.summary.tracksAttendance),
+          scope:
+            (dto.dataScope !== undefined && dto.dataScope !== current.summary.dataScope) ||
+            (dto.requiresOffice !== undefined &&
+              dto.requiresOffice !== current.summary.requiresOffice) ||
+            (dto.tracksAttendance !== undefined &&
+              dto.tracksAttendance !== current.summary.tracksAttendance),
         },
       );
       const requiresOffice = dto.requiresOffice ?? current.summary.requiresOffice;
-      const tracks = attendanceSetting(requiresOffice, dto.tracksAttendance, dto.requiresOffice === true ? true : current.summary.tracksAttendance);
+      const tracks = attendanceSetting(
+        requiresOffice,
+        dto.tracksAttendance,
+        dto.requiresOffice === true ? true : current.summary.tracksAttendance,
+      );
       if (dto.dataScope) assertScopeNotWider(auth.dataScope, dto.dataScope);
       if (dto.name && dto.name !== current.summary.name) await this.assertNameFree(trx, dto.name);
 
       if (dto.permissions) {
         const ids = await this.permissionIds(trx, dto.permissions);
         // Only what is being added needs to be held by the person making the change.
-        assertCanGrant(auth.permissions, dto.permissions.filter((c) => !current.permissions.includes(c)));
+        assertCanGrant(
+          auth.permissions,
+          dto.permissions.filter((c) => !current.permissions.includes(c)),
+        );
         await this.setPermissions(trx, auth.tenantId, id, ids);
       }
       // Changing only the permissions leaves nothing to update on the role row itself.
@@ -133,14 +191,20 @@ export class RolesService {
         ...(dto.requiresOffice !== undefined && { requires_office: dto.requiresOffice }),
         ...(tracks !== current.summary.tracksAttendance && { tracks_attendance: tracks }),
       };
-      if (Object.keys(changes).length > 0) await trx.updateTable('roles').set(changes).where('id', '=', id).execute();
+      if (Object.keys(changes).length > 0)
+        await trx.updateTable('roles').set(changes).where('id', '=', id).execute();
 
       const after = await this.load(trx, id);
       await this.audit.write(trx, {
-        tenantId: auth.tenantId, actorId: auth.userId, action: 'role.update', entity: 'role', entityId: id,
+        tenantId: auth.tenantId,
+        actorId: auth.userId,
+        action: 'role.update',
+        entity: 'role',
+        entityId: id,
         before: { ...current.summary, permissions: current.permissions },
         after: { ...after.summary, permissions: after.permissions },
-        ip: auth.ip, requestId: auth.requestId,
+        ip: auth.ip,
+        requestId: auth.requestId,
       });
       return { ...after.summary, permissions: after.permissions };
     });
@@ -149,24 +213,44 @@ export class RolesService {
   remove(auth: AuthContext, id: string): Promise<void> {
     return this.db.withTenant(auth.tenantId, async (trx) => {
       const role = await this.load(trx, id);
-      if (role.summary.isSystem) throw new AppError('ROLE_LOCKED', 'A standard role cannot be deleted', 409);
+      if (role.summary.isSystem)
+        throw new AppError('ROLE_LOCKED', 'A standard role cannot be deleted', 409);
       if (role.summary.userCount > 0) {
-        throw AppError.conflict('ROLE_IN_USE', `${role.summary.userCount} people still have this role. Move them to another role first.`);
+        throw AppError.conflict(
+          'ROLE_IN_USE',
+          `${role.summary.userCount} people still have this role. Move them to another role first.`,
+        );
       }
       await trx.deleteFrom('roles').where('id', '=', id).execute();
       await this.audit.write(trx, {
-        tenantId: auth.tenantId, actorId: auth.userId, action: 'role.delete', entity: 'role', entityId: id,
-        before: { ...role.summary, permissions: role.permissions }, ip: auth.ip, requestId: auth.requestId,
+        tenantId: auth.tenantId,
+        actorId: auth.userId,
+        action: 'role.delete',
+        entity: 'role',
+        entityId: id,
+        before: { ...role.summary, permissions: role.permissions },
+        ip: auth.ip,
+        requestId: auth.requestId,
       });
     });
   }
 
   // ---------------------------------------------------------------- helpers
 
-  private async load(trx: Trx, id: string): Promise<{ summary: RoleSummary; permissions: string[] }> {
+  private async load(
+    trx: Trx,
+    id: string,
+  ): Promise<{ summary: RoleSummary; permissions: string[] }> {
     const { rows } = await sql<{
-      id: string; name: string; system_key: string | null; data_scope: string; requires_office: boolean; tracks_attendance: boolean;
-      is_system: boolean; user_count: string; permissions: string[];
+      id: string;
+      name: string;
+      system_key: string | null;
+      data_scope: string;
+      requires_office: boolean;
+      tracks_attendance: boolean;
+      is_system: boolean;
+      user_count: string;
+      permissions: string[];
     }>`
       SELECT r.id, r.name, r.system_key, r.data_scope, r.requires_office, r.tracks_attendance, r.is_system,
              (SELECT count(*) FROM users u WHERE u.role_id = r.id) AS user_count,
@@ -178,20 +262,35 @@ export class RolesService {
     return {
       permissions: r.permissions,
       summary: {
-        id: r.id, name: r.name, key: r.system_key, dataScope: r.data_scope, requiresOffice: r.requires_office, tracksAttendance: r.tracks_attendance,
-        isSystem: r.is_system, permissionCount: r.permissions.length, userCount: Number(r.user_count),
+        id: r.id,
+        name: r.name,
+        key: r.system_key,
+        dataScope: r.data_scope,
+        requiresOffice: r.requires_office,
+        tracksAttendance: r.tracks_attendance,
+        isSystem: r.is_system,
+        permissionCount: r.permissions.length,
+        userCount: Number(r.user_count),
       },
     };
   }
 
   private async assertNameFree(trx: Trx, name: string): Promise<void> {
-    const taken = await trx.selectFrom('roles').select('id').where(sql`lower(name)`, '=', name.toLowerCase()).executeTakeFirst();
+    const taken = await trx
+      .selectFrom('roles')
+      .select('id')
+      .where(sql`lower(name)`, '=', name.toLowerCase())
+      .executeTakeFirst();
     if (taken) throw AppError.conflict('ROLE_NAME_TAKEN', 'A role with this name already exists');
   }
 
   private async permissionIds(trx: Trx, codes: string[]): Promise<string[]> {
     if (codes.length === 0) return [];
-    const rows = await trx.selectFrom('permissions').select(['id', 'code']).where('code', 'in', codes).execute();
+    const rows = await trx
+      .selectFrom('permissions')
+      .select(['id', 'code'])
+      .where('code', 'in', codes)
+      .execute();
     const unknown = codes.filter((c) => !rows.some((r) => r.code === c));
     if (unknown.length > 0) {
       throw AppError.badRequest('UNKNOWN_PERMISSION', `Unknown permission: ${unknown.join(', ')}`, [
@@ -201,12 +300,23 @@ export class RolesService {
     return rows.map((r) => r.id);
   }
 
-  private async setPermissions(trx: Trx, tenantId: string, roleId: string, permissionIds: string[]): Promise<void> {
+  private async setPermissions(
+    trx: Trx,
+    tenantId: string,
+    roleId: string,
+    permissionIds: string[],
+  ): Promise<void> {
     await trx.deleteFrom('role_permissions').where('role_id', '=', roleId).execute();
     if (permissionIds.length > 0) {
       await trx
         .insertInto('role_permissions')
-        .values(permissionIds.map((permission_id) => ({ tenant_id: tenantId, role_id: roleId, permission_id })))
+        .values(
+          permissionIds.map((permission_id) => ({
+            tenant_id: tenantId,
+            role_id: roleId,
+            permission_id,
+          })),
+        )
         .execute();
     }
   }

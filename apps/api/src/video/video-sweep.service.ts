@@ -3,7 +3,11 @@ import { sql } from 'kysely';
 import { ENV } from '../config/config.module.js';
 import type { Env } from '../config/env.js';
 import { DatabaseService } from '../database/database.service.js';
-import { EMPTY_CALL_GRACE_SECONDS, PRESENCE_STALE_SECONDS, REMINDER_MINUTES } from './video-rules.js';
+import {
+  EMPTY_CALL_GRACE_SECONDS,
+  PRESENCE_STALE_SECONDS,
+  REMINDER_MINUTES,
+} from './video-rules.js';
 import { RecordingService } from '../recording/recording.service.js';
 import { SessionRow, VideoStore } from './video-store.js';
 import { JobRegistry } from '../jobs/job-registry.service.js';
@@ -32,31 +36,62 @@ export class VideoSweepService implements OnModuleInit {
     private readonly store: VideoStore,
     private readonly recording: RecordingService,
     @Inject(ENV) private readonly env: Env,
-  
+
     private readonly jobs: JobRegistry,
   ) {}
 
   onModuleInit(): void {
-    this.jobs.register({ name: 'communication-sweep', group: 'minute', everySec: this.env.COMMUNICATION_SWEEP_SEC, run: () => this.runSafely() });
+    this.jobs.register({
+      name: 'communication-sweep',
+      group: 'minute',
+      everySec: this.env.COMMUNICATION_SWEEP_SEC,
+      run: () => this.runSafely(),
+    });
   }
 
   /** One pass over every active company. */
   async runOnce(): Promise<SweepCounts> {
-    const total: SweepCounts = { missed: 0, lost: 0, endedEmpty: 0, endedTimeUp: 0, cancelled: 0, reminders: 0 };
-    const { rows: tenants } = await sql<{ id: string }>`SELECT list_active_tenant_ids() AS id`.execute(this.db.unscoped());
+    const total: SweepCounts = {
+      missed: 0,
+      lost: 0,
+      endedEmpty: 0,
+      endedTimeUp: 0,
+      cancelled: 0,
+      reminders: 0,
+    };
+    const { rows: tenants } = await sql<{
+      id: string;
+    }>`SELECT list_active_tenant_ids() AS id`.execute(this.db.unscoped());
     for (const { id } of tenants) {
       const c = await this.sweepTenant(id);
       for (const k of Object.keys(total) as (keyof SweepCounts)[]) total[k] += c[k];
       // Recordings are looked after outside the transaction above: they call Agora and the storage bucket.
-      await this.recording.sweep(id).catch((e: unknown) => this.logger.error(`recording sweep failed: ${e instanceof Error ? e.message : String(e)}`));
+      await this.recording
+        .sweep(id)
+        .catch((e: unknown) =>
+          this.logger.error(
+            `recording sweep failed: ${e instanceof Error ? e.message : String(e)}`,
+          ),
+        );
     }
     return total;
   }
 
   private sweepTenant(tenantId: string): Promise<SweepCounts> {
     return this.db.withTenant(tenantId, async (trx) => {
-      const counts: SweepCounts = { missed: 0, lost: 0, endedEmpty: 0, endedTimeUp: 0, cancelled: 0, reminders: 0 };
-      const { rows: lock } = await sql<{ ok: boolean }>`SELECT pg_try_advisory_xact_lock(hashtext('communication-sweep'), hashtext(${tenantId})) AS ok`.execute(trx);
+      const counts: SweepCounts = {
+        missed: 0,
+        lost: 0,
+        endedEmpty: 0,
+        endedTimeUp: 0,
+        cancelled: 0,
+        reminders: 0,
+      };
+      const { rows: lock } = await sql<{
+        ok: boolean;
+      }>`SELECT pg_try_advisory_xact_lock(hashtext('communication-sweep'), hashtext(${tenantId})) AS ok`.execute(
+        trx,
+      );
       if (!lock[0]?.ok) return counts;
 
       // 1. A ring nobody answered is a missed call; the person called is told, and a call nobody joined ends as missed.
@@ -68,8 +103,15 @@ export class VideoSweepService implements OnModuleInit {
         counts.missed++;
         await this.store.event(trx, tenantId, m.session_id, m.id, 'missed');
         const session = await this.store.load(trx, m.session_id, { lock: true });
-        await this.store.notify(trx, tenantId, [m.user_id], 'comm_missed', { sessionId: session.id, kind: session.kind, fromName: session.creator_name, leadId: session.lead_id ?? undefined, leadName: session.lead_name ?? undefined });
-        if (session.type === 'call' && session.status === 'open') await this.store.end(trx, session, 'missed', { detail: 'not answered' });
+        await this.store.notify(trx, tenantId, [m.user_id], 'comm_missed', {
+          sessionId: session.id,
+          kind: session.kind,
+          fromName: session.creator_name,
+          leadId: session.lead_id ?? undefined,
+          leadName: session.lead_name ?? undefined,
+        });
+        if (session.type === 'call' && session.status === 'open')
+          await this.store.end(trx, session, 'missed', { detail: 'not answered' });
       }
 
       // 2. A screen that has stopped reporting has left (closed the tab, lost the network).
@@ -88,26 +130,38 @@ export class VideoSweepService implements OnModuleInit {
         WHERE v.status = 'open' AND v.type = 'call' AND v.started_at IS NOT NULL
           AND NOT EXISTS (SELECT 1 FROM video_session_invites i WHERE i.session_id = v.id AND i.joined_at IS NOT NULL)
           AND COALESCE((SELECT max(i.last_left_at) FROM video_session_invites i WHERE i.session_id = v.id), v.started_at) < now() - make_interval(secs => ${EMPTY_CALL_GRACE_SECONDS})
-          AND v.started_at < now() - make_interval(secs => ${EMPTY_CALL_GRACE_SECONDS})`.execute(trx);
+          AND v.started_at < now() - make_interval(secs => ${EMPTY_CALL_GRACE_SECONDS})`.execute(
+        trx,
+      );
       for (const e of empty) {
-        await this.store.end(trx, await this.store.load(trx, e.id, { lock: true }), 'completed', { detail: 'everyone left' });
+        await this.store.end(trx, await this.store.load(trx, e.id, { lock: true }), 'completed', {
+          detail: 'everyone left',
+        });
         counts.endedEmpty++;
       }
 
       // 4. Sessions whose agreed time has run out.
       const { rows: late } = await sql<{ id: string }>`
-        SELECT id FROM video_sessions WHERE status = 'open' AND started_at IS NOT NULL AND started_at + max_minutes * interval '1 minute' < now()`.execute(trx);
+        SELECT id FROM video_sessions WHERE status = 'open' AND started_at IS NOT NULL AND started_at + max_minutes * interval '1 minute' < now()`.execute(
+        trx,
+      );
       for (const s of late) {
-        await this.store.end(trx, await this.store.load(trx, s.id, { lock: true }), 'completed', { detail: 'time was up' });
+        await this.store.end(trx, await this.store.load(trx, s.id, { lock: true }), 'completed', {
+          detail: 'time was up',
+        });
         counts.endedTimeUp++;
       }
 
       // 5. Sessions nobody ever joined, long after they were meant to happen.
       const { rows: stale } = await sql<{ id: string }>`
         SELECT id FROM video_sessions
-        WHERE status = 'open' AND started_at IS NULL AND COALESCE(scheduled_for, created_at) + max_minutes * interval '1 minute' + interval '1 hour' < now()`.execute(trx);
+        WHERE status = 'open' AND started_at IS NULL AND COALESCE(scheduled_for, created_at) + max_minutes * interval '1 minute' + interval '1 hour' < now()`.execute(
+        trx,
+      );
       for (const s of stale) {
-        await this.store.end(trx, await this.store.load(trx, s.id, { lock: true }), 'cancelled', { detail: 'nobody joined' });
+        await this.store.end(trx, await this.store.load(trx, s.id, { lock: true }), 'cancelled', {
+          detail: 'nobody joined',
+        });
         counts.cancelled++;
       }
 
@@ -115,14 +169,30 @@ export class VideoSweepService implements OnModuleInit {
       const { rows: soon } = await sql<{ id: string }>`
         SELECT id FROM video_sessions
         WHERE status = 'open' AND type = 'meeting' AND started_at IS NULL AND reminded_at IS NULL
-          AND scheduled_for IS NOT NULL AND scheduled_for <= now() + make_interval(mins => ${REMINDER_MINUTES}) AND scheduled_for > now() - interval '5 minutes'`.execute(trx);
+          AND scheduled_for IS NOT NULL AND scheduled_for <= now() + make_interval(mins => ${REMINDER_MINUTES}) AND scheduled_for > now() - interval '5 minutes'`.execute(
+        trx,
+      );
       for (const s of soon) {
         const session: SessionRow = await this.store.load(trx, s.id, { lock: true });
-        await sql`UPDATE video_sessions SET reminded_at = now() WHERE id = ${s.id}::uuid`.execute(trx);
-        const people = (await this.store.invites(trx, s.id)).filter((i) => i.user_id && ['invited', 'accepted'].includes(i.state));
-        await this.store.notify(trx, tenantId, people.map((i) => i.user_id!), 'comm_meeting_reminder', {
-          sessionId: s.id, title: session.title ?? undefined, kind: session.kind, fromName: session.creator_name, scheduledFor: session.scheduled_for?.toISOString(),
-        });
+        await sql`UPDATE video_sessions SET reminded_at = now() WHERE id = ${s.id}::uuid`.execute(
+          trx,
+        );
+        const people = (await this.store.invites(trx, s.id)).filter(
+          (i) => i.user_id && ['invited', 'accepted'].includes(i.state),
+        );
+        await this.store.notify(
+          trx,
+          tenantId,
+          people.map((i) => i.user_id!),
+          'comm_meeting_reminder',
+          {
+            sessionId: s.id,
+            title: session.title ?? undefined,
+            kind: session.kind,
+            fromName: session.creator_name,
+            scheduledFor: session.scheduled_for?.toISOString(),
+          },
+        );
         await this.store.event(trx, tenantId, s.id, null, 'reminder');
         counts.reminders++;
       }
@@ -136,10 +206,14 @@ export class VideoSweepService implements OnModuleInit {
     try {
       const c = await this.runOnce();
       if (c.missed + c.endedEmpty + c.endedTimeUp + c.cancelled + c.reminders > 0) {
-        this.logger.log(`calls: ${c.missed} missed, ${c.endedEmpty} ended empty, ${c.endedTimeUp} ended at time, ${c.cancelled} cancelled, ${c.reminders} reminders`);
+        this.logger.log(
+          `calls: ${c.missed} missed, ${c.endedEmpty} ended empty, ${c.endedTimeUp} ended at time, ${c.cancelled} cancelled, ${c.reminders} reminders`,
+        );
       }
     } catch (err) {
-      this.logger.error(`communication sweep failed: ${err instanceof Error ? err.message : String(err)}`);
+      this.logger.error(
+        `communication sweep failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
     } finally {
       this.running = false;
     }

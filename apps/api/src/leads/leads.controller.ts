@@ -1,4 +1,16 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Query, Res } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+  Res,
+} from '@nestjs/common';
 import type { FastifyReply } from 'fastify';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { createZodDto } from 'nestjs-zod';
@@ -7,7 +19,16 @@ import type { AuthContext } from '../auth/auth-context.js';
 import { DownloadAlerts } from '../notifications/download-alerts.service.js';
 import { Background, CurrentAuth, Heavy, RequirePermissions } from '../auth/decorators.js';
 import {
-  AssignDto, BulkAssignDto, BulkStatusDto, ChangeStatusDto, CreateLeadDto, ExportLeadsDto, ListLeadsDto, NoteDto, TransferLeadsDto, UpdateLeadDto,
+  AssignDto,
+  BulkAssignDto,
+  BulkStatusDto,
+  ChangeStatusDto,
+  CreateLeadDto,
+  ExportLeadsDto,
+  ListLeadsDto,
+  NoteDto,
+  TransferLeadsDto,
+  UpdateLeadDto,
 } from './leads.dto.js';
 import { LeadsService } from './leads.service.js';
 
@@ -32,10 +53,23 @@ export class LeadsController {
   @RequirePermissions('lead.export')
   @Heavy()
   @Get('export')
-  async export(@CurrentAuth() auth: AuthContext, @Query() query: ExportLeadsDto, @Res({ passthrough: true }) reply: FastifyReply) {
+  async export(
+    @CurrentAuth() auth: AuthContext,
+    @Query() query: ExportLeadsDto,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
     const file = await this.leads.exportFile(auth, query);
-    await this.downloads.record(auth, 'lead_export', `the lead list (${query.format === 'xlsx' ? 'Excel' : 'CSV'})`, file.fileName);
-    reply.header('content-type', file.contentType).header('content-disposition', `attachment; filename="${file.fileName}"`).header('cache-control', 'private, no-store').header('x-content-type-options', 'nosniff');
+    await this.downloads.record(
+      auth,
+      'lead_export',
+      `the lead list (${query.format === 'xlsx' ? 'Excel' : 'CSV'})`,
+      file.fileName,
+    );
+    reply
+      .header('content-type', file.contentType)
+      .header('content-disposition', `attachment; filename="${file.fileName}"`)
+      .header('cache-control', 'private, no-store')
+      .header('x-content-type-options', 'nosniff');
     return file.body;
   }
 
@@ -86,33 +120,53 @@ export class LeadsController {
 
   @RequirePermissions('lead.update')
   @Patch(':id')
-  update(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: UpdateLeadDto) {
+  update(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: UpdateLeadDto,
+  ) {
     return this.leads.update(auth, id, body);
   }
 
   @RequirePermissions('lead.update')
   @Post(':id/status')
   @HttpCode(200)
-  changeStatus(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: ChangeStatusDto) {
+  changeStatus(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: ChangeStatusDto,
+  ) {
     return this.leads.changeStatus(auth, id, body);
   }
 
   @RequirePermissions('lead.assign')
   @Post(':id/assign')
   @HttpCode(200)
-  assign(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: AssignDto) {
+  assign(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: AssignDto,
+  ) {
     return this.leads.assign(auth, id, body);
   }
 
   @RequirePermissions('lead.update')
   @Post(':id/notes')
-  addNote(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: NoteDto) {
+  addNote(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: NoteDto,
+  ) {
     return this.leads.addNote(auth, id, body.remark);
   }
 
   @RequirePermissions('lead.read')
   @Get(':id/activities')
-  activities(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Query() query: ActivitiesQueryDto) {
+  activities(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query() query: ActivitiesQueryDto,
+  ) {
     return this.leads.activities(auth, id, query);
   }
 

@@ -43,7 +43,10 @@ export function assertPlacement(p: PlacementInput): void {
 /** The company must always have at least one Super Admin who can sign in. */
 export function assertNotLastSuperAdmin(otherActiveSuperAdmins: number): void {
   if (otherActiveSuperAdmins < 1) {
-    throw AppError.conflict('LAST_SUPER_ADMIN', 'The company must keep at least one active Super Admin');
+    throw AppError.conflict(
+      'LAST_SUPER_ADMIN',
+      'The company must keep at least one active Super Admin',
+    );
   }
 }
 
@@ -51,9 +54,16 @@ export function assertNotLastSuperAdmin(otherActiveSuperAdmins: number): void {
  * You can change someone only if you hold every permission their role holds. Otherwise a person
  * allowed to manage users could reset the password of, or deactivate, someone more powerful.
  */
-export function assertCanManage(held: ReadonlySet<string>, targetPermissions: readonly string[]): void {
+export function assertCanManage(
+  held: ReadonlySet<string>,
+  targetPermissions: readonly string[],
+): void {
   if (targetPermissions.some((code) => !held.has(code))) {
-    throw new AppError('TARGET_MORE_POWERFUL', 'This person has more access than you, so you cannot change them', 403);
+    throw new AppError(
+      'TARGET_MORE_POWERFUL',
+      'This person has more access than you, so you cannot change them',
+      403,
+    );
   }
 }
 

@@ -1,15 +1,45 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Put, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Put,
+  Query,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import type { AuthContext } from '../auth/auth-context.js';
 import { CurrentAuth, RequirePermissions } from '../auth/decorators.js';
-import { createFieldSchema, CustomFieldsService, updateFieldSchema } from './custom-fields.service.js';
+import {
+  createFieldSchema,
+  CustomFieldsService,
+  updateFieldSchema,
+} from './custom-fields.service.js';
 
 class CreateDto extends createZodDto(createFieldSchema) {}
 class UpdateDto extends createZodDto(updateFieldSchema) {}
-class ListDto extends createZodDto(z.object({ includeInactive: z.enum(['true', 'false']).transform((v) => v === 'true').optional() })) {}
-class ValuesDto extends createZodDto(z.object({ values: z.record(z.string(), z.unknown()).refine((v) => Object.keys(v).length > 0 && Object.keys(v).length <= 50, 'Send between 1 and 50 values') })) {}
+class ListDto extends createZodDto(
+  z.object({
+    includeInactive: z
+      .enum(['true', 'false'])
+      .transform((v) => v === 'true')
+      .optional(),
+  }),
+) {}
+class ValuesDto extends createZodDto(
+  z.object({
+    values: z
+      .record(z.string(), z.unknown())
+      .refine(
+        (v) => Object.keys(v).length > 0 && Object.keys(v).length <= 50,
+        'Send between 1 and 50 values',
+      ),
+  }),
+) {}
 
 @ApiTags('custom fields')
 @ApiBearerAuth()
@@ -32,7 +62,11 @@ export class CustomFieldsController {
 
   @RequirePermissions('settings.manage')
   @Patch('custom-fields/:id')
-  update(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: UpdateDto) {
+  update(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: UpdateDto,
+  ) {
     return this.fields.update(auth, id, body);
   }
 
@@ -44,7 +78,11 @@ export class CustomFieldsController {
 
   @RequirePermissions('lead.update')
   @Put('leads/:id/custom-fields')
-  setForLead(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: ValuesDto) {
+  setForLead(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: ValuesDto,
+  ) {
     return this.fields.setForLead(auth, id, body.values);
   }
 }

@@ -1,7 +1,12 @@
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import pg from 'pg';
 import { PushDispatchService } from '../src/push/push-dispatch.service.js';
-import { PushProvider, PushTransportError, type PushMessage, type PushResult } from '../src/push/push-provider.js';
+import {
+  PushProvider,
+  PushTransportError,
+  type PushMessage,
+  type PushResult,
+} from '../src/push/push-provider.js';
 import { startApp } from './helpers/app.js';
 import { Client, makeClient } from './helpers/client.js';
 import { createFixture, Fixture } from './helpers/fixtures.js';
@@ -11,9 +16,14 @@ class FakeProvider extends PushProvider {
   sent: PushMessage[] = [];
   next: 'ok' | 'down' | 'gone' = 'ok';
   send(messages: readonly PushMessage[]): Promise<PushResult[]> {
-    if (this.next === 'down') return Promise.reject(new PushTransportError('Push service answered 503', true));
+    if (this.next === 'down')
+      return Promise.reject(new PushTransportError('Push service answered 503', true));
     this.sent.push(...messages);
-    return Promise.resolve(messages.map((): PushResult => (this.next === 'gone' ? { status: 'error', dead: true, message: 'gone' } : { status: 'ok' })));
+    return Promise.resolve(
+      messages.map((): PushResult =>
+        this.next === 'gone' ? { status: 'error', dead: true, message: 'gone' } : { status: 'ok' },
+      ),
+    );
   }
 }
 
@@ -26,15 +36,25 @@ const t: Record<string, string> = {};
 
 const token = (c: string) => `ExponentPushToken[${c.repeat(22)}]`;
 const errorCode = (res: { json: () => { error?: { code?: string } } }) => res.json().error?.code;
-const register = (who: string, tok: string, platform = 'android') => api.call('POST', '/push-tokens', t[who]!, { token: tok, platform });
+const register = (who: string, tok: string, platform = 'android') =>
+  api.call('POST', '/push-tokens', t[who]!, { token: tok, platform });
 
 const notify = async (who: string, payload: Record<string, unknown>, ageMinutes = 0) =>
-  (await owner.query(
-    `INSERT INTO notifications (tenant_id, user_id, type, payload, created_at) VALUES ($1, $2, 'lead_new', $3, now() - make_interval(mins => $4)) RETURNING id::text`,
-    [fx.tenantId, fx.user(who).id, JSON.stringify(payload), ageMinutes],
-  )).rows[0].id as string;
-const pushedAt = async (id: string) => (await owner.query(`SELECT pushed_at FROM notifications WHERE id = $1`, [id])).rows[0].pushed_at as Date | null;
-const tokensOf = async (who: string) => (await owner.query(`SELECT token FROM push_tokens WHERE user_id = $1 ORDER BY token`, [fx.user(who).id])).rows.map((r) => r.token as string);
+  (
+    await owner.query(
+      `INSERT INTO notifications (tenant_id, user_id, type, payload, created_at) VALUES ($1, $2, 'lead_new', $3, now() - make_interval(mins => $4)) RETURNING id::text`,
+      [fx.tenantId, fx.user(who).id, JSON.stringify(payload), ageMinutes],
+    )
+  ).rows[0].id as string;
+const pushedAt = async (id: string) =>
+  (await owner.query(`SELECT pushed_at FROM notifications WHERE id = $1`, [id])).rows[0]
+    .pushed_at as Date | null;
+const tokensOf = async (who: string) =>
+  (
+    await owner.query(`SELECT token FROM push_tokens WHERE user_id = $1 ORDER BY token`, [
+      fx.user(who).id,
+    ])
+  ).rows.map((r) => r.token as string);
 const clearAll = async () => {
   await owner.query(`DELETE FROM push_tokens WHERE tenant_id = $1`, [fx.tenantId]);
   // The dispatcher takes every company's waiting alerts, so rows left by an interrupted run of another test must not be counted here.
@@ -47,7 +67,11 @@ beforeAll(async () => {
   await owner.connect();
   fx = await createFixture(owner);
   // The background job is off; the tests run it by hand, with a fake delivery service.
-  app = await startApp({ LOGIN_IP_MAX_ATTEMPTS: '500', PUSH_INTERVAL_SEC: '0', PUSH_PROVIDER: 'off' });
+  app = await startApp({
+    LOGIN_IP_MAX_ATTEMPTS: '500',
+    PUSH_INTERVAL_SEC: '0',
+    PUSH_PROVIDER: 'off',
+  });
   api = makeClient(app, fx);
   dispatch = app.get(PushDispatchService);
   for (const name of ['lc1', 'lc2', 'admin']) t[name] = await api.signIn(name, { office: true });
@@ -63,7 +87,15 @@ beforeEach(clearAll);
 
 describe('registering a phone', () => {
   it('needs a sign-in and a real push token', async () => {
-    expect((await app.inject({ method: 'POST', url: '/api/v1/push-tokens', payload: { token: token('a'), platform: 'android' } })).statusCode).toBe(401);
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/api/v1/push-tokens',
+          payload: { token: token('a'), platform: 'android' },
+        })
+      ).statusCode,
+    ).toBe(401);
     expect((await register('lc1', 'not-a-token')).statusCode).toBe(400);
     expect((await register('lc1', token('a'), 'windows')).statusCode).toBe(400);
   });
@@ -71,10 +103,19 @@ describe('registering a phone', () => {
   it('saves the phone against the person and the sign-in it was registered in, and can be repeated', async () => {
     expect((await register('lc1', token('a'))).statusCode).toBe(200);
     expect((await register('lc1', token('a'))).statusCode).toBe(200);
-    const rows = (await owner.query(`SELECT user_id, session_id, platform FROM push_tokens WHERE tenant_id = $1`, [fx.tenantId])).rows;
+    const rows = (
+      await owner.query(
+        `SELECT user_id, session_id, platform FROM push_tokens WHERE tenant_id = $1`,
+        [fx.tenantId],
+      )
+    ).rows;
     expect(rows).toHaveLength(1);
     expect(rows[0].user_id).toBe(fx.user('lc1').id);
-    const session = (await owner.query(`SELECT user_id, ended_at FROM user_sessions WHERE id = $1`, [rows[0].session_id])).rows[0];
+    const session = (
+      await owner.query(`SELECT user_id, ended_at FROM user_sessions WHERE id = $1`, [
+        rows[0].session_id,
+      ])
+    ).rows[0];
     expect(session).toMatchObject({ user_id: fx.user('lc1').id, ended_at: null });
   });
 
@@ -85,13 +126,15 @@ describe('registering a phone', () => {
     expect(await tokensOf('lc2')).toEqual([token('a')]);
   });
 
-  it('removes only the signed-in person\'s own phone', async () => {
+  it("removes only the signed-in person's own phone", async () => {
     await register('lc1', token('a'));
     await register('lc2', token('b'));
     const res = await api.call('POST', '/push-tokens/remove', t.lc2!, { token: token('a') });
     expect(res.json().removed).toBe(0);
     expect(await tokensOf('lc1')).toEqual([token('a')]);
-    expect((await api.call('POST', '/push-tokens/remove', t.lc2!, { token: token('b') })).json().removed).toBe(1);
+    expect(
+      (await api.call('POST', '/push-tokens/remove', t.lc2!, { token: token('b') })).json().removed,
+    ).toBe(1);
     expect(await tokensOf('lc2')).toEqual([]);
   });
 
@@ -102,14 +145,26 @@ describe('registering a phone', () => {
 });
 
 describe('sending alerts', () => {
-  it('sends a new notification to the person\'s phone once, with the lead to open', async () => {
+  it("sends a new notification to the person's phone once, with the lead to open", async () => {
     await register('lc1', token('a'));
-    const id = await notify('lc1', { event: 'lead_assigned', name: 'Riya Sharma', leadId: 'lead-1', source: 'Google Ads' });
+    const id = await notify('lc1', {
+      event: 'lead_assigned',
+      name: 'Riya Sharma',
+      leadId: 'lead-1',
+      source: 'Google Ads',
+    });
     const fake = new FakeProvider();
 
     const first = await dispatch.runOnce(fake);
     expect(first).toMatchObject({ claimed: 1, alerts: 1, sent: 1 });
-    expect(fake.sent).toEqual([{ to: token('a'), title: 'New lead assigned: Riya Sharma', body: 'From Google Ads', data: { notificationId: id, leadId: 'lead-1' } }]);
+    expect(fake.sent).toEqual([
+      {
+        to: token('a'),
+        title: 'New lead assigned: Riya Sharma',
+        body: 'From Google Ads',
+        data: { notificationId: id, leadId: 'lead-1' },
+      },
+    ]);
     expect(await pushedAt(id)).not.toBeNull();
 
     const second = await dispatch.runOnce(fake);
@@ -147,7 +202,10 @@ describe('sending alerts', () => {
 
   it('stops alerting a phone once its sign-in has ended', async () => {
     await register('lc1', token('a'));
-    await owner.query(`UPDATE user_sessions SET ended_at = now(), ended_reason = 'revoked' WHERE user_id = $1 AND ended_at IS NULL`, [fx.user('lc1').id]);
+    await owner.query(
+      `UPDATE user_sessions SET ended_at = now(), ended_reason = 'revoked' WHERE user_id = $1 AND ended_at IS NULL`,
+      [fx.user('lc1').id],
+    );
     await notify('lc1', { event: 'missed_call', name: 'Private Lead', leadId: 'l1' });
     const fake = new FakeProvider();
     expect(await dispatch.runOnce(fake)).toMatchObject({ claimed: 1, alerts: 0 });
@@ -200,7 +258,8 @@ describe('sending alerts', () => {
 
   it('does not send the same notification twice when two passes run at once', async () => {
     await register('lc1', token('a'));
-    for (let i = 0; i < 5; i++) await notify('lc1', { event: 'missed_call', name: `Lead ${i}`, leadId: `l${i}` });
+    for (let i = 0; i < 5; i++)
+      await notify('lc1', { event: 'missed_call', name: `Lead ${i}`, leadId: `l${i}` });
     const fake = new FakeProvider();
     await Promise.all([dispatch.runOnce(fake), dispatch.runOnce(fake), dispatch.runOnce(fake)]);
     expect(fake.sent).toHaveLength(5);

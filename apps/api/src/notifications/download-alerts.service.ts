@@ -3,7 +3,14 @@ import type { AuthContext } from '../auth/auth-context.js';
 import { DatabaseService } from '../database/database.service.js';
 import { NotificationsService } from './notifications.service.js';
 
-export type DownloadKind = 'lead_export' | 'report_export' | 'salary_export' | 'payslip' | 'import_problems' | 'document' | 'recording';
+export type DownloadKind =
+  | 'lead_export'
+  | 'report_export'
+  | 'salary_export'
+  | 'payslip'
+  | 'import_problems'
+  | 'document'
+  | 'recording';
 
 /**
  * Tells every Super Admin when anyone downloads anything: an export, a report, a payslip, a student
@@ -22,17 +29,32 @@ export class DownloadAlerts {
     private readonly notifications: NotificationsService,
   ) {}
 
-  async record(auth: AuthContext, kind: DownloadKind, what: string, fileName?: string): Promise<void> {
+  async record(
+    auth: AuthContext,
+    kind: DownloadKind,
+    what: string,
+    fileName?: string,
+  ): Promise<void> {
     try {
       await this.db.withTenant(auth.tenantId, (trx) =>
         this.notifications.notifyOversight(trx, {
           tenantId: auth.tenantId,
           exceptUserId: auth.userId,
-          payload: { event: 'download', userId: auth.userId, userName: auth.name, kind, what, fileName: fileName ?? null, ip: auth.ip ?? null },
+          payload: {
+            event: 'download',
+            userId: auth.userId,
+            userName: auth.name,
+            kind,
+            what,
+            fileName: fileName ?? null,
+            ip: auth.ip ?? null,
+          },
         }),
       );
     } catch (err) {
-      this.logger.error(`could not write download alert: ${err instanceof Error ? err.message : String(err)}`);
+      this.logger.error(
+        `could not write download alert: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 }

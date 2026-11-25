@@ -14,12 +14,18 @@ describe('normalizePhone', () => {
     expect(normalizePhone(input)).toBe(expected);
   });
 
-  it.each(['', 'abc', '12345', '5876543210', '98765432101', '+0123456789', '9876 54321x', '+91 98765 4321'])(
-    'refuses %j',
-    (input) => {
-      expect(normalizePhone(input)).toBeNull();
-    },
-  );
+  it.each([
+    '',
+    'abc',
+    '12345',
+    '5876543210',
+    '98765432101',
+    '+0123456789',
+    '9876 54321x',
+    '+91 98765 4321',
+  ])('refuses %j', (input) => {
+    expect(normalizePhone(input)).toBeNull();
+  });
 
   it('gives the same result for the same number written differently', () => {
     const forms = ['9876543210', '+91 9876543210', '09876543210', '919876543210'];

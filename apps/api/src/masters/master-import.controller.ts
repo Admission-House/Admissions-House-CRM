@@ -48,7 +48,10 @@ export class MasterImportController {
 
   private async read(req: FastifyRequest) {
     const { fields, file } = await readForm(req, this.env.MAX_UPLOAD_BYTES);
-    if (!file) throw AppError.badRequest('NO_FILE', 'No file was sent', [{ field: 'file', message: 'Attach the file' }]);
+    if (!file)
+      throw AppError.badRequest('NO_FILE', 'No file was sent', [
+        { field: 'file', message: 'Attach the file' },
+      ]);
     const parsed = fieldsSchema.safeParse(fields);
     if (!parsed.success) throw new ZodValidationException(parsed.error);
     return { file, mapping: parsed.data.mapping };

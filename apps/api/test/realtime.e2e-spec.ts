@@ -18,7 +18,12 @@ beforeAll(async () => {
   await owner.connect();
   fx = await createFixture(owner);
   // A long cache for the queue counts on purpose: a live change must show at once anyway.
-  app = await startApp({ REALTIME_ENABLED: 'true', REALTIME_RECHECK_SEC: '1', LOGIN_IP_MAX_ATTEMPTS: '500', QUEUE_COUNT_CACHE_SEC: '30' });
+  app = await startApp({
+    REALTIME_ENABLED: 'true',
+    REALTIME_RECHECK_SEC: '1',
+    LOGIN_IP_MAX_ATTEMPTS: '500',
+    QUEUE_COUNT_CACHE_SEC: '30',
+  });
   await app.listen(0, '127.0.0.1');
   url = `ws://127.0.0.1:${(app.getHttpServer().address() as AddressInfo).port}/api/v1/ws`;
   api = makeClient(app, fx);
@@ -42,7 +47,12 @@ async function until(check: () => boolean, ms = 4000): Promise<void> {
   }
 }
 
-interface Conn { ws: WebSocket; events: { type: string; topics?: string[] }[]; code: () => number | undefined; refused: () => number | undefined }
+interface Conn {
+  ws: WebSocket;
+  events: { type: string; topics?: string[] }[];
+  code: () => number | undefined;
+  refused: () => number | undefined;
+}
 
 /** Opens a connection and records what comes in and how it ends. */
 function connect(headers: Record<string, string> = {}, path = '/api/v1/ws'): Conn {
@@ -52,8 +62,12 @@ function connect(headers: Record<string, string> = {}, path = '/api/v1/ws'): Con
   open.push(ws);
   const events: Conn['events'] = [];
   ws.on('message', (d) => events.push(JSON.parse(d.toString()) as Conn['events'][number]));
-  ws.on('close', (code) => { closeCode = code; });
-  ws.on('unexpected-response', (_req, res) => { refusedStatus = res.statusCode; });
+  ws.on('close', (code) => {
+    closeCode = code;
+  });
+  ws.on('unexpected-response', (_req, res) => {
+    refusedStatus = res.statusCode;
+  });
   ws.on('error', () => undefined);
   return { ws, events, code: () => closeCode, refused: () => refusedStatus };
 }
@@ -67,10 +81,14 @@ async function signedIn(token: string): Promise<Conn> {
   return c;
 }
 
-const topics = (c: Conn) => c.events.filter((e) => e.type === 'event').flatMap((e) => e.topics ?? []);
+const topics = (c: Conn) =>
+  c.events.filter((e) => e.type === 'event').flatMap((e) => e.topics ?? []);
 const idOf = (name: string) => fx.user(name).id;
 const notify = (name: string) =>
-  owner.query(`INSERT INTO notifications (tenant_id, user_id, type, payload) VALUES ($1, $2, 'lead_new', '{"event":"lead_assigned"}')`, [fx.tenantId, idOf(name)]);
+  owner.query(
+    `INSERT INTO notifications (tenant_id, user_id, type, payload) VALUES ($1, $2, 'lead_new', '{"event":"lead_assigned"}')`,
+    [fx.tenantId, idOf(name)],
+  );
 
 describe('signing in on the connection', () => {
   it('closes a connection whose first message is not a sign-in, or not JSON', async () => {
@@ -103,10 +121,20 @@ describe('signing in on the connection', () => {
 
   it('does not count the connection as activity, so it cannot keep an idle session open', async () => {
     const token = await api.signIn('idle');
-    const before = (await owner.query(`SELECT last_active_at FROM user_sessions WHERE user_id = $1 AND ended_at IS NULL`, [idOf('idle')])).rows[0].last_active_at as Date;
+    const before = (
+      await owner.query(
+        `SELECT last_active_at FROM user_sessions WHERE user_id = $1 AND ended_at IS NULL`,
+        [idOf('idle')],
+      )
+    ).rows[0].last_active_at as Date;
     await sleep(1100);
     await signedIn(token);
-    const after = (await owner.query(`SELECT last_active_at FROM user_sessions WHERE user_id = $1 AND ended_at IS NULL`, [idOf('idle')])).rows[0].last_active_at as Date;
+    const after = (
+      await owner.query(
+        `SELECT last_active_at FROM user_sessions WHERE user_id = $1 AND ended_at IS NULL`,
+        [idOf('idle')],
+      )
+    ).rows[0].last_active_at as Date;
     expect(after.getTime()).toBe(before.getTime());
   });
 });
@@ -154,7 +182,9 @@ describe('live hints', () => {
     await sleep(800);
     expect(topics(theirs)).not.toContain('notification');
     // The hint carries no data, only the topic.
-    const ev = mine.events.find((e) => e.type === 'event' && (e as { topics?: string[] }).topics?.includes('notification')) as Record<string, unknown>;
+    const ev = mine.events.find(
+      (e) => e.type === 'event' && (e as { topics?: string[] }).topics?.includes('notification'),
+    ) as Record<string, unknown>;
     expect(Object.keys(ev).sort()).toEqual(['topics', 'type']);
   });
 
@@ -173,7 +203,11 @@ describe('live hints', () => {
     const boss = await signedIn(await api.signIn('admin', { office: true }));
     const token = await api.signIn('super');
     boss.events.length = 0;
-    const res = await api.call('POST', '/leads', token, { name: 'Live Lead', phone: '9876500077', sourceId: fx.sourceId('Website') });
+    const res = await api.call('POST', '/leads', token, {
+      name: 'Live Lead',
+      phone: '9876500077',
+      sourceId: fx.sourceId('Website'),
+    });
     expect(res.statusCode, res.body).toBe(201);
     await until(() => topics(boss).includes('lead'));
   });
@@ -181,11 +215,16 @@ describe('live hints', () => {
   it('drops the cached queue counts the moment a lead changes, so the count the screen then asks for is current', async () => {
     const token = await api.signIn('super');
     const boss = await signedIn(token);
-    const total = async () => (await api.call('GET', '/leads/queues', token)).json().total as number;
+    const total = async () =>
+      (await api.call('GET', '/leads/queues', token)).json().total as number;
     const before = await total();
     expect(await total()).toBe(before); // now cached for 30 seconds
     boss.events.length = 0;
-    const res = await api.call('POST', '/leads', token, { name: 'Counted Lead', phone: '9876500088', sourceId: fx.sourceId('Website') });
+    const res = await api.call('POST', '/leads', token, {
+      name: 'Counted Lead',
+      phone: '9876500088',
+      sourceId: fx.sourceId('Website'),
+    });
     expect(res.statusCode, res.body).toBe(201);
     await until(() => topics(boss).includes('lead'));
     expect(await total()).toBe(before + 1);
@@ -195,7 +234,11 @@ describe('live hints', () => {
     const boss = await signedIn(await api.signIn('super'));
     boss.events.length = 0;
     await owner.query('BEGIN');
-    for (let i = 0; i < 5; i++) await owner.query(`INSERT INTO notifications (tenant_id, user_id, type, payload) VALUES ($1, $2, 'lead_new', '{}')`, [fx.tenantId, idOf('super')]);
+    for (let i = 0; i < 5; i++)
+      await owner.query(
+        `INSERT INTO notifications (tenant_id, user_id, type, payload) VALUES ($1, $2, 'lead_new', '{}')`,
+        [fx.tenantId, idOf('super')],
+      );
     await owner.query('COMMIT');
     await until(() => topics(boss).includes('notification'));
     await sleep(800);
@@ -206,7 +249,10 @@ describe('live hints', () => {
     const boss = await signedIn(await api.signIn('super'));
     boss.events.length = 0;
     await owner.query('BEGIN');
-    await owner.query(`INSERT INTO notifications (tenant_id, user_id, type, payload) VALUES ($1, $2, 'lead_new', '{}')`, [fx.tenantId, idOf('super')]);
+    await owner.query(
+      `INSERT INTO notifications (tenant_id, user_id, type, payload) VALUES ($1, $2, 'lead_new', '{}')`,
+      [fx.tenantId, idOf('super')],
+    );
     await owner.query('ROLLBACK');
     await sleep(1000);
     expect(topics(boss)).not.toContain('notification');

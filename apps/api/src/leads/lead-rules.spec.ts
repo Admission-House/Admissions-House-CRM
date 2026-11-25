@@ -1,7 +1,20 @@
-import { DummyDriver, Kysely, PostgresAdapter, PostgresIntrospector, PostgresQueryCompiler, sql } from 'kysely';
+import {
+  DummyDriver,
+  Kysely,
+  PostgresAdapter,
+  PostgresIntrospector,
+  PostgresQueryCompiler,
+  sql,
+} from 'kysely';
 import { AppError } from '../common/app-error.js';
 import { leadVisibility } from '../access/lead-scope.js';
-import { assertFollowUpForStatus, assertFollowUpTime, classifySearch, diffFields, likePattern } from './lead-rules.js';
+import {
+  assertFollowUpForStatus,
+  assertFollowUpTime,
+  classifySearch,
+  diffFields,
+  likePattern,
+} from './lead-rules.js';
 
 const codeOf = (fn: () => unknown): string | undefined => {
   try {
@@ -14,9 +27,21 @@ const codeOf = (fn: () => unknown): string | undefined => {
 
 describe('classifySearch', () => {
   it('tries both a Lead ID and part of a phone number for 4 to 7 bare digits', () => {
-    expect(classifySearch('98861')).toEqual({ kind: 'lead_no_or_phone', value: '98861', digits: '98861' });
-    expect(classifySearch('0007')).toEqual({ kind: 'lead_no_or_phone', value: '7', digits: '0007' });
-    expect(classifySearch('9886117')).toEqual({ kind: 'lead_no_or_phone', value: '9886117', digits: '9886117' });
+    expect(classifySearch('98861')).toEqual({
+      kind: 'lead_no_or_phone',
+      value: '98861',
+      digits: '98861',
+    });
+    expect(classifySearch('0007')).toEqual({
+      kind: 'lead_no_or_phone',
+      value: '7',
+      digits: '0007',
+    });
+    expect(classifySearch('9886117')).toEqual({
+      kind: 'lead_no_or_phone',
+      value: '9886117',
+      digits: '9886117',
+    });
   });
 
   it.each([
@@ -40,9 +65,12 @@ describe('classifySearch', () => {
     expect(classifySearch(input)).toEqual({ kind: 'phone', value });
   });
 
-  it.each(['Riya', 'riya@example.com', '  Riya Sharma ', 'B.Tech 2026'])('%s is a name or email', (input) => {
-    expect(classifySearch(input)).toEqual({ kind: 'text', value: input.trim() });
-  });
+  it.each(['Riya', 'riya@example.com', '  Riya Sharma ', 'B.Tech 2026'])(
+    '%s is a name or email',
+    (input) => {
+      expect(classifySearch(input)).toEqual({ kind: 'text', value: input.trim() });
+    },
+  );
 
   it('gives nothing for an empty box', () => {
     expect(classifySearch('   ')).toBeNull();
@@ -60,7 +88,13 @@ describe('likePattern', () => {
 describe('diffFields', () => {
   const fields = ['name', 'email', 'intent'];
   it('lists only what changed', () => {
-    expect(diffFields({ name: 'Riya', email: 'a@b.co', intent: 'cold' }, { name: 'Riya', email: 'x@y.co', intent: 'hot' }, fields)).toEqual([
+    expect(
+      diffFields(
+        { name: 'Riya', email: 'a@b.co', intent: 'cold' },
+        { name: 'Riya', email: 'x@y.co', intent: 'hot' },
+        fields,
+      ),
+    ).toEqual([
       { field: 'email', oldValue: 'a@b.co', newValue: 'x@y.co' },
       { field: 'intent', oldValue: 'cold', newValue: 'hot' },
     ]);
@@ -72,12 +106,18 @@ describe('diffFields', () => {
   });
 
   it('records a field being filled in or cleared', () => {
-    expect(diffFields({ intent: null }, { intent: 'hot' }, fields)).toEqual([{ field: 'intent', oldValue: null, newValue: 'hot' }]);
-    expect(diffFields({ intent: 'hot' }, { intent: null }, fields)).toEqual([{ field: 'intent', oldValue: 'hot', newValue: null }]);
+    expect(diffFields({ intent: null }, { intent: 'hot' }, fields)).toEqual([
+      { field: 'intent', oldValue: null, newValue: 'hot' },
+    ]);
+    expect(diffFields({ intent: 'hot' }, { intent: null }, fields)).toEqual([
+      { field: 'intent', oldValue: 'hot', newValue: null },
+    ]);
   });
 
   it('ignores fields that were not sent and fields it was not asked about', () => {
-    expect(diffFields({ name: 'A', email: 'a@b.co' }, { name: 'B' }, fields)).toEqual([{ field: 'name', oldValue: 'A', newValue: 'B' }]);
+    expect(diffFields({ name: 'A', email: 'a@b.co' }, { name: 'B' }, fields)).toEqual([
+      { field: 'name', oldValue: 'A', newValue: 'B' },
+    ]);
     expect(diffFields({ secret: 1 }, { secret: 2 }, fields)).toEqual([]);
   });
 
@@ -96,8 +136,12 @@ describe('assertFollowUpForStatus', () => {
     expect(codeOf(() => assertFollowUpForStatus(needs, false, true))).toBeUndefined();
   });
   it('asks for nothing from other statuses, and never from a closed one', () => {
-    expect(codeOf(() => assertFollowUpForStatus({ ...needs, requiresFollowup: false }, false, false))).toBeUndefined();
-    expect(codeOf(() => assertFollowUpForStatus({ ...needs, isOpen: false }, false, false))).toBeUndefined();
+    expect(
+      codeOf(() => assertFollowUpForStatus({ ...needs, requiresFollowup: false }, false, false)),
+    ).toBeUndefined();
+    expect(
+      codeOf(() => assertFollowUpForStatus({ ...needs, isOpen: false }, false, false)),
+    ).toBeUndefined();
   });
 });
 
@@ -106,7 +150,9 @@ describe('assertFollowUpTime', () => {
   it('accepts the future and a few seconds ago, refuses the past', () => {
     expect(codeOf(() => assertFollowUpTime(new Date('2026-10-28T10:30:00Z'), now))).toBeUndefined();
     expect(codeOf(() => assertFollowUpTime(new Date('2026-10-28T09:59:30Z'), now))).toBeUndefined();
-    expect(codeOf(() => assertFollowUpTime(new Date('2026-10-28T09:00:00Z'), now))).toBe('FOLLOWUP_IN_PAST');
+    expect(codeOf(() => assertFollowUpTime(new Date('2026-10-28T09:00:00Z'), now))).toBe(
+      'FOLLOWUP_IN_PAST',
+    );
   });
 });
 
@@ -139,7 +185,9 @@ describe('leadVisibility', () => {
     expect(plain).toContain('manager_id');
     expect(plain.toLowerCase()).not.toContain('is null');
 
-    const withPool = sqlOf(leadVisibility({ ...base, dataScope: 'team', permissions: new Set(['lead.assign']) }));
+    const withPool = sqlOf(
+      leadVisibility({ ...base, dataScope: 'team', permissions: new Set(['lead.assign']) }),
+    );
     expect(withPool.toLowerCase()).toContain('"l"."assigned_to" is null');
   });
 });

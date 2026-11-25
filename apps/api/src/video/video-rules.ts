@@ -18,7 +18,8 @@ export const REMINDER_MINUTES = 10;
 export type SessionKind = 'video' | 'voice';
 /** A call is one-to-one; a meeting is planned, may have a title and many people. */
 export type SessionType = 'call' | 'meeting';
-export type InviteState = 'invited' | 'ringing' | 'accepted' | 'declined' | 'missed' | 'busy' | 'removed';
+export type InviteState =
+  'invited' | 'ringing' | 'accepted' | 'declined' | 'missed' | 'busy' | 'removed';
 export type Outcome = 'completed' | 'missed' | 'declined' | 'busy' | 'cancelled' | 'failed';
 
 /** At least this many people are counted in a call, whoever has joined so far. */
@@ -31,8 +32,10 @@ export const MIN_PEOPLE_IN_CALL = 2;
 export const STANDARD_PER_PERSON_MINUTE: Record<SessionKind, number> = { voice: 1, video: 4 };
 
 /** Standard minutes used by one minute of a call of this kind with this many people. */
-export const standardPerCallMinute = (kind: SessionKind, people: number = MIN_PEOPLE_IN_CALL): number =>
-  Math.max(people, MIN_PEOPLE_IN_CALL) * STANDARD_PER_PERSON_MINUTE[kind];
+export const standardPerCallMinute = (
+  kind: SessionKind,
+  people: number = MIN_PEOPLE_IN_CALL,
+): number => Math.max(people, MIN_PEOPLE_IN_CALL) * STANDARD_PER_PERSON_MINUTE[kind];
 
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const INVITE_TOKEN = new RegExp(`^(${UUID})\\.(${UUID})\\.([A-Za-z0-9_-]{43})$`, 'i');
@@ -41,14 +44,20 @@ const INVITE_TOKEN = new RegExp(`^(${UUID})\\.(${UUID})\\.([A-Za-z0-9_-]{43})$`,
 export const channelOf = (sessionId: string): string => `ah${sessionId.replace(/-/g, '')}`;
 
 const mac = (secret: string, tenantId: string, inviteId: string, version: number): string =>
-  createHmac('sha256', secret).update(`invite:${tenantId}:${inviteId}:${version}`).digest('base64url');
+  createHmac('sha256', secret)
+    .update(`invite:${tenantId}:${inviteId}:${version}`)
+    .digest('base64url');
 
 /**
  * The secret part of a guest's link. It belongs to one invitation and one version of it: whoever holds it
  * can join that one session as that one guest, nothing else. Raising the version cancels older links.
  */
-export const inviteToken = (secret: string, tenantId: string, inviteId: string, version: number): string =>
-  `${tenantId}.${inviteId}.${mac(secret, tenantId, inviteId, version)}`;
+export const inviteToken = (
+  secret: string,
+  tenantId: string,
+  inviteId: string,
+  version: number,
+): string => `${tenantId}.${inviteId}.${mac(secret, tenantId, inviteId, version)}`;
 
 export interface ParsedInviteToken {
   tenantId: string;
@@ -63,7 +72,11 @@ export function parseInviteToken(token: string): ParsedInviteToken | null {
 }
 
 /** Whether the link was made for this invitation at this version. */
-export function inviteTokenGenuine(secret: string, parsed: ParsedInviteToken, version: number): boolean {
+export function inviteTokenGenuine(
+  secret: string,
+  parsed: ParsedInviteToken,
+  version: number,
+): boolean {
   const given = Buffer.from(parsed.mac);
   const expected = Buffer.from(mac(secret, parsed.tenantId, parsed.inviteId, version));
   return given.length === expected.length && timingSafeEqual(given, expected);
@@ -77,9 +90,23 @@ export const randomUid = (random: (max: number) => number): number => 1 + random
  * It is renewed while the person is still allowed in, so ending a session or removing someone takes effect
  * within one token life even for a screen that stays open.
  */
-export function buildRtcToken(appId: string, certificate: string, channel: string, uid: number, seconds: number): string {
+export function buildRtcToken(
+  appId: string,
+  certificate: string,
+  channel: string,
+  uid: number,
+  seconds: number,
+): string {
   const life = Math.max(30, Math.floor(seconds));
-  return agora.RtcTokenBuilder.buildTokenWithUid(appId, certificate, channel, uid, agora.RtcRole.PUBLISHER, life, life);
+  return agora.RtcTokenBuilder.buildTokenWithUid(
+    appId,
+    certificate,
+    channel,
+    uid,
+    agora.RtcRole.PUBLISHER,
+    life,
+    life,
+  );
 }
 
 export interface SessionClock {
@@ -102,18 +129,31 @@ export function sessionProblem(s: SessionClock, now: Date): SessionProblem {
     return null;
   }
   if (now.getTime() >= new Date(s.expires_at).getTime()) return 'link_expired';
-  if (s.scheduled_for && now.getTime() < new Date(s.scheduled_for).getTime() - EARLY_JOIN_MINUTES * 60_000) return 'too_early';
+  if (
+    s.scheduled_for &&
+    now.getTime() < new Date(s.scheduled_for).getTime() - EARLY_JOIN_MINUTES * 60_000
+  )
+    return 'too_early';
   return null;
 }
 
 /** Seconds of call time left. A session that has not started has all of it. */
-export function secondsLeft(s: Pick<SessionClock, 'started_at' | 'max_minutes'>, now: Date): number {
+export function secondsLeft(
+  s: Pick<SessionClock, 'started_at' | 'max_minutes'>,
+  now: Date,
+): number {
   if (!s.started_at) return s.max_minutes * 60;
-  return Math.max(0, Math.floor((new Date(s.started_at).getTime() + s.max_minutes * 60_000 - now.getTime()) / 1000));
+  return Math.max(
+    0,
+    Math.floor((new Date(s.started_at).getTime() + s.max_minutes * 60_000 - now.getTime()) / 1000),
+  );
 }
 
 /** Whether someone's screen has reported recently enough to count as connected. */
-export function isConnected(i: { joined_at: Date | string | null; last_seen_at: Date | string | null }, now: Date): boolean {
+export function isConnected(
+  i: { joined_at: Date | string | null; last_seen_at: Date | string | null },
+  now: Date,
+): boolean {
   if (!i.joined_at || !i.last_seen_at) return false;
   return now.getTime() - new Date(i.last_seen_at).getTime() < PRESENCE_STALE_SECONDS * 1000;
 }

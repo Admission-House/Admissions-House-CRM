@@ -23,7 +23,10 @@ export function decodeCursor<T>(cursor: string | undefined, shape: z.ZodType<T>)
   try {
     return shape.parse(JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')));
   } catch {
-    throw AppError.badRequest('INVALID_CURSOR', 'The page marker is not valid. Start again from the first page.');
+    throw AppError.badRequest(
+      'INVALID_CURSOR',
+      'The page marker is not valid. Start again from the first page.',
+    );
   }
 }
 

@@ -23,10 +23,21 @@ export interface MonthSummary {
 @Injectable()
 export class AttendanceSummaryService {
   /** `month` is the first day of the month, as YYYY-MM-01. */
-  async forMonth(trx: Trx, userIds: readonly string[], month: string): Promise<Map<string, MonthSummary>> {
+  async forMonth(
+    trx: Trx,
+    userIds: readonly string[],
+    month: string,
+  ): Promise<Map<string, MonthSummary>> {
     const out = new Map<string, MonthSummary>();
     if (userIds.length === 0) return out;
-    const { rows } = await sql<{ user_id: string; working: number; present: number; late: number; late_min: number; leave_days: number }>`
+    const { rows } = await sql<{
+      user_id: string;
+      working: number;
+      present: number;
+      late: number;
+      late_min: number;
+      leave_days: number;
+    }>`
       WITH tz AS (SELECT timezone FROM tenants LIMIT 1),
       days AS (
         SELECT d::date AS day FROM generate_series(${month}::date, (${month}::date + interval '1 month - 1 day')::date, interval '1 day') d
@@ -50,7 +61,12 @@ export class AttendanceSummaryService {
       FROM users u WHERE u.id = ANY(${userIds as string[]}::uuid[])`.execute(trx);
     for (const r of rows) {
       out.set(r.user_id, {
-        userId: r.user_id, workingDays: r.working, present: r.present, late: r.late, lateMinutes: r.late_min, leaveDays: r.leave_days,
+        userId: r.user_id,
+        workingDays: r.working,
+        present: r.present,
+        late: r.late,
+        lateMinutes: r.late_min,
+        leaveDays: r.leave_days,
         absent: Math.max(0, r.working - r.present - r.leave_days),
       });
     }

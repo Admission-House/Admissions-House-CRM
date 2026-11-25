@@ -49,6 +49,7 @@ export class CircuitBreaker {
   failure(): void {
     this.trialInFlight = false;
     this.failures += 1;
-    if (this.openedAt !== null || this.failures >= this.failureThreshold) this.openedAt = this.now();
+    if (this.openedAt !== null || this.failures >= this.failureThreshold)
+      this.openedAt = this.now();
   }
 }

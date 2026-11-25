@@ -21,7 +21,8 @@ beforeAll(async () => {
   app = await startApp({ LOGIN_IP_MAX_ATTEMPTS: '500' });
   api = makeClient(app, fx);
   t.sa = await api.signIn('super');
-  for (const name of ['admin', 'admin2', 'lc1', 'lc2']) t[name] = await api.signIn(name, { office: true });
+  for (const name of ['admin', 'admin2', 'lc1', 'lc2'])
+    t[name] = await api.signIn(name, { office: true });
 });
 
 /** Places made for a test. They are shared lists, so they are removed once the leads that point at them are gone. */
@@ -30,7 +31,10 @@ const testPlaces: string[] = [];
 afterAll(async () => {
   await app?.close();
   await fx?.cleanup();
-  if (testPlaces.length > 0) await owner?.query(`DELETE FROM locations WHERE name = ANY($1) AND type = 'city'`, [testPlaces]).then(() => owner.query(`DELETE FROM locations WHERE name = ANY($1)`, [testPlaces]));
+  if (testPlaces.length > 0)
+    await owner
+      ?.query(`DELETE FROM locations WHERE name = ANY($1) AND type = 'city'`, [testPlaces])
+      .then(() => owner.query(`DELETE FROM locations WHERE name = ANY($1)`, [testPlaces]));
   await owner?.end();
 });
 
@@ -45,12 +49,25 @@ const file = (data: Buffer, filename = 'leads.csv'): UploadFile => ({ filename, 
 
 function post(token: string, path: string, fields: Record<string, string>, files: UploadFile[]) {
   const { payload, contentType } = multipart(fields, files);
-  return app.inject({ method: 'POST', url: `/api/v1/leads/import${path}`, payload, headers: { authorization: `Bearer ${token}`, 'content-type': contentType } });
+  return app.inject({
+    method: 'POST',
+    url: `/api/v1/leads/import${path}`,
+    payload,
+    headers: { authorization: `Bearer ${token}`, 'content-type': contentType },
+  });
 }
-const preview = (token: string, f: UploadFile, fields: Record<string, string> = {}) => post(token, '/preview', fields, [f]);
-const start = (token: string, f: UploadFile, fields: Record<string, string> = {}) => post(token, '', { sourceId: fx.sourceId('Meta Ads'), ...fields }, [f]);
+const preview = (token: string, f: UploadFile, fields: Record<string, string> = {}) =>
+  post(token, '/preview', fields, [f]);
+const start = (token: string, f: UploadFile, fields: Record<string, string> = {}) =>
+  post(token, '', { sourceId: fx.sourceId('Meta Ads'), ...fields }, [f]);
 
-type Batch = { id: string; status: string; totals: Record<string, number>; assigned: Record<string, number>; assign: { mode: string } };
+type Batch = {
+  id: string;
+  status: string;
+  totals: Record<string, number>;
+  assigned: Record<string, number>;
+  assign: { mode: string };
+};
 async function finished(token: string, id: string): Promise<Batch> {
   for (let i = 0; i < 100; i++) {
     const res = await api.call('GET', `/leads/import/${id}`, token);
@@ -65,8 +82,18 @@ async function runImport(token: string, f: UploadFile, fields: Record<string, st
   expect(res.statusCode, res.body).toBe(202);
   return finished(token, res.json().id);
 }
-const leadByPhone = async (p: string) => (await owner.query(`SELECT * FROM leads WHERE tenant_id = $1 AND primary_phone = $2 AND deleted_at IS NULL`, [fx.tenantId, `91${p}`])).rows[0];
-const leadCount = async () => Number((await owner.query(`SELECT count(*) FROM leads WHERE tenant_id = $1`, [fx.tenantId])).rows[0].count);
+const leadByPhone = async (p: string) =>
+  (
+    await owner.query(
+      `SELECT * FROM leads WHERE tenant_id = $1 AND primary_phone = $2 AND deleted_at IS NULL`,
+      [fx.tenantId, `91${p}`],
+    )
+  ).rows[0];
+const leadCount = async () =>
+  Number(
+    (await owner.query(`SELECT count(*) FROM leads WHERE tenant_id = $1`, [fx.tenantId])).rows[0]
+      .count,
+  );
 const setPolicy = (duplicateAction: 'attach' | 'reject') =>
   owner.query(
     `INSERT INTO lead_policies (tenant_id, duplicate_action, auto_assign) VALUES ($1, $2, true)
@@ -80,14 +107,32 @@ describe('previewing a file', () => {
   it('says what would happen and saves nothing', async () => {
     const dup = phone();
     const before = await leadCount();
-    await api.call('POST', '/leads', t.lc1!, { name: 'Already Here', phone: dup, sourceId: fx.sourceId('Website') });
+    await api.call('POST', '/leads', t.lc1!, {
+      name: 'Already Here',
+      phone: dup,
+      sourceId: fx.sourceId('Website'),
+    });
     const res = await preview(
       t.admin!,
-      file(csv('Student Name,Mobile No.,E-mail,Course,Remarks', `Riya,${phone()},riya@example.com,B.Tech,call late`, `Asha,${dup},,MBA,`, `Repeat,${dup},,,`, 'No Phone,,,,', 'Bad Phone,12345,,,')),
+      file(
+        csv(
+          'Student Name,Mobile No.,E-mail,Course,Remarks',
+          `Riya,${phone()},riya@example.com,B.Tech,call late`,
+          `Asha,${dup},,MBA,`,
+          `Repeat,${dup},,,`,
+          'No Phone,,,,',
+          'Bad Phone,12345,,,',
+        ),
+      ),
     );
     expect(res.statusCode, res.body).toBe(200);
     const p = res.json();
-    expect(p.mapping).toEqual({ name: 'Student Name', phone: 'Mobile No.', email: 'E-mail', interest: 'Course' });
+    expect(p.mapping).toEqual({
+      name: 'Student Name',
+      phone: 'Mobile No.',
+      email: 'E-mail',
+      interest: 'Course',
+    });
     expect(p.unmappedColumns).toEqual(['Remarks']);
     expect(p.missing).toEqual([]);
     expect(p.totals).toEqual({ rows: 5, valid: 3, invalid: 2, repeatedInFile: 1, alreadyInCrm: 1 });
@@ -109,7 +154,9 @@ describe('previewing a file', () => {
     const first = await preview(t.admin!, file(data));
     expect(first.json().missing).toEqual(['name', 'phone']);
     expect(first.json().totals.valid).toBe(0);
-    const fixed = await preview(t.admin!, file(data), { mapping: JSON.stringify({ name: 'Candidate', phone: 'Number' }) });
+    const fixed = await preview(t.admin!, file(data), {
+      mapping: JSON.stringify({ name: 'Candidate', phone: 'Number' }),
+    });
     expect(fixed.json()).toMatchObject({ missing: [], totals: { valid: 1, invalid: 0 } });
   });
 
@@ -119,13 +166,32 @@ describe('previewing a file', () => {
       [{ value: 'Riya', type: String }, { value: 919876543210 }],
     ]).toBuffer();
     const res = await preview(t.admin!, file(xlsx, 'leads.xlsx'));
-    expect(res.json()).toMatchObject({ fileName: 'leads.xlsx', totals: { valid: 1 }, sample: [{ name: 'Riya', phone: '919876543210' }] });
+    expect(res.json()).toMatchObject({
+      fileName: 'leads.xlsx',
+      totals: { valid: 1 },
+      sample: [{ name: 'Riya', phone: '919876543210' }],
+    });
   });
 
   it.each([
-    ['a program named like a spreadsheet', file(Buffer.concat([Buffer.from('MZ'), Buffer.alloc(200)]), 'leads.csv'), 415, 'NOT_A_SPREADSHEET'],
-    ['an old .xls file', file(Buffer.concat([Buffer.from([0xd0, 0xcf, 0x11, 0xe0]), Buffer.alloc(200)]), 'leads.xls'), 415, 'OLD_EXCEL'],
-    ['a file that is not UTF-8', file(Buffer.from([0x4e, 0x0a, 0x52, 0xe9, 0x0a]), 'leads.csv'), 400, 'NOT_UTF8'],
+    [
+      'a program named like a spreadsheet',
+      file(Buffer.concat([Buffer.from('MZ'), Buffer.alloc(200)]), 'leads.csv'),
+      415,
+      'NOT_A_SPREADSHEET',
+    ],
+    [
+      'an old .xls file',
+      file(Buffer.concat([Buffer.from([0xd0, 0xcf, 0x11, 0xe0]), Buffer.alloc(200)]), 'leads.xls'),
+      415,
+      'OLD_EXCEL',
+    ],
+    [
+      'a file that is not UTF-8',
+      file(Buffer.from([0x4e, 0x0a, 0x52, 0xe9, 0x0a]), 'leads.csv'),
+      400,
+      'NOT_UTF8',
+    ],
     ['an empty file', file(Buffer.alloc(0)), 400, 'EMPTY_SHEET'],
   ])('refuses %s', async (_n, f, status, code) => {
     const res = await preview(t.admin!, f);
@@ -141,10 +207,29 @@ describe('previewing a file', () => {
   });
 
   it('refuses a request that is not an upload, or has no file, or bad column choices', async () => {
-    expect(errorCode(await app.inject({ method: 'POST', url: '/api/v1/leads/import/preview', payload: {}, headers: { authorization: `Bearer ${t.admin}` } }))).toBe('NOT_MULTIPART');
+    expect(
+      errorCode(
+        await app.inject({
+          method: 'POST',
+          url: '/api/v1/leads/import/preview',
+          payload: {},
+          headers: { authorization: `Bearer ${t.admin}` },
+        }),
+      ),
+    ).toBe('NOT_MULTIPART');
     expect(errorCode(await post(t.admin!, '/preview', {}, []))).toBe('NO_FILE');
-    expect(errorCode(await preview(t.admin!, file(csv('Name,Mobile', `a,${phone()}`)), { mapping: 'not json' }))).toBe('VALIDATION_FAILED');
-    expect(errorCode(await preview(t.admin!, file(csv('Name,Mobile', `a,${phone()}`)), { mapping: JSON.stringify({ salary: 'Name' }) }))).toBe('VALIDATION_FAILED');
+    expect(
+      errorCode(
+        await preview(t.admin!, file(csv('Name,Mobile', `a,${phone()}`)), { mapping: 'not json' }),
+      ),
+    ).toBe('VALIDATION_FAILED');
+    expect(
+      errorCode(
+        await preview(t.admin!, file(csv('Name,Mobile', `a,${phone()}`)), {
+          mapping: JSON.stringify({ salary: 'Name' }),
+        }),
+      ),
+    ).toBe('VALIDATION_FAILED');
   });
 });
 
@@ -154,45 +239,108 @@ describe('importing leads', () => {
   it('files every good row, gives them to the chosen person, and reports the rest', async () => {
     await setPolicy('attach');
     const [a, b] = [phone(), phone()];
-    const data = csv('Name,Phone,Email,City', `Riya Sharma,${a},riya@example.com,Delhi`, `Asha K,+91 ${b.slice(0, 5)} ${b.slice(5)},,`, 'No Phone,,,', 'Bad,123,,');
-    const res = await start(t.admin!, file(data, 'October Batch.csv'), { assign: 'user', userId: fx.user('lc1').id });
+    const data = csv(
+      'Name,Phone,Email,City',
+      `Riya Sharma,${a},riya@example.com,Delhi`,
+      `Asha K,+91 ${b.slice(0, 5)} ${b.slice(5)},,`,
+      'No Phone,,,',
+      'Bad,123,,',
+    );
+    const res = await start(t.admin!, file(data, 'October Batch.csv'), {
+      assign: 'user',
+      userId: fx.user('lc1').id,
+    });
     expect(res.statusCode, res.body).toBe(202);
-    expect(res.json()).toMatchObject({ fileName: 'October Batch.csv', status: expect.stringMatching(/queued|processing|done/), source: { name: 'Meta Ads' }, assign: { mode: 'user', user: { name: 'lc1' } } });
+    expect(res.json()).toMatchObject({
+      fileName: 'October Batch.csv',
+      status: expect.stringMatching(/queued|processing|done/),
+      source: { name: 'Meta Ads' },
+      assign: { mode: 'user', user: { name: 'lc1' } },
+    });
 
     const done = await finished(t.admin!, res.json().id);
-    expect(done.totals).toEqual({ rows: 4, invalid: 2, toFile: 2, processed: 2, created: 2, attached: 0, rejected: 0, failed: 0 });
+    expect(done.totals).toEqual({
+      rows: 4,
+      invalid: 2,
+      toFile: 2,
+      processed: 2,
+      created: 2,
+      attached: 0,
+      rejected: 0,
+      failed: 0,
+    });
     expect(done.assigned).toEqual({ [fx.user('lc1').id]: 2 });
 
     const lead = await leadByPhone(a);
-    expect(lead).toMatchObject({ name: 'Riya Sharma', email: 'riya@example.com', assigned_to: fx.user('lc1').id });
+    expect(lead).toMatchObject({
+      name: 'Riya Sharma',
+      email: 'riya@example.com',
+      assigned_to: fx.user('lc1').id,
+    });
     expect((await leadByPhone(b)).assigned_to).toBe(fx.user('lc1').id);
-    const source = (await owner.query(`SELECT s.name FROM lead_sources s WHERE s.id = $1`, [lead.source_id])).rows[0].name;
+    const source = (
+      await owner.query(`SELECT s.name FROM lead_sources s WHERE s.id = $1`, [lead.source_id])
+    ).rows[0].name;
     expect(source).toBe('Meta Ads');
-    const enquiry = (await owner.query(`SELECT form_name FROM lead_enquiries WHERE lead_id = $1`, [lead.id])).rows[0];
+    const enquiry = (
+      await owner.query(`SELECT form_name FROM lead_enquiries WHERE lead_id = $1`, [lead.id])
+    ).rows[0];
     expect(enquiry.form_name).toBe('import: October Batch.csv');
 
-    const trail = (await api.call('GET', `/leads/${lead.id}/activities?limit=50`, t.lc1!)).json().items.map((x: { type: string; remark: string }) => `${x.type}:${x.remark}`);
+    const trail = (await api.call('GET', `/leads/${lead.id}/activities?limit=50`, t.lc1!))
+      .json()
+      .items.map((x: { type: string; remark: string }) => `${x.type}:${x.remark}`);
     expect(trail).toContain('assignment:Assigned to lc1');
   });
 
   it('sends one summary instead of a notification for every lead', async () => {
     const rows = Array.from({ length: 6 }, (_v, i) => `Bulk ${i},${phone()}`);
-    const done = await runImport(t.admin!, file(csv('Name,Phone', ...rows)), { assign: 'user', userId: fx.user('lc2').id });
+    const done = await runImport(t.admin!, file(csv('Name,Phone', ...rows)), {
+      assign: 'user',
+      userId: fx.user('lc2').id,
+    });
     expect(done.totals.created).toBe(6);
 
-    const lc2 = (await owner.query(`SELECT type, payload FROM notifications WHERE user_id = $1 AND payload->>'batchId' = $2`, [fx.user('lc2').id, done.id])).rows;
+    const lc2 = (
+      await owner.query(
+        `SELECT type, payload FROM notifications WHERE user_id = $1 AND payload->>'batchId' = $2`,
+        [fx.user('lc2').id, done.id],
+      )
+    ).rows;
     expect(lc2).toHaveLength(1);
-    expect(lc2[0]).toMatchObject({ type: 'assignment', payload: { event: 'leads_imported', count: 6 } });
-    const mine = (await owner.query(`SELECT payload FROM notifications WHERE user_id = $1 AND payload->>'batchId' = $2`, [fx.user('admin').id, done.id])).rows;
+    expect(lc2[0]).toMatchObject({
+      type: 'assignment',
+      payload: { event: 'leads_imported', count: 6 },
+    });
+    const mine = (
+      await owner.query(
+        `SELECT payload FROM notifications WHERE user_id = $1 AND payload->>'batchId' = $2`,
+        [fx.user('admin').id, done.id],
+      )
+    ).rows;
     expect(mine).toHaveLength(1);
-    expect(mine[0].payload).toMatchObject({ event: 'import_finished', created: 6, attached: 0, failed: 0 });
-    const perLead = (await owner.query(`SELECT count(*) FROM notifications WHERE tenant_id = $1 AND payload->>'event' = 'lead_assigned' AND payload->>'name' LIKE 'Bulk %'`, [fx.tenantId])).rows[0].count;
+    expect(mine[0].payload).toMatchObject({
+      event: 'import_finished',
+      created: 6,
+      attached: 0,
+      failed: 0,
+    });
+    const perLead = (
+      await owner.query(
+        `SELECT count(*) FROM notifications WHERE tenant_id = $1 AND payload->>'event' = 'lead_assigned' AND payload->>'name' LIKE 'Bulk %'`,
+        [fx.tenantId],
+      )
+    ).rows[0].count;
     expect(Number(perLead)).toBe(0);
   });
 
   it('has a small sheet filed by the time the answer comes back, without waiting for a later sweep', async () => {
     const phones = [phone(), phone()];
-    const res = await start(t.admin!, file(csv('Name,Phone', ...phones.map((p, i) => `Quick ${i},${p}`))), { assign: 'none' });
+    const res = await start(
+      t.admin!,
+      file(csv('Name,Phone', ...phones.map((p, i) => `Quick ${i},${p}`))),
+      { assign: 'none' },
+    );
     expect(res.statusCode, res.body).toBe(202);
     expect(res.json().status).toBe('done');
     expect(res.json().totals.created).toBe(2);
@@ -202,101 +350,252 @@ describe('importing leads', () => {
     const suffix = Math.random().toString(36).slice(2, 10);
     const stateName = `Teststate ${suffix}`;
     const cityName = `Testcity ${suffix}`;
-    const state = (await owner.query(`INSERT INTO locations (type, name) VALUES ('state', $1) RETURNING id`, [stateName])).rows[0].id;
-    await owner.query(`INSERT INTO locations (type, name, parent_id) VALUES ('city', $1, $2)`, [cityName, state]);
+    const state = (
+      await owner.query(`INSERT INTO locations (type, name) VALUES ('state', $1) RETURNING id`, [
+        stateName,
+      ])
+    ).rows[0].id;
+    await owner.query(`INSERT INTO locations (type, name, parent_id) VALUES ('city', $1, $2)`, [
+      cityName,
+      state,
+    ]);
     testPlaces.push(cityName, stateName);
     {
       const p = phone();
-      const done = await runImport(t.admin!, file(csv('Name,Phone,City,Stream,Level,Course,Qualification,Parent name,Alternate phone', `Detail Student,${p},${cityName},Engineering,PG,MBA,B.Com,Rajesh Kumar,9811122233`)), { assign: 'none' });
+      const done = await runImport(
+        t.admin!,
+        file(
+          csv(
+            'Name,Phone,City,Stream,Level,Course,Qualification,Parent name,Alternate phone',
+            `Detail Student,${p},${cityName},Engineering,PG,MBA,B.Com,Rajesh Kumar,9811122233`,
+          ),
+        ),
+        { assign: 'none' },
+      );
       expect(done.totals.created).toBe(1);
 
       const row = await leadByPhone(p);
-      const notes = (await owner.query(`SELECT remark FROM lead_activities WHERE lead_id = $1 AND type = 'note'`, [row.id])).rows.map((r) => r.remark as string);
+      const notes = (
+        await owner.query(
+          `SELECT remark FROM lead_activities WHERE lead_id = $1 AND type = 'note'`,
+          [row.id],
+        )
+      ).rows.map((r) => r.remark as string);
       expect(notes).toHaveLength(1);
-      expect(notes[0]).toBe('Other details from the file: Qualification: B.Com; Parent name: Rajesh Kumar; Alternate phone: 9811122233');
+      expect(notes[0]).toBe(
+        'Other details from the file: Qualification: B.Com; Parent name: Rajesh Kumar; Alternate phone: 9811122233',
+      );
 
       const exported = (await api.call('GET', '/leads/export?q=Detail%20Student', t.sa!)).body;
       const line = (parse(exported, { bom: true, columns: true }) as Record<string, string>[])[0]!;
-      expect(line).toMatchObject({ Name: 'Detail Student', City: cityName, Stream: 'Engineering', Level: 'PG' });
+      expect(line).toMatchObject({
+        Name: 'Detail Student',
+        City: cityName,
+        Stream: 'Engineering',
+        Level: 'PG',
+      });
 
       const listed = (await api.call('GET', '/leads?q=Detail%20Student', t.sa!)).json().items[0];
-      expect(listed).toMatchObject({ name: 'Detail Student', email: null, course: 'MBA', region: cityName, source: { name: 'Meta Ads' } });
+      expect(listed).toMatchObject({
+        name: 'Detail Student',
+        email: null,
+        course: 'MBA',
+        region: cityName,
+        source: { name: 'Meta Ads' },
+      });
     }
   });
 
   it('shows a city the company does not have yet as the region, and the course as typed', async () => {
     const p = phone();
-    await runImport(t.admin!, file(csv('Name,Phone,City,Course,Email', `Far Away Student,${p},Unlistedville,BBA,far@example.com`)), { assign: 'none' });
+    await runImport(
+      t.admin!,
+      file(
+        csv(
+          'Name,Phone,City,Course,Email',
+          `Far Away Student,${p},Unlistedville,BBA,far@example.com`,
+        ),
+      ),
+      { assign: 'none' },
+    );
     const listed = (await api.call('GET', '/leads?q=Far%20Away', t.sa!)).json().items[0];
-    expect(listed).toMatchObject({ name: 'Far Away Student', email: 'far@example.com', course: 'BBA', region: 'Unlistedville' });
+    expect(listed).toMatchObject({
+      name: 'Far Away Student',
+      email: 'far@example.com',
+      course: 'BBA',
+      region: 'Unlistedville',
+    });
   });
 
   it('adds the details of a repeat row to the note history of the lead that already has the number', async () => {
     await setPolicy('attach');
     const p = phone();
-    await runImport(t.admin!, file(csv('Name,Phone,Qualification', `First Entry,${p},12th`)), { assign: 'none' });
-    await runImport(t.admin!, file(csv('Name,Phone,Qualification', `Second Entry,${p},Graduate`)), { assign: 'none' });
+    await runImport(t.admin!, file(csv('Name,Phone,Qualification', `First Entry,${p},12th`)), {
+      assign: 'none',
+    });
+    await runImport(t.admin!, file(csv('Name,Phone,Qualification', `Second Entry,${p},Graduate`)), {
+      assign: 'none',
+    });
     const row = await leadByPhone(p);
-    const notes = (await owner.query(`SELECT remark FROM lead_activities WHERE lead_id = $1 AND type = 'note' ORDER BY created_at`, [row.id])).rows.map((r) => r.remark as string);
-    expect(notes).toEqual(['Other details from the file: Qualification: 12th', 'Other details from the file (repeat entry): Qualification: Graduate']);
+    const notes = (
+      await owner.query(
+        `SELECT remark FROM lead_activities WHERE lead_id = $1 AND type = 'note' ORDER BY created_at`,
+        [row.id],
+      )
+    ).rows.map((r) => r.remark as string);
+    expect(notes).toEqual([
+      'Other details from the file: Qualification: 12th',
+      'Other details from the file (repeat entry): Qualification: Graduate',
+    ]);
   });
 
   it('writes no note when every column belongs to a field', async () => {
     const p = phone();
-    await runImport(t.admin!, file(csv('Name,Phone,Email', `Plain Row,${p},plain@example.com`)), { assign: 'none' });
+    await runImport(t.admin!, file(csv('Name,Phone,Email', `Plain Row,${p},plain@example.com`)), {
+      assign: 'none',
+    });
     const row = await leadByPhone(p);
-    expect((await owner.query(`SELECT count(*)::int AS n FROM lead_activities WHERE lead_id = $1 AND type = 'note'`, [row.id])).rows[0].n).toBe(0);
+    expect(
+      (
+        await owner.query(
+          `SELECT count(*)::int AS n FROM lead_activities WHERE lead_id = $1 AND type = 'note'`,
+          [row.id],
+        )
+      ).rows[0].n,
+    ).toBe(0);
   });
 
   it('takes a messy sheet as an admin gets it from a college or an ad platform, and the export shows the same leads back', async () => {
     const n = counter + 1;
     const mobile = (i: number) => `9${String(610_000_000 + n * 100 + i).padStart(9, '0')}`;
     const rows = [
-      ['Sr No', 'Student Name', 'Mobile No.', 'Email ID', 'Course', 'Region', 'Qualification', 'Parent Name', 'Remarks'],
-      ['1', 'Aarav Sharma', `+91 ${mobile(1).slice(0, 5)} ${mobile(1).slice(5)}`, 'AARAV@Example.com', 'MBA', 'Noida', 'B.Com', 'Rakesh Sharma', 'Call after 6 pm'],
+      [
+        'Sr No',
+        'Student Name',
+        'Mobile No.',
+        'Email ID',
+        'Course',
+        'Region',
+        'Qualification',
+        'Parent Name',
+        'Remarks',
+      ],
+      [
+        '1',
+        'Aarav Sharma',
+        `+91 ${mobile(1).slice(0, 5)} ${mobile(1).slice(5)}`,
+        'AARAV@Example.com',
+        'MBA',
+        'Noida',
+        'B.Com',
+        'Rakesh Sharma',
+        'Call after 6 pm',
+      ],
       ['2', 'प्रिया वर्मा', `0${mobile(2)}`, '', 'BBA', 'Lucknow', '12th', 'Sunita Verma', ''],
-      ['3', 'Mohammed Faiz', `91-${mobile(3)}`, 'faiz@example.com', 'B.Tech CSE', 'Delhi', 'Diploma', '', 'Wants hostel'],
-      ['4', 'Duplicate Of One', mobile(1), 'dup@example.com', 'MBA', 'Noida', '', '', 'Second form fill'],
+      [
+        '3',
+        'Mohammed Faiz',
+        `91-${mobile(3)}`,
+        'faiz@example.com',
+        'B.Tech CSE',
+        'Delhi',
+        'Diploma',
+        '',
+        'Wants hostel',
+      ],
+      [
+        '4',
+        'Duplicate Of One',
+        mobile(1),
+        'dup@example.com',
+        'MBA',
+        'Noida',
+        '',
+        '',
+        'Second form fill',
+      ],
       ['5', 'No Number', '', 'nonumber@example.com', 'BCA', 'Kanpur', '', '', ''],
       ['6', '', mobile(6), '', 'MCA', 'Agra', '', '', 'No name given'],
       ['7', 'Bad Number', '12345', '', 'MBA', 'Noida', '', '', ''],
-      ['8', 'Neha  Gupta ', `  ${mobile(8)}  `, 'neha.gupta@example.com', 'M.Com', 'Ghaziabad', 'B.Com', 'Anil Gupta', ''],
+      [
+        '8',
+        'Neha  Gupta ',
+        `  ${mobile(8)}  `,
+        'neha.gupta@example.com',
+        'M.Com',
+        'Ghaziabad',
+        'B.Com',
+        'Anil Gupta',
+        '',
+      ],
     ];
     const { default: writeXlsx } = await import('write-excel-file/node');
-    const data = await writeXlsx(rows.map((r) => r.map((value) => ({ value, type: String })))).toBuffer();
+    const data = await writeXlsx(
+      rows.map((r) => r.map((value) => ({ value, type: String }))),
+    ).toBuffer();
     const done = await runImport(t.admin!, file(data, 'college data.xlsx'), { assign: 'none' });
     // 4 good rows are filed, the repeat of row 1 is added to it, and 3 rows that cannot be filed are reported.
     expect(done.totals).toMatchObject({ rows: 8, invalid: 3, created: 4, attached: 1 });
 
-    const lead = async (m: string) => (await owner.query(`SELECT name, email, primary_phone FROM leads WHERE tenant_id = $1 AND primary_phone = $2 AND deleted_at IS NULL`, [fx.tenantId, `91${m}`])).rows[0];
-    expect(await lead(mobile(1))).toMatchObject({ name: 'Aarav Sharma', email: 'aarav@example.com' });
+    const lead = async (m: string) =>
+      (
+        await owner.query(
+          `SELECT name, email, primary_phone FROM leads WHERE tenant_id = $1 AND primary_phone = $2 AND deleted_at IS NULL`,
+          [fx.tenantId, `91${m}`],
+        )
+      ).rows[0];
+    expect(await lead(mobile(1))).toMatchObject({
+      name: 'Aarav Sharma',
+      email: 'aarav@example.com',
+    });
     expect(await lead(mobile(2))).toMatchObject({ name: 'प्रिया वर्मा' });
     expect(await lead(mobile(3))).toMatchObject({ name: 'Mohammed Faiz' });
     expect(await lead(mobile(8))).toMatchObject({ name: 'Neha Gupta' });
 
     // The admin sees them in the list with course and region, and the notes keep everything else.
     const listed = (await api.call('GET', '/leads?q=Aarav%20Sharma', t.admin!)).json().items[0];
-    expect(listed).toMatchObject({ name: 'Aarav Sharma', course: 'MBA', region: 'Noida', source: { name: 'Meta Ads' } });
-    const notes = (await owner.query(`SELECT remark FROM lead_activities a JOIN leads l ON l.id = a.lead_id WHERE l.tenant_id = $1 AND l.primary_phone = $2 AND a.type = 'note' ORDER BY a.created_at`, [fx.tenantId, `91${mobile(1)}`])).rows.map((r) => r.remark as string);
-    expect(notes[0]).toBe('Other details from the file: Sr No: 1; Qualification: B.Com; Parent Name: Rakesh Sharma; Remarks: Call after 6 pm');
+    expect(listed).toMatchObject({
+      name: 'Aarav Sharma',
+      course: 'MBA',
+      region: 'Noida',
+      source: { name: 'Meta Ads' },
+    });
+    const notes = (
+      await owner.query(
+        `SELECT remark FROM lead_activities a JOIN leads l ON l.id = a.lead_id WHERE l.tenant_id = $1 AND l.primary_phone = $2 AND a.type = 'note' ORDER BY a.created_at`,
+        [fx.tenantId, `91${mobile(1)}`],
+      )
+    ).rows.map((r) => r.remark as string);
+    expect(notes[0]).toBe(
+      'Other details from the file: Sr No: 1; Qualification: B.Com; Parent Name: Rakesh Sharma; Remarks: Call after 6 pm',
+    );
     expect(notes[1]).toContain('Second form fill');
 
     // Export and import round trip: the same four people come back out for the admin, with the Hindi name intact.
     const exported = (await api.call('GET', '/leads/export?format=csv', t.admin!)).body;
-    const names = (parse(exported, { bom: true, columns: true }) as Record<string, string>[]).map((r) => r.Name);
-    for (const expected of ['Aarav Sharma', 'प्रिया वर्मा', 'Mohammed Faiz', 'Neha Gupta']) expect(names, expected).toContain(expected);
+    const names = (parse(exported, { bom: true, columns: true }) as Record<string, string>[]).map(
+      (r) => r.Name,
+    );
+    for (const expected of ['Aarav Sharma', 'प्रिया वर्मा', 'Mohammed Faiz', 'Neha Gupta'])
+      expect(names, expected).toContain(expected);
   });
 
   it('can leave leads in the unassigned pool', async () => {
     const p = phone();
-    const done = await runImport(t.admin!, file(csv('Name,Phone', `Pool Lead,${p}`)), { assign: 'none' });
+    const done = await runImport(t.admin!, file(csv('Name,Phone', `Pool Lead,${p}`)), {
+      assign: 'none',
+    });
     expect(done.assigned).toEqual({ unassigned: 1 });
     expect((await leadByPhone(p)).assigned_to).toBeNull();
   });
 
   it("follows the company's automatic assignment when asked", async () => {
     const phones = [phone(), phone(), phone()];
-    const done = await runImport(t.admin!, file(csv('Name,Phone', ...phones.map((p, i) => `Auto ${i},${p}`))), { assign: 'auto' });
+    const done = await runImport(
+      t.admin!,
+      file(csv('Name,Phone', ...phones.map((p, i) => `Auto ${i},${p}`))),
+      { assign: 'auto' },
+    );
     expect(done.totals.created).toBe(3);
     const givenOut = Object.values(done.assigned).reduce((n, c) => n + c, 0);
     expect(givenOut).toBe(3);
@@ -309,13 +608,25 @@ describe('importing leads', () => {
   it('adds a repeat to the lead that already has the number, and keeps the first', async () => {
     await setPolicy('attach');
     const known = phone();
-    const first = (await api.call('POST', '/leads', t.lc1!, { name: 'First Name', phone: known, sourceId: fx.sourceId('Website') })).json();
+    const first = (
+      await api.call('POST', '/leads', t.lc1!, {
+        name: 'First Name',
+        phone: known,
+        sourceId: fx.sourceId('Website'),
+      })
+    ).json();
     const fresh = phone();
-    const done = await runImport(t.admin!, file(csv('Name,Phone', `Other Name,${known}`, `New One,${fresh}`, `New One Again,${fresh}`)), { assign: 'none' });
+    const done = await runImport(
+      t.admin!,
+      file(csv('Name,Phone', `Other Name,${known}`, `New One,${fresh}`, `New One Again,${fresh}`)),
+      { assign: 'none' },
+    );
     expect(done.totals).toMatchObject({ created: 1, attached: 2, rejected: 0 });
     expect((await leadByPhone(known)).name).toBe('First Name');
     expect((await leadByPhone(fresh)).name).toBe('New One');
-    const enquiries = (await owner.query(`SELECT count(*) FROM lead_enquiries WHERE lead_id = $1`, [first.id])).rows[0].count;
+    const enquiries = (
+      await owner.query(`SELECT count(*) FROM lead_enquiries WHERE lead_id = $1`, [first.id])
+    ).rows[0].count;
     expect(Number(enquiries)).toBe(1);
   });
 
@@ -323,9 +634,15 @@ describe('importing leads', () => {
     await setPolicy('reject');
     try {
       const known = phone();
-      await api.call('POST', '/leads', t.lc1!, { name: 'Keep Me', phone: known, sourceId: fx.sourceId('Website') });
+      await api.call('POST', '/leads', t.lc1!, {
+        name: 'Keep Me',
+        phone: known,
+        sourceId: fx.sourceId('Website'),
+      });
       const before = await leadCount();
-      const done = await runImport(t.admin!, file(csv('Name,Phone', `Dup,${known}`)), { assign: 'none' });
+      const done = await runImport(t.admin!, file(csv('Name,Phone', `Dup,${known}`)), {
+        assign: 'none',
+      });
       expect(done.totals).toMatchObject({ created: 0, attached: 0, rejected: 1 });
       expect(await leadCount()).toBe(before);
     } finally {
@@ -337,7 +654,11 @@ describe('importing leads', () => {
     const p = phone();
     const xlsx = await writeXlsxFile([
       [{ value: 'Name' }, { value: 'Mobile' }, { value: 'City' }],
-      [{ value: 'Excel Lead', type: String }, { value: `91${p}`, type: String }, { value: 'Pune', type: String }],
+      [
+        { value: 'Excel Lead', type: String },
+        { value: `91${p}`, type: String },
+        { value: 'Pune', type: String },
+      ],
     ]).toBuffer();
     const done = await runImport(t.admin!, file(xlsx, 'leads.xlsx'), { assign: 'none' });
     expect(done.totals.created).toBe(1);
@@ -346,12 +667,21 @@ describe('importing leads', () => {
 
   it('keeps Hindi names intact', async () => {
     const p = phone();
-    await runImport(t.admin!, file(csv('नाम,मोबाइल नंबर,Phone', `सिया शर्मा,,${p}`)), { assign: 'none' });
+    await runImport(t.admin!, file(csv('नाम,मोबाइल नंबर,Phone', `सिया शर्मा,,${p}`)), {
+      assign: 'none',
+    });
     expect((await leadByPhone(p)).name).toBe('सिया शर्मा');
   });
 
   it('gives a CSV of the rows that were left out, safe to open in a spreadsheet', async () => {
-    const res = await start(t.admin!, file(csv('Name,Phone', `Good,${phone()}`, `=HYPERLINK("http://evil.example"),123`, 'Plain Bad,'), 'mixed.csv'), { assign: 'none' });
+    const res = await start(
+      t.admin!,
+      file(
+        csv('Name,Phone', `Good,${phone()}`, `=HYPERLINK("http://evil.example"),123`, 'Plain Bad,'),
+        'mixed.csv',
+      ),
+      { assign: 'none' },
+    );
     const done = await finished(t.admin!, res.json().id);
     expect(done.totals).toMatchObject({ invalid: 2, created: 1 });
 
@@ -369,39 +699,77 @@ describe('importing leads', () => {
   it('rejects what is wrong with the request before queueing anything', async () => {
     const good = file(csv('Name,Phone', `A,${phone()}`));
     const bad = async (fields: Record<string, string | undefined>, f = good) =>
-      post(t.admin!, '', Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined)) as Record<string, string>, [f]);
+      post(
+        t.admin!,
+        '',
+        Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined)) as Record<
+          string,
+          string
+        >,
+        [f],
+      );
 
     expect(errorCode(await bad({}))).toBe('VALIDATION_FAILED'); // no source
     expect(errorCode(await bad({ sourceId: 'nope' }))).toBe('VALIDATION_FAILED');
-    expect(errorCode(await bad({ sourceId: fx.sourceId('Meta Ads'), assign: 'user' }))).toBe('VALIDATION_FAILED'); // user without userId
-    expect(errorCode(await bad({ sourceId: fx.sourceId('Meta Ads'), assign: 'none', userId: fx.user('lc1').id }))).toBe('VALIDATION_FAILED');
-    expect(errorCode(await bad({ sourceId: '0197f000-0000-7000-8000-000000000000' }))).toBe('SOURCE_INVALID');
-    const stranger = await bad({ sourceId: fx.sourceId('Meta Ads'), assign: 'user', userId: '0197f000-0000-7000-8000-000000000000' });
+    expect(errorCode(await bad({ sourceId: fx.sourceId('Meta Ads'), assign: 'user' }))).toBe(
+      'VALIDATION_FAILED',
+    ); // user without userId
+    expect(
+      errorCode(
+        await bad({ sourceId: fx.sourceId('Meta Ads'), assign: 'none', userId: fx.user('lc1').id }),
+      ),
+    ).toBe('VALIDATION_FAILED');
+    expect(errorCode(await bad({ sourceId: '0197f000-0000-7000-8000-000000000000' }))).toBe(
+      'SOURCE_INVALID',
+    );
+    const stranger = await bad({
+      sourceId: fx.sourceId('Meta Ads'),
+      assign: 'user',
+      userId: '0197f000-0000-7000-8000-000000000000',
+    });
     expect(errorCode(stranger)).toBe('ASSIGNEE_INVALID');
 
-    const noPhoneCol = await bad({ sourceId: fx.sourceId('Meta Ads') }, file(csv('Candidate,Number', 'a,1')));
+    const noPhoneCol = await bad(
+      { sourceId: fx.sourceId('Meta Ads') },
+      file(csv('Candidate,Number', 'a,1')),
+    );
     expect(noPhoneCol.statusCode).toBe(422);
     expect(errorCode(noPhoneCol)).toBe('MAPPING_INCOMPLETE');
     expect(noPhoneCol.json().error.details).toMatchObject({ missing: ['name', 'phone'] });
 
-    const allBad = await bad({ sourceId: fx.sourceId('Meta Ads') }, file(csv('Name,Phone', 'a,1', 'b,2')));
+    const allBad = await bad(
+      { sourceId: fx.sourceId('Meta Ads') },
+      file(csv('Name,Phone', 'a,1', 'b,2')),
+    );
     expect(allBad.statusCode).toBe(422);
     expect(errorCode(allBad)).toBe('NOTHING_TO_IMPORT');
     expect(allBad.json().error.details.problems).toHaveLength(2);
 
-    expect(errorCode(await bad({ sourceId: fx.sourceId('Meta Ads') }, file(csv('Name,Phone'))))).toBe('EMPTY_SHEET');
+    expect(
+      errorCode(await bad({ sourceId: fx.sourceId('Meta Ads') }, file(csv('Name,Phone')))),
+    ).toBe('EMPTY_SHEET');
   });
 
   it('does not file a row twice when several workers pick up the same batch', async () => {
     const rows = Array.from({ length: 60 }, (_v, i) => `Race ${i},${phone()}`);
     const res = await start(t.admin!, file(csv('Name,Phone', ...rows)), { assign: 'none' });
     const svc = app.get(ImportsService);
-    await Promise.all([svc.process(fx.tenantId, res.json().id), svc.process(fx.tenantId, res.json().id), svc.process(fx.tenantId, res.json().id)]);
+    await Promise.all([
+      svc.process(fx.tenantId, res.json().id),
+      svc.process(fx.tenantId, res.json().id),
+      svc.process(fx.tenantId, res.json().id),
+    ]);
     const done = await finished(t.admin!, res.json().id);
     expect(done.totals).toMatchObject({ processed: 60, created: 60, failed: 0 });
-    const count = (await owner.query(`SELECT count(*) FROM leads WHERE tenant_id = $1 AND name LIKE 'Race %'`, [fx.tenantId])).rows[0].count;
+    const count = (
+      await owner.query(`SELECT count(*) FROM leads WHERE tenant_id = $1 AND name LIKE 'Race %'`, [
+        fx.tenantId,
+      ])
+    ).rows[0].count;
     expect(Number(count)).toBe(60);
-    const stored = (await owner.query(`SELECT rows FROM lead_import_batches WHERE id = $1`, [done.id])).rows[0].rows;
+    const stored = (
+      await owner.query(`SELECT rows FROM lead_import_batches WHERE id = $1`, [done.id])
+    ).rows[0].rows;
     expect(stored).toEqual([]); // the waiting rows are cleared once finished
   });
 });
@@ -435,20 +803,42 @@ describe('stopping an import', () => {
     const after = (await api.call('GET', `/leads/import/${id}`, t.admin!)).json();
     expect(after.status).toBe('cancelled');
     expect(after.totals.processed).toBe(filed);
-    const count = (await owner.query(`SELECT count(*) FROM leads WHERE tenant_id = $1 AND name LIKE 'Stopper %'`, [fx.tenantId])).rows[0].count;
+    const count = (
+      await owner.query(
+        `SELECT count(*) FROM leads WHERE tenant_id = $1 AND name LIKE 'Stopper %'`,
+        [fx.tenantId],
+      )
+    ).rows[0].count;
     expect(Number(count)).toBe(filed);
-    expect((await owner.query(`SELECT rows FROM lead_import_batches WHERE id = $1`, [id])).rows[0].rows).toEqual([]);
-    const audit = await owner.query(`SELECT action FROM audit_logs WHERE tenant_id = $1 AND entity_id = $2 AND action = 'lead_import.cancel'`, [fx.tenantId, id]);
+    expect(
+      (await owner.query(`SELECT rows FROM lead_import_batches WHERE id = $1`, [id])).rows[0].rows,
+    ).toEqual([]);
+    const audit = await owner.query(
+      `SELECT action FROM audit_logs WHERE tenant_id = $1 AND entity_id = $2 AND action = 'lead_import.cancel'`,
+      [fx.tenantId, id],
+    );
     expect(audit.rowCount).toBe(1);
   });
 
   it('leaves a finished import as it is, and only lets people who import stop one', async () => {
-    const done = await runImport(t.admin!, file(csv('Name,Phone', `Finished One,${phone()}`)), { assign: 'none' });
+    const done = await runImport(t.admin!, file(csv('Name,Phone', `Finished One,${phone()}`)), {
+      assign: 'none',
+    });
     const again = await api.call('POST', `/leads/import/${done.id}/cancel`, t.admin!);
     expect(again.statusCode, again.body).toBe(200);
     expect(again.json().status).toBe('done');
-    expect((await api.call('POST', `/leads/import/${done.id}/cancel`, t.lc1!)).statusCode).toBe(403);
-    expect((await api.call('POST', '/leads/import/00000000-0000-7000-8000-000000000000/cancel', t.admin!)).statusCode).toBe(404);
+    expect((await api.call('POST', `/leads/import/${done.id}/cancel`, t.lc1!)).statusCode).toBe(
+      403,
+    );
+    expect(
+      (
+        await api.call(
+          'POST',
+          '/leads/import/00000000-0000-7000-8000-000000000000/cancel',
+          t.admin!,
+        )
+      ).statusCode,
+    ).toBe(404);
   });
 });
 
@@ -464,12 +854,20 @@ describe('who may import', () => {
   });
 
   it('shows a person their own imports; an Admin of another team cannot see them, a Super Admin can', async () => {
-    const done = await runImport(t.admin!, file(csv('Name,Phone', `Mine,${phone()}`)), { assign: 'none' });
+    const done = await runImport(t.admin!, file(csv('Name,Phone', `Mine,${phone()}`)), {
+      assign: 'none',
+    });
     expect((await api.call('GET', `/leads/import/${done.id}`, t.admin!)).statusCode).toBe(200);
     expect((await api.call('GET', `/leads/import/${done.id}`, t.sa!)).statusCode).toBe(200);
     expect((await api.call('GET', `/leads/import/${done.id}`, t.admin2!)).statusCode).toBe(404);
-    expect((await api.call('GET', `/leads/import/${done.id}/problems.csv`, t.admin2!)).statusCode).toBe(404);
-    expect((await api.call('GET', '/leads/import', t.admin2!)).json().map((b: { id: string }) => b.id)).not.toContain(done.id);
-    expect((await api.call('GET', '/leads/import', t.sa!)).json().map((b: { id: string }) => b.id)).toContain(done.id);
+    expect(
+      (await api.call('GET', `/leads/import/${done.id}/problems.csv`, t.admin2!)).statusCode,
+    ).toBe(404);
+    expect(
+      (await api.call('GET', '/leads/import', t.admin2!)).json().map((b: { id: string }) => b.id),
+    ).not.toContain(done.id);
+    expect(
+      (await api.call('GET', '/leads/import', t.sa!)).json().map((b: { id: string }) => b.id),
+    ).toContain(done.id);
   });
 });

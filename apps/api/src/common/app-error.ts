@@ -27,7 +27,10 @@ export class AppError extends Error {
   static unauthorized(message = 'Authentication is required'): AppError {
     return new AppError('UNAUTHENTICATED', message, 401);
   }
-  static forbidden(code = 'FORBIDDEN', message = 'You do not have permission to do this'): AppError {
+  static forbidden(
+    code = 'FORBIDDEN',
+    message = 'You do not have permission to do this',
+  ): AppError {
     return new AppError(code, message, 403);
   }
   static notFound(what = 'Record'): AppError {

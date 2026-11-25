@@ -5,5 +5,10 @@ import { ProfileService } from './profile.service.js';
 import { UsersController } from './users.controller.js';
 import { UsersService } from './users.service.js';
 
-@Module({ imports: [AuthModule], controllers: [UsersController, ProfileController], providers: [UsersService, ProfileService], exports: [UsersService] })
+@Module({
+  imports: [AuthModule],
+  controllers: [UsersController, ProfileController],
+  providers: [UsersService, ProfileService],
+  exports: [UsersService],
+})
 export class UsersModule {}

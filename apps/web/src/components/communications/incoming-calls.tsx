@@ -4,7 +4,7 @@ import { Mic, PhoneIncoming, PhoneOff, Video } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui';
-import { api, ApiError } from '@/lib/api';
+import { api, errorText } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import type { CallKind } from '@/lib/communications';
 import { POLLING, useRealtime, useRealtimeStatus } from '@/lib/realtime';
@@ -51,9 +51,19 @@ export function IncomingCalls() {
       if (shown.current.has(r.sessionId)) continue;
       shown.current.add(r.sessionId);
       try {
-        if (typeof Notification !== 'undefined' && Notification.permission === 'granted' && document.visibilityState === 'hidden') {
-          const n = new Notification(`Incoming ${r.kind === 'voice' ? 'voice' : 'video'} call from ${r.fromName}`, { body: r.leadName ? `About ${r.leadName}` : r.title ?? undefined, tag: r.sessionId });
-          n.onclick = () => { window.focus(); n.close(); };
+        if (
+          typeof Notification !== 'undefined' &&
+          Notification.permission === 'granted' &&
+          document.visibilityState === 'hidden'
+        ) {
+          const n = new Notification(
+            `Incoming ${r.kind === 'voice' ? 'voice' : 'video'} call from ${r.fromName}`,
+            { body: r.leadName ? `About ${r.leadName}` : (r.title ?? undefined), tag: r.sessionId },
+          );
+          n.onclick = () => {
+            window.focus();
+            n.close();
+          };
         }
       } catch {
         // Some browsers refuse to build one outside a page action; the on-screen card is the main alert.
@@ -70,7 +80,7 @@ export function IncomingCalls() {
         reload();
         if (action === 'accept') router.push(`/video/${r.sessionId}`);
       } catch (e) {
-        setError(e instanceof ApiError ? e.message : 'Cannot reach the server.');
+        setError(errorText(e, 'Cannot reach the server.'));
         reload();
       } finally {
         setBusy(null);
@@ -82,24 +92,61 @@ export function IncomingCalls() {
   const list = ringing.data ?? [];
   if (!allowed || list.length === 0) return null;
   return (
-    <div className="fixed bottom-4 right-4 z-[60] flex w-[min(22rem,calc(100vw-2rem))] flex-col gap-3" role="alert" aria-live="assertive">
+    <div
+      className="fixed bottom-4 right-4 z-[60] flex w-[min(22rem,calc(100vw-2rem))] flex-col gap-3"
+      role="alert"
+      aria-live="assertive"
+    >
       {list.map((r) => (
         <div key={r.sessionId} className="glass rounded-2xl border border-brand/30 p-4 shadow-2xl">
           <div className="flex items-start gap-3">
-            <span className="grid h-10 w-10 shrink-0 animate-pulse place-items-center rounded-full bg-mint text-brand"><PhoneIncoming className="h-5 w-5" aria-hidden /></span>
+            <span className="grid h-10 w-10 shrink-0 animate-pulse place-items-center rounded-full bg-mint text-brand">
+              <PhoneIncoming className="h-5 w-5" aria-hidden />
+            </span>
             <div className="min-w-0 flex-1">
               <p className="flex items-center gap-1.5 text-sm font-semibold text-ink">
-                {r.kind === 'voice' ? <Mic className="h-3.5 w-3.5" aria-hidden /> : <Video className="h-3.5 w-3.5" aria-hidden />}
+                {r.kind === 'voice' ? (
+                  <Mic className="h-3.5 w-3.5" aria-hidden />
+                ) : (
+                  <Video className="h-3.5 w-3.5" aria-hidden />
+                )}
                 Incoming {r.kind === 'voice' ? 'voice' : 'video'} call
               </p>
               <p className="truncate text-sm text-ink">{r.fromName}</p>
-              {(r.leadName || r.title) && <p className="truncate text-xs text-muted">{r.leadName ? `About ${r.leadName}` : r.title}</p>}
-              {r.leadId && <a href={`/leads/${r.leadId}`} target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-brand underline">Open the lead</a>}
+              {(r.leadName || r.title) && (
+                <p className="truncate text-xs text-muted">
+                  {r.leadName ? `About ${r.leadName}` : r.title}
+                </p>
+              )}
+              {r.leadId && (
+                <a
+                  href={`/leads/${r.leadId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs font-medium text-brand underline"
+                >
+                  Open the lead
+                </a>
+              )}
             </div>
           </div>
           <div className="mt-3 flex gap-2">
-            <Button className="flex-1" variant="primary" onClick={() => void answer(r, 'accept')} loading={busy === r.sessionId}>Accept</Button>
-            <Button className="flex-1" variant="danger" onClick={() => void answer(r, 'decline')} disabled={busy === r.sessionId}><PhoneOff className="h-4 w-4" aria-hidden /> Decline</Button>
+            <Button
+              className="flex-1"
+              variant="primary"
+              onClick={() => void answer(r, 'accept')}
+              loading={busy === r.sessionId}
+            >
+              Accept
+            </Button>
+            <Button
+              className="flex-1"
+              variant="danger"
+              onClick={() => void answer(r, 'decline')}
+              disabled={busy === r.sessionId}
+            >
+              <PhoneOff className="h-4 w-4" aria-hidden /> Decline
+            </Button>
           </div>
         </div>
       ))}

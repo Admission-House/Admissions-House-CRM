@@ -6,7 +6,13 @@ import type { AuthContext } from '../auth/auth-context.js';
 import { distanceMeters } from '../auth/office-rules.js';
 import { AppError } from '../common/app-error.js';
 import { DatabaseService, Trx } from '../database/database.service.js';
-import type { AddNetworkDto, ConfirmDetectionDto, CreateBranchDto, DetectDto, UpdateBranchDto } from './branches.dto.js';
+import type {
+  AddNetworkDto,
+  ConfirmDetectionDto,
+  CreateBranchDto,
+  DetectDto,
+  UpdateBranchDto,
+} from './branches.dto.js';
 import { isInternalAddress, normalizeAllowedRange, rangeForAddress } from './network-rules.js';
 
 /** GPS indoors is rough. Below this a reading is good; up to the hard limit it is accepted with a warning. */
@@ -24,7 +30,14 @@ export interface BranchView {
   detectedAt: Date | null;
   isActive: boolean;
   userCount: number;
-  networks: { id: string; kind: string; ipRange: string | null; wifiId: string | null; hostname: string | null; resolvesTo: string[] }[];
+  networks: {
+    id: string;
+    kind: string;
+    ipRange: string | null;
+    wifiId: string | null;
+    hostname: string | null;
+    resolvesTo: string[];
+  }[];
 }
 
 @Injectable()
@@ -71,7 +84,10 @@ export class BranchesService {
       const before = await this.load(trx, id);
       if (dto.name && dto.name !== before.name) await this.assertNameFree(trx, dto.name);
       if (dto.isActive === false && before.isActive && before.userCount > 0) {
-        throw AppError.conflict('BRANCH_IN_USE', `${before.userCount} active people are placed in this office. Move them first.`);
+        throw AppError.conflict(
+          'BRANCH_IN_USE',
+          `${before.userCount} active people are placed in this office. Move them first.`,
+        );
       }
       await trx
         .updateTable('branches')
@@ -97,7 +113,12 @@ export class BranchesService {
       let hostname: string | null = null;
       if (dto.kind === 'ddns') {
         hostname = normalizeHostname(dto.hostname!);
-        if (!hostname) throw AppError.badRequest('INVALID_HOSTNAME', 'That is not a valid hostname. Use the name from the router, such as office.ddns.net', [{ field: 'hostname', message: 'Not a valid hostname' }]);
+        if (!hostname)
+          throw AppError.badRequest(
+            'INVALID_HOSTNAME',
+            'That is not a valid hostname. Use the name from the router, such as office.ddns.net',
+            [{ field: 'hostname', message: 'Not a valid hostname' }],
+          );
       }
       await this.insertNetwork(trx, auth, id, dto.kind, range, dto.wifiId ?? null, hostname);
       return this.load(trx, id);
@@ -110,10 +131,22 @@ export class BranchesService {
         .deleteFrom('branch_networks')
         .where('id', '=', networkId)
         .where('branch_id', '=', id)
-        .returning(['kind', sql<string | null>`host(ip_range)`.as('ip_text'), sql<string | null>`ip_range::text`.as('range_text'), 'wifi_id'])
+        .returning([
+          'kind',
+          sql<string | null>`host(ip_range)`.as('ip_text'),
+          sql<string | null>`ip_range::text`.as('range_text'),
+          'wifi_id',
+        ])
         .executeTakeFirst();
       if (!removed) throw AppError.notFound('Network');
-      await this.record(trx, auth, 'branch.network_remove', id, { kind: removed.kind, ipRange: removed.range_text, wifiId: removed.wifi_id }, undefined);
+      await this.record(
+        trx,
+        auth,
+        'branch.network_remove',
+        id,
+        { kind: removed.kind, ipRange: removed.range_text, wifiId: removed.wifi_id },
+        undefined,
+      );
       return this.load(trx, id);
     });
   }
@@ -127,10 +160,16 @@ export class BranchesService {
     return this.db.withTenant(auth.tenantId, async (trx) => {
       const branch = await this.load(trx, id);
       const warnings: string[] = [];
-      if (reading.accuracy > MAX_ACCURACY_M) warnings.push('The position is too vague to save. Move near a window, wait a few seconds and try again.');
-      else if (reading.accuracy > GOOD_ACCURACY_M) warnings.push('The position is not very precise. Moving near a window usually helps.');
+      if (reading.accuracy > MAX_ACCURACY_M)
+        warnings.push(
+          'The position is too vague to save. Move near a window, wait a few seconds and try again.',
+        );
+      else if (reading.accuracy > GOOD_ACCURACY_M)
+        warnings.push('The position is not very precise. Moving near a window usually helps.');
       if (isInternalAddress(auth.ip)) {
-        warnings.push('The server sees a private address, not the office\'s public one. Check the proxy setting before saving the network.');
+        warnings.push(
+          "The server sees a private address, not the office's public one. Check the proxy setting before saving the network.",
+        );
       }
       const hadPosition = branch.latitude !== null && branch.longitude !== null;
       return {
@@ -154,12 +193,15 @@ export class BranchesService {
     return this.db.withTenant(auth.tenantId, async (trx) => {
       const before = await this.load(trx, id);
       if (body.accuracy > MAX_ACCURACY_M) {
-        throw AppError.badRequest('GPS_TOO_VAGUE', 'The position is too vague to save. Try again near a window.');
+        throw AppError.badRequest(
+          'GPS_TOO_VAGUE',
+          'The position is too vague to save. Try again near a window.',
+        );
       }
       if (body.addCurrentIp && isInternalAddress(auth.ip) && !body.allowInternalAddress) {
         throw AppError.badRequest(
           'ADDRESS_NOT_PUBLIC',
-          'The server sees a private address, not the office\'s public one. Fix the proxy setting, or confirm that this address is intended.',
+          "The server sees a private address, not the office's public one. Fix the proxy setting, or confirm that this address is intended.",
         );
       }
       await trx
@@ -173,7 +215,10 @@ export class BranchesService {
         if (!exists) await this.insertNetwork(trx, auth, id, 'ip_range', range, null);
       }
       const after = await this.load(trx, id);
-      await this.record(trx, auth, 'branch.detect', id, summary(before), { ...summary(after), accuracy: body.accuracy });
+      await this.record(trx, auth, 'branch.detect', id, summary(before), {
+        ...summary(after),
+        accuracy: body.accuracy,
+      });
       return after;
     });
   }
@@ -181,11 +226,21 @@ export class BranchesService {
   // ---------------------------------------------------------------- helpers
 
   private async load(trx: Trx, id: string): Promise<BranchView> {
-    const branch = await trx.selectFrom('branches').selectAll().where('id', '=', id).executeTakeFirst();
+    const branch = await trx
+      .selectFrom('branches')
+      .selectAll()
+      .where('id', '=', id)
+      .executeTakeFirst();
     if (!branch) throw AppError.notFound('Office');
     const networks = await trx
       .selectFrom('branch_networks')
-      .select(['id', 'kind', sql<string | null>`ip_range::text`.as('ip_range'), 'wifi_id', 'hostname'])
+      .select([
+        'id',
+        'kind',
+        sql<string | null>`ip_range::text`.as('ip_range'),
+        'wifi_id',
+        'hostname',
+      ])
       .where('branch_id', '=', id)
       .orderBy('created_at')
       .execute();
@@ -206,39 +261,102 @@ export class BranchesService {
       detectedAt: branch.detected_at,
       isActive: branch.is_active,
       userCount: Number(users.n),
-      networks: await Promise.all(networks.map(async (n) => ({ id: n.id, kind: n.kind, ipRange: n.ip_range, wifiId: n.wifi_id, hostname: n.hostname, resolvesTo: n.hostname ? await addressesOf(n.hostname) : [] }))),
+      networks: await Promise.all(
+        networks.map(async (n) => ({
+          id: n.id,
+          kind: n.kind,
+          ipRange: n.ip_range,
+          wifiId: n.wifi_id,
+          hostname: n.hostname,
+          resolvesTo: n.hostname ? await addressesOf(n.hostname) : [],
+        })),
+      ),
     };
   }
 
-  private async insertNetwork(trx: Trx, auth: AuthContext, branchId: string, kind: string, range: string | null, wifiId: string | null, hostname: string | null = null): Promise<void> {
+  private async insertNetwork(
+    trx: Trx,
+    auth: AuthContext,
+    branchId: string,
+    kind: string,
+    range: string | null,
+    wifiId: string | null,
+    hostname: string | null = null,
+  ): Promise<void> {
     const duplicate = await trx
       .selectFrom('branch_networks')
       .select('id')
       .where('branch_id', '=', branchId)
-      .where((eb) => (range ? eb(sql`ip_range::text`, '=', range) : hostname ? eb('hostname', '=', hostname) : eb('wifi_id', '=', wifiId)))
+      .where((eb) =>
+        range
+          ? eb(sql`ip_range::text`, '=', range)
+          : hostname
+            ? eb('hostname', '=', hostname)
+            : eb('wifi_id', '=', wifiId),
+      )
       .executeTakeFirst();
-    if (duplicate) throw AppError.conflict('NETWORK_EXISTS', 'This network is already allowed for the office');
+    if (duplicate)
+      throw AppError.conflict('NETWORK_EXISTS', 'This network is already allowed for the office');
 
     await trx
       .insertInto('branch_networks')
-      .values({ tenant_id: auth.tenantId, branch_id: branchId, kind, ip_range: range, wifi_id: wifiId, hostname })
+      .values({
+        tenant_id: auth.tenantId,
+        branch_id: branchId,
+        kind,
+        ip_range: range,
+        wifi_id: wifiId,
+        hostname,
+      })
       .execute();
-    await this.record(trx, auth, 'branch.network_add', branchId, undefined, { kind, ipRange: range, wifiId, hostname });
+    await this.record(trx, auth, 'branch.network_add', branchId, undefined, {
+      kind,
+      ipRange: range,
+      wifiId,
+      hostname,
+    });
   }
 
   private async assertNameFree(trx: Trx, name: string): Promise<void> {
-    const taken = await trx.selectFrom('branches').select('id').where(sql`lower(name)`, '=', name.toLowerCase()).executeTakeFirst();
-    if (taken) throw AppError.conflict('BRANCH_NAME_TAKEN', 'An office with this name already exists');
+    const taken = await trx
+      .selectFrom('branches')
+      .select('id')
+      .where(sql`lower(name)`, '=', name.toLowerCase())
+      .executeTakeFirst();
+    if (taken)
+      throw AppError.conflict('BRANCH_NAME_TAKEN', 'An office with this name already exists');
   }
 
-  private record(trx: Trx, auth: AuthContext, action: string, id: string, before: unknown, after: unknown): Promise<void> {
+  private record(
+    trx: Trx,
+    auth: AuthContext,
+    action: string,
+    id: string,
+    before: unknown,
+    after: unknown,
+  ): Promise<void> {
     return this.audit.write(trx, {
-      tenantId: auth.tenantId, actorId: auth.userId, action, entity: 'branch', entityId: id,
-      before, after, ip: auth.ip, requestId: auth.requestId,
+      tenantId: auth.tenantId,
+      actorId: auth.userId,
+      action,
+      entity: 'branch',
+      entityId: id,
+      before,
+      after,
+      ip: auth.ip,
+      requestId: auth.requestId,
     });
   }
 }
 
 function summary(b: BranchView) {
-  return { name: b.name, address: b.address, latitude: b.latitude, longitude: b.longitude, radiusM: b.radiusM, officeCheck: b.officeCheck, isActive: b.isActive };
+  return {
+    name: b.name,
+    address: b.address,
+    latitude: b.latitude,
+    longitude: b.longitude,
+    radiusM: b.radiusM,
+    officeCheck: b.officeCheck,
+    isActive: b.isActive,
+  };
 }

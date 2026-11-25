@@ -6,5 +6,10 @@ import { PulseController } from './pulse.controller.js';
 import { RealtimeListener } from './realtime.listener.js';
 
 @Global()
-@Module({ imports: [AuthModule], controllers: [PulseController], providers: [LiveBus, RealtimeGateway, RealtimeListener], exports: [LiveBus] })
+@Module({
+  imports: [AuthModule],
+  controllers: [PulseController],
+  providers: [LiveBus, RealtimeGateway, RealtimeListener],
+  exports: [LiveBus],
+})
 export class RealtimeModule {}

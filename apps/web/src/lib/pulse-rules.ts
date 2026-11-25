@@ -19,7 +19,11 @@ export interface Pace {
  * How long to wait before asking again. Fast only while something is ringing, slow when nobody is looking
  * (so a hidden tab costs almost nothing), and longer and longer while the server does not answer.
  */
-export function nextWaitMs(pace: Pace, state: { failures: number; ringing: boolean; hidden: boolean; untouchedMs: number }, quietAfterMs: number): number {
+export function nextWaitMs(
+  pace: Pace,
+  state: { failures: number; ringing: boolean; hidden: boolean; untouchedMs: number },
+  quietAfterMs: number,
+): number {
   if (state.failures > 0) return Math.min(pace.activeMs * 2 ** state.failures, pace.maxBackoffMs);
   if (state.ringing) return pace.ringingMs;
   return state.hidden || state.untouchedMs > quietAfterMs ? pace.quietMs : pace.activeMs;
@@ -32,7 +36,9 @@ export function nextWaitMs(pace: Pace, state: { failures: number; ringing: boole
  */
 export function changedTopics(last: Pulse | null, now: Pulse, resyncDue: boolean): string[] {
   if (!last) return [];
-  const changed = Object.entries(now.stamps).filter(([topic, at]) => last.stamps[topic] !== at).map(([topic]) => topic);
+  const changed = Object.entries(now.stamps)
+    .filter(([topic, at]) => last.stamps[topic] !== at)
+    .map(([topic]) => topic);
   if (now.ringing && !changed.includes('call')) changed.push('call');
   if (resyncDue) changed.push('resync');
   return changed;
@@ -48,9 +54,18 @@ export function topicsForPath(path: string | null): string[] {
   const head = p.split('/')[0]!;
   if (head === 'leads' && p.endsWith('/calls')) return ['lead', 'calllog']; // a lead's Calls tab
   if (head === 'leads' || head === 'followups' || head === 'imports') return ['lead'];
-  if (head === 'attendance' || head === 'leave' || head === 'salaries' || head === 'payroll') return ['work', 'team'];
+  if (head === 'attendance' || head === 'leave' || head === 'salaries' || head === 'payroll')
+    return ['work', 'team'];
   if (head === 'reports') return ['lead', 'work', 'team', 'calllog'];
-  if (head === 'users' || head === 'roles' || head === 'branches' || head === 'lead-statuses' || head === 'lead-sources' || head === 'lead-policies') return ['admin'];
+  if (
+    head === 'users' ||
+    head === 'roles' ||
+    head === 'branches' ||
+    head === 'lead-statuses' ||
+    head === 'lead-sources' ||
+    head === 'lead-policies'
+  )
+    return ['admin'];
   if (head === 'communications' || head === 'calls') return ['call', 'calllog'];
   return [];
 }

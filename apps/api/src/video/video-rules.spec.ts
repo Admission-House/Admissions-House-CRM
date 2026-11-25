@@ -1,13 +1,22 @@
 import { randomUUID } from 'node:crypto';
 import {
-  buildRtcToken, channelOf, inviteToken, inviteTokenGenuine, isConnected, parseInviteToken, randomUid, secondsLeft, sessionProblem, standardPerCallMinute,
+  buildRtcToken,
+  channelOf,
+  inviteToken,
+  inviteTokenGenuine,
+  isConnected,
+  parseInviteToken,
+  randomUid,
+  secondsLeft,
+  sessionProblem,
+  standardPerCallMinute,
 } from './video-rules.js';
 
 const SECRET = 'a-test-secret-that-is-long-enough-123456';
 const tenant = randomUUID();
 const invite = randomUUID();
 
-describe('a guest\'s link', () => {
+describe("a guest's link", () => {
   it('names the company and the invitation it was made for, and is genuine at its version', () => {
     const parsed = parseInviteToken(inviteToken(SECRET, tenant, invite, 1))!;
     expect(parsed).toMatchObject({ tenantId: tenant, inviteId: invite });
@@ -30,11 +39,20 @@ describe('a guest\'s link', () => {
   });
 
   it('is refused when it has the wrong shape', () => {
-    for (const bad of ['', 'nonsense', `${tenant}.${invite}`, `${tenant}.${invite}.short`, `x.${invite}.${'A'.repeat(43)}`]) expect(parseInviteToken(bad)).toBeNull();
+    for (const bad of [
+      '',
+      'nonsense',
+      `${tenant}.${invite}`,
+      `${tenant}.${invite}.short`,
+      `x.${invite}.${'A'.repeat(43)}`,
+    ])
+      expect(parseInviteToken(bad)).toBeNull();
   });
 
   it('gives different links to different invitations of the same session', () => {
-    expect(inviteToken(SECRET, tenant, randomUUID(), 1)).not.toBe(inviteToken(SECRET, tenant, randomUUID(), 1));
+    expect(inviteToken(SECRET, tenant, randomUUID(), 1)).not.toBe(
+      inviteToken(SECRET, tenant, randomUUID(), 1),
+    );
   });
 });
 
@@ -68,11 +86,19 @@ describe('the Agora channel and token', () => {
 
 describe('when a session can be joined', () => {
   const now = new Date('2026-11-12T10:00:00Z');
-  const base = { status: 'open', started_at: null, max_minutes: 45, expires_at: new Date('2026-11-13T10:00:00Z'), ended_at: null };
+  const base = {
+    status: 'open',
+    started_at: null,
+    max_minutes: 45,
+    expires_at: new Date('2026-11-13T10:00:00Z'),
+    ended_at: null,
+  };
 
   it('is open before and during the call', () => {
     expect(sessionProblem(base, now)).toBeNull();
-    expect(sessionProblem({ ...base, started_at: new Date('2026-11-12T09:30:00Z') }, now)).toBeNull();
+    expect(
+      sessionProblem({ ...base, started_at: new Date('2026-11-12T09:30:00Z') }, now),
+    ).toBeNull();
   });
 
   it('refuses an ended session', () => {
@@ -80,34 +106,77 @@ describe('when a session can be joined', () => {
   });
 
   it('refuses a link that expired before anyone joined, but not a call already running', () => {
-    expect(sessionProblem({ ...base, expires_at: new Date('2026-11-12T09:00:00Z') }, now)).toBe('link_expired');
-    expect(sessionProblem({ ...base, expires_at: new Date('2026-11-12T09:00:00Z'), started_at: new Date('2026-11-12T09:50:00Z') }, now)).toBeNull();
+    expect(sessionProblem({ ...base, expires_at: new Date('2026-11-12T09:00:00Z') }, now)).toBe(
+      'link_expired',
+    );
+    expect(
+      sessionProblem(
+        {
+          ...base,
+          expires_at: new Date('2026-11-12T09:00:00Z'),
+          started_at: new Date('2026-11-12T09:50:00Z'),
+        },
+        now,
+      ),
+    ).toBeNull();
   });
 
   it('refuses once the agreed minutes have passed', () => {
-    expect(sessionProblem({ ...base, started_at: new Date('2026-11-12T09:14:00Z') }, now)).toBe('time_up');
+    expect(sessionProblem({ ...base, started_at: new Date('2026-11-12T09:14:00Z') }, now)).toBe(
+      'time_up',
+    );
   });
 
   it('keeps a planned meeting closed until a few minutes before its time', () => {
-    expect(sessionProblem({ ...base, scheduled_for: new Date('2026-11-12T11:00:00Z') }, now)).toBe('too_early');
-    expect(sessionProblem({ ...base, scheduled_for: new Date('2026-11-12T10:09:00Z') }, now)).toBeNull();
-    expect(sessionProblem({ ...base, scheduled_for: new Date('2026-11-12T09:30:00Z') }, now)).toBeNull();
+    expect(sessionProblem({ ...base, scheduled_for: new Date('2026-11-12T11:00:00Z') }, now)).toBe(
+      'too_early',
+    );
+    expect(
+      sessionProblem({ ...base, scheduled_for: new Date('2026-11-12T10:09:00Z') }, now),
+    ).toBeNull();
+    expect(
+      sessionProblem({ ...base, scheduled_for: new Date('2026-11-12T09:30:00Z') }, now),
+    ).toBeNull();
   });
 
   it('counts the seconds left from the start', () => {
     expect(secondsLeft({ started_at: null, max_minutes: 45 }, now)).toBe(2700);
-    expect(secondsLeft({ started_at: new Date('2026-11-12T09:40:00Z'), max_minutes: 45 }, now)).toBe(1500);
-    expect(secondsLeft({ started_at: new Date('2026-11-12T08:00:00Z'), max_minutes: 45 }, now)).toBe(0);
+    expect(
+      secondsLeft({ started_at: new Date('2026-11-12T09:40:00Z'), max_minutes: 45 }, now),
+    ).toBe(1500);
+    expect(
+      secondsLeft({ started_at: new Date('2026-11-12T08:00:00Z'), max_minutes: 45 }, now),
+    ).toBe(0);
   });
 });
 
 describe('who counts as connected', () => {
   const now = new Date('2026-11-12T10:00:00Z');
   it('needs to have joined and to have reported recently', () => {
-    expect(isConnected({ joined_at: new Date('2026-11-12T09:50:00Z'), last_seen_at: new Date('2026-11-12T09:59:40Z') }, now)).toBe(true);
-    expect(isConnected({ joined_at: new Date('2026-11-12T09:50:00Z'), last_seen_at: new Date('2026-11-12T09:58:00Z') }, now)).toBe(false);
-    expect(isConnected({ joined_at: null, last_seen_at: new Date('2026-11-12T09:59:55Z') }, now)).toBe(false);
-    expect(isConnected({ joined_at: new Date('2026-11-12T09:50:00Z'), last_seen_at: null }, now)).toBe(false);
+    expect(
+      isConnected(
+        {
+          joined_at: new Date('2026-11-12T09:50:00Z'),
+          last_seen_at: new Date('2026-11-12T09:59:40Z'),
+        },
+        now,
+      ),
+    ).toBe(true);
+    expect(
+      isConnected(
+        {
+          joined_at: new Date('2026-11-12T09:50:00Z'),
+          last_seen_at: new Date('2026-11-12T09:58:00Z'),
+        },
+        now,
+      ),
+    ).toBe(false);
+    expect(
+      isConnected({ joined_at: null, last_seen_at: new Date('2026-11-12T09:59:55Z') }, now),
+    ).toBe(false);
+    expect(
+      isConnected({ joined_at: new Date('2026-11-12T09:50:00Z'), last_seen_at: null }, now),
+    ).toBe(false);
   });
 });
 

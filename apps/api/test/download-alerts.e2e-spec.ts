@@ -57,7 +57,12 @@ describe('download alerts to Super Admins', () => {
       expect(mine.rows.length, `Super Admin ${sa.name}`).toBeGreaterThanOrEqual(1);
     }
     const latest = (await alertsFor('lockme'))[0]!;
-    expect(latest).toMatchObject({ event: 'download', kind: 'lead_export', userName: 'admin', userId: fx.user('admin').id });
+    expect(latest).toMatchObject({
+      event: 'download',
+      kind: 'lead_export',
+      userName: 'admin',
+      userId: fx.user('admin').id,
+    });
     expect(String(latest.what)).toContain('lead list');
     expect(String(latest.fileName)).toMatch(/\.csv$/);
     expect((await alertsFor('lockme')).length).toBe(before + 1);
@@ -73,10 +78,23 @@ describe('download alerts to Super Admins', () => {
 
   it('covers reports exported as a file, and does not alert for a report only viewed on screen', async () => {
     const before = (await alertsFor('lockme')).length;
-    expect((await api.call('GET', '/reports/leads?groupBy=source', t.admin!, undefined, OFFICE_IP)).statusCode).toBe(200);
+    expect(
+      (await api.call('GET', '/reports/leads?groupBy=source', t.admin!, undefined, OFFICE_IP))
+        .statusCode,
+    ).toBe(200);
     expect((await alertsFor('lockme')).length).toBe(before);
 
-    expect((await api.call('GET', '/reports/leads?groupBy=source&format=xlsx', t.admin!, undefined, OFFICE_IP)).statusCode).toBe(200);
+    expect(
+      (
+        await api.call(
+          'GET',
+          '/reports/leads?groupBy=source&format=xlsx',
+          t.admin!,
+          undefined,
+          OFFICE_IP,
+        )
+      ).statusCode,
+    ).toBe(200);
     const after = await alertsFor('lockme');
     expect(after.length).toBe(before + 1);
     expect(after[0]).toMatchObject({ kind: 'report_export', userName: 'admin' });
@@ -87,13 +105,29 @@ describe('download alerts to Super Admins', () => {
     const res = await api.call('GET', '/leads/export?format=csv', 'not.a.token');
     expect(res.statusCode).toBe(401);
     const counsellor = await api.signIn('counsellor', { office: true });
-    expect((await api.call('GET', '/reports/leads?groupBy=source&format=csv', counsellor, undefined, OFFICE_IP)).statusCode).toBe(403);
+    expect(
+      (
+        await api.call(
+          'GET',
+          '/reports/leads?groupBy=source&format=csv',
+          counsellor,
+          undefined,
+          OFFICE_IP,
+        )
+      ).statusCode,
+    ).toBe(403);
     expect((await alertsFor('lockme')).length).toBe(before);
   });
 
   it('covers the monthly salary report with the same alert', async () => {
     const before = (await alertsFor('lockme')).length;
-    const report = await api.call('GET', '/salaries/report?month=2026-10&format=csv', t.admin!, undefined, OFFICE_IP);
+    const report = await api.call(
+      'GET',
+      '/salaries/report?month=2026-10&format=csv',
+      t.admin!,
+      undefined,
+      OFFICE_IP,
+    );
     // Whether the month has rows or not, a file is produced and the download is announced.
     expect(report.statusCode, report.body).toBe(200);
     const after = await alertsFor('lockme');

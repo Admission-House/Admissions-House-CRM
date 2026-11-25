@@ -1,4 +1,16 @@
-import { Body, Controller, Delete, Get, HttpCode, Inject, Post, Put, Req, Res, StreamableFile } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Inject,
+  Post,
+  Put,
+  Req,
+  Res,
+  StreamableFile,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { createZodDto } from 'nestjs-zod';
@@ -8,7 +20,12 @@ import { AppError } from '../common/app-error.js';
 import { ENV } from '../config/config.module.js';
 import type { Env } from '../config/env.js';
 import { readForm } from '../storage/multipart.js';
-import { companySchema, CompanyService, MAX_LOGO_BYTES, securitySchema } from './company.service.js';
+import {
+  companySchema,
+  CompanyService,
+  MAX_LOGO_BYTES,
+  securitySchema,
+} from './company.service.js';
 
 class CompanyDto extends createZodDto(companySchema) {}
 class SecurityDto extends createZodDto(securitySchema) {}
@@ -49,7 +66,10 @@ export class CompanyController {
 
   @AllowMfaSetup()
   @Get('logo')
-  async logo(@CurrentAuth() auth: AuthContext, @Res({ passthrough: true }) reply: FastifyReply): Promise<StreamableFile> {
+  async logo(
+    @CurrentAuth() auth: AuthContext,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<StreamableFile> {
     const file = await this.company.logo(auth);
     if (!file) throw AppError.notFound('Logo');
     void reply.header('content-type', file.mime);
@@ -66,7 +86,10 @@ export class CompanyController {
   @HttpCode(200)
   async setLogo(@CurrentAuth() auth: AuthContext, @Req() req: FastifyRequest) {
     const { file } = await readForm(req, Math.min(this.env.MAX_UPLOAD_BYTES, MAX_LOGO_BYTES + 1));
-    if (!file) throw AppError.badRequest('NO_FILE', 'No file was sent', [{ field: 'file', message: 'Attach the picture' }]);
+    if (!file)
+      throw AppError.badRequest('NO_FILE', 'No file was sent', [
+        { field: 'file', message: 'Attach the picture' },
+      ]);
     return this.company.setLogo(auth, file.data);
   }
 

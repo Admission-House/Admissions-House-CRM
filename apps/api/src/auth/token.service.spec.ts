@@ -28,9 +28,15 @@ describe('TokenService access tokens', () => {
   });
 
   it('rejects a token signed with another secret', async () => {
-    const other = new TokenService({ ...env, JWT_ACCESS_SECRET: 'another-secret-that-is-also-long-enough-xx' });
+    const other = new TokenService({
+      ...env,
+      JWT_ACCESS_SECRET: 'another-secret-that-is-also-long-enough-xx',
+    });
     const { token } = await other.signAccess(claims);
-    await expect(tokens.verifyAccess(token)).rejects.toMatchObject({ code: 'TOKEN_INVALID', status: 401 });
+    await expect(tokens.verifyAccess(token)).rejects.toMatchObject({
+      code: 'TOKEN_INVALID',
+      status: 401,
+    });
   });
 
   it('rejects an expired token', async () => {
@@ -63,7 +69,9 @@ describe('TokenService access tokens', () => {
   });
 
   it('rejects garbage', async () => {
-    await expect(tokens.verifyAccess('not-a-token')).rejects.toMatchObject({ code: 'TOKEN_INVALID' });
+    await expect(tokens.verifyAccess('not-a-token')).rejects.toMatchObject({
+      code: 'TOKEN_INVALID',
+    });
     await expect(tokens.verifyAccess('')).rejects.toMatchObject({ code: 'TOKEN_INVALID' });
   });
 });
@@ -85,12 +93,14 @@ describe('TokenService refresh tokens', () => {
     expect(a.hash).not.toContain(a.token.split('.')[3]);
   });
 
-  it.each(['', 'v1.x.y.z', `v2.${randomUUID()}.${randomUUID()}.${'a'.repeat(43)}`, `v1.${randomUUID()}.${randomUUID()}.short`])(
-    'refuses a malformed token: %s',
-    (bad) => {
-      expect(tokens.parseRefreshToken(bad)).toBeNull();
-    },
-  );
+  it.each([
+    '',
+    'v1.x.y.z',
+    `v2.${randomUUID()}.${randomUUID()}.${'a'.repeat(43)}`,
+    `v1.${randomUUID()}.${randomUUID()}.short`,
+  ])('refuses a malformed token: %s', (bad) => {
+    expect(tokens.parseRefreshToken(bad)).toBeNull();
+  });
 });
 
 describe('safeEqualHex', () => {

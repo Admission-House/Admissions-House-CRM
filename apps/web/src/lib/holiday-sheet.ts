@@ -15,7 +15,8 @@ const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', '
 function iso(y: number, m: number, d: number): string | null {
   if (y < 2000 || y > 2100 || m < 1 || m > 12 || d < 1 || d > 31) return null;
   const date = new Date(Date.UTC(y, m - 1, d));
-  if (date.getUTCFullYear() !== y || date.getUTCMonth() !== m - 1 || date.getUTCDate() !== d) return null; // 31-02 and the like
+  if (date.getUTCFullYear() !== y || date.getUTCMonth() !== m - 1 || date.getUTCDate() !== d)
+    return null; // 31-02 and the like
   return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 }
 
@@ -43,7 +44,10 @@ function cells(line: string): string[] {
   for (let i = 0; i < line.length; i++) {
     const ch = line[i]!;
     if (ch === '"') {
-      if (quoted && line[i + 1] === '"') { cur += '"'; i++; } else quoted = !quoted;
+      if (quoted && line[i + 1] === '"') {
+        cur += '"';
+        i++;
+      } else quoted = !quoted;
     } else if (ch === sep && !quoted) {
       out.push(cur);
       cur = '';
@@ -69,16 +73,22 @@ export function readHolidaySheet(text: string): HolidayLine[] {
     }
     seenHoliday = true;
     const date = readDate(parts[at]!)!;
-    const name = parts.filter((_p, j) => j !== at).join(' ').trim();
+    const name = parts
+      .filter((_p, j) => j !== at)
+      .join(' ')
+      .trim();
     if (name.length < 2) out.push({ line: i + 1, date, problem: 'The holiday needs a name.' });
-    else if (name.length > 80) out.push({ line: i + 1, date, problem: 'The name is longer than 80 letters.' });
+    else if (name.length > 80)
+      out.push({ line: i + 1, date, problem: 'The name is longer than 80 letters.' });
     else out.push({ line: i + 1, date, name });
   });
   // The same date twice in the list: keep the first.
   const first = new Map<string, number>();
   for (const h of out) {
     if (!h.date || h.problem) continue;
-    if (first.has(h.date)) { h.problem = `Same date as line ${first.get(h.date)}.`; } else first.set(h.date, h.line);
+    if (first.has(h.date)) {
+      h.problem = `Same date as line ${first.get(h.date)}.`;
+    } else first.set(h.date, h.line);
   }
   return out;
 }

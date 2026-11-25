@@ -19,14 +19,23 @@ import type { PlaceCallRequest, TelephonyProvider } from './provider.js';
 export const EXOTEL_HOSTS = ['api.exotel.com', 'api.in.exotel.com'] as const;
 
 export const exotelConfigSchema = z.object({
-  accountSid: z.string().trim().regex(/^[A-Za-z0-9_-]{2,60}$/),
+  accountSid: z
+    .string()
+    .trim()
+    .regex(/^[A-Za-z0-9_-]{2,60}$/),
   apiKey: z.string().trim().min(4).max(120),
   apiToken: z.string().trim().min(4).max(200),
   /** The ExoPhone the student sees and calls back on. */
   callerId: z.string().trim().min(5).max(20),
   host: z.enum(EXOTEL_HOSTS).default('api.exotel.com'),
   /** The full callback address, https://<api>/api/v1/telephony/hooks/exotel/<webhook key>. */
-  callbackUrl: z.url().max(500).refine((u) => u.startsWith('https://') || /^http:\/\/(localhost|127\.0\.0\.1)/.test(u), 'Use an https address'),
+  callbackUrl: z
+    .url()
+    .max(500)
+    .refine(
+      (u) => u.startsWith('https://') || /^http:\/\/(localhost|127\.0\.0\.1)/.test(u),
+      'Use an https address',
+    ),
   record: z.boolean().default(true),
 });
 export type ExotelConfig = z.infer<typeof exotelConfigSchema>;
@@ -109,15 +118,30 @@ export class ExotelProvider implements TelephonyProvider {
   validateConfig(config: Record<string, unknown>): Record<string, unknown> {
     const parsed = exotelConfigSchema.safeParse(config);
     if (!parsed.success) {
-      throw new AppError('CONFIG_INVALID', 'The Exotel settings are not complete', 422, parsed.error.issues.map((i) => ({ field: String(i.path[0] ?? 'config'), message: i.message })));
+      throw new AppError(
+        'CONFIG_INVALID',
+        'The Exotel settings are not complete',
+        422,
+        parsed.error.issues.map((i) => ({
+          field: String(i.path[0] ?? 'config'),
+          message: i.message,
+        })),
+      );
     }
     return parsed.data;
   }
 
-  async placeCall(rawConfig: Record<string, unknown>, request: PlaceCallRequest): Promise<{ providerCallId: string }> {
+  async placeCall(
+    rawConfig: Record<string, unknown>,
+    request: PlaceCallRequest,
+  ): Promise<{ providerCallId: string }> {
     const parsed = exotelConfigSchema.safeParse(rawConfig);
     if (!parsed.success) {
-      throw new AppError('TELEPHONY_NOT_CONFIGURED', 'The Exotel connection is missing details. Ask an admin to complete it in Settings → Telephony.', 422);
+      throw new AppError(
+        'TELEPHONY_NOT_CONFIGURED',
+        'The Exotel connection is missing details. Ask an admin to complete it in Settings → Telephony.',
+        422,
+      );
     }
     const c = parsed.data;
     const body = new URLSearchParams({
@@ -134,53 +158,96 @@ export class ExotelProvider implements TelephonyProvider {
 
     const breaker = this.breakerFor(c.host);
     if (!breaker.tryAcquire()) {
-      throw new AppError('PROVIDER_PAUSED', 'Calling is paused for a moment because the calling service is not answering. Try again in a minute.', 503, undefined, { 'retry-after': String(Math.max(1, breaker.retryAfterSec)) });
+      throw new AppError(
+        'PROVIDER_PAUSED',
+        'Calling is paused for a moment because the calling service is not answering. Try again in a minute.',
+        503,
+        undefined,
+        { 'retry-after': String(Math.max(1, breaker.retryAfterSec)) },
+      );
     }
 
     let res: Response;
     try {
-      res = await fetch(`https://${c.host}/v1/Accounts/${encodeURIComponent(c.accountSid)}/Calls/connect`, {
-        method: 'POST',
-        headers: {
-          authorization: `Basic ${Buffer.from(`${c.apiKey}:${c.apiToken}`).toString('base64')}`,
-          'content-type': 'application/x-www-form-urlencoded',
-          accept: 'application/json',
+      res = await fetch(
+        `https://${c.host}/v1/Accounts/${encodeURIComponent(c.accountSid)}/Calls/connect`,
+        {
+          method: 'POST',
+          headers: {
+            authorization: `Basic ${Buffer.from(`${c.apiKey}:${c.apiToken}`).toString('base64')}`,
+            'content-type': 'application/x-www-form-urlencoded',
+            accept: 'application/json',
+          },
+          body,
+          redirect: 'error',
+          signal: AbortSignal.timeout(10_000),
         },
-        body,
-        redirect: 'error',
-        signal: AbortSignal.timeout(10_000),
-      });
+      );
     } catch {
       breaker.failure();
-      throw new AppError('PROVIDER_UNREACHABLE', 'The calling service did not answer. Try again in a moment.', 502);
+      throw new AppError(
+        'PROVIDER_UNREACHABLE',
+        'The calling service did not answer. Try again in a moment.',
+        502,
+      );
     }
     if (res.status >= 500) breaker.failure();
     else breaker.success();
-    if (res.status === 401 || res.status === 403) throw new AppError('PROVIDER_AUTH', 'Exotel rejected the saved login details. Ask an admin to check them.', 502);
-    if (res.status === 429) throw new AppError('PROVIDER_BUSY', 'Too many calls are being placed at once. Try again in a few seconds.', 429);
-    if (!res.ok) throw new AppError('PROVIDER_ERROR', 'The calling service did not accept the call. Try again in a moment.', 502);
+    if (res.status === 401 || res.status === 403)
+      throw new AppError(
+        'PROVIDER_AUTH',
+        'Exotel rejected the saved login details. Ask an admin to check them.',
+        502,
+      );
+    if (res.status === 429)
+      throw new AppError(
+        'PROVIDER_BUSY',
+        'Too many calls are being placed at once. Try again in a few seconds.',
+        429,
+      );
+    if (!res.ok)
+      throw new AppError(
+        'PROVIDER_ERROR',
+        'The calling service did not accept the call. Try again in a moment.',
+        502,
+      );
 
     const json = (await res.json().catch(() => null)) as { Call?: { Sid?: unknown } } | null;
     const sid = json?.Call?.Sid;
-    if (typeof sid !== 'string' || sid.length === 0) throw new AppError('PROVIDER_ERROR', 'The calling service gave an answer we could not read.', 502);
+    if (typeof sid !== 'string' || sid.length === 0)
+      throw new AppError(
+        'PROVIDER_ERROR',
+        'The calling service gave an answer we could not read.',
+        502,
+      );
     return { providerCallId: sid };
   }
 
   normalize(body: unknown): CallEvent[] {
-    if (typeof body !== 'object' || body === null) throw new ProviderPayloadError('Expected an Exotel call report');
+    if (typeof body !== 'object' || body === null)
+      throw new ProviderPayloadError('Expected an Exotel call report');
     // Passthru reports carry CallFrom; StatusCallback reports do not.
     return 'CallFrom' in body ? this.fromPassthru(body) : this.fromStatusCallback(body);
   }
 
   private fromStatusCallback(body: object): CallEvent[] {
     const p = statusCallbackSchema.safeParse(body);
-    if (!p.success) throw new ProviderPayloadError(`Exotel report not understood: ${p.error.issues.map((i) => i.path.join('.')).join(', ')}`);
+    if (!p.success)
+      throw new ProviderPayloadError(
+        `Exotel report not understood: ${p.error.issues.map((i) => i.path.join('.')).join(', ')}`,
+      );
     const r = p.data;
     const incoming = r.Direction === 'inbound';
     const customerNumber = phone(incoming ? r.From : r.To);
-    if (!customerNumber) throw new ProviderPayloadError('Exotel report has no usable customer number');
+    if (!customerNumber)
+      throw new ProviderPayloadError('Exotel report has no usable customer number');
     const agentNumber = phone(incoming ? r.To : r.From);
-    const base = { providerCallId: r.CallSid, direction: incoming ? ('incoming' as const) : ('outgoing' as const), customerNumber, agentNumber };
+    const base = {
+      providerCallId: r.CallSid,
+      direction: incoming ? ('incoming' as const) : ('outgoing' as const),
+      customerNumber,
+      agentNumber,
+    };
 
     if (r.EventType === 'answered') {
       const at = exotelTime(r.StartTime ?? r.DateUpdated, this.utcOffset) ?? new Date();
@@ -193,7 +260,11 @@ export class ExotelProvider implements TelephonyProvider {
     switch (r.Status) {
       case 'completed':
         // Both legs were joined only if they actually talked.
-        events.push(talk > 0 ? { ...base, event: 'ended', at, durationSec: talk } : { ...base, event: 'ended', at, durationSec: 0, outcome: 'not_picked' });
+        events.push(
+          talk > 0
+            ? { ...base, event: 'ended', at, durationSec: talk }
+            : { ...base, event: 'ended', at, durationSec: 0, outcome: 'not_picked' },
+        );
         break;
       case 'busy':
         events.push({ ...base, event: 'ended', at, durationSec: 0, outcome: 'busy' });
@@ -214,12 +285,24 @@ export class ExotelProvider implements TelephonyProvider {
 
   private fromPassthru(body: object): CallEvent[] {
     const p = passthruSchema.safeParse(body);
-    if (!p.success) throw new ProviderPayloadError(`Exotel report not understood: ${p.error.issues.map((i) => i.path.join('.')).join(', ')}`);
+    if (!p.success)
+      throw new ProviderPayloadError(
+        `Exotel report not understood: ${p.error.issues.map((i) => i.path.join('.')).join(', ')}`,
+      );
     const r = p.data;
     const customerNumber = phone(r.CallFrom);
-    if (!customerNumber) throw new ProviderPayloadError('Exotel report has no usable caller number');
-    const at = exotelTime(r.CurrentTime, this.utcOffset) ?? exotelTime(r.Created, this.utcOffset) ?? new Date();
-    const base = { providerCallId: r.CallSid, direction: 'incoming' as const, customerNumber, agentNumber: phone(r.DialWhomNumber) };
+    if (!customerNumber)
+      throw new ProviderPayloadError('Exotel report has no usable caller number');
+    const at =
+      exotelTime(r.CurrentTime, this.utcOffset) ??
+      exotelTime(r.Created, this.utcOffset) ??
+      new Date();
+    const base = {
+      providerCallId: r.CallSid,
+      direction: 'incoming' as const,
+      customerNumber,
+      agentNumber: phone(r.DialWhomNumber),
+    };
 
     // Exotel's CallType: completed = they talked; incomplete / client-hangup / voicemail / call-attempt = nobody took it.
     const talked = r.CallType === 'completed' || r.DialCallStatus === 'completed';

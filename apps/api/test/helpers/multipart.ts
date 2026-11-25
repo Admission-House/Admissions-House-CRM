@@ -10,11 +10,18 @@ export interface UploadFile {
 }
 
 /** Builds a multipart/form-data body by hand, the way a browser or the mobile app sends it. */
-export function multipart(fields: Record<string, string>, files: UploadFile[] = []): { payload: Buffer; contentType: string } {
+export function multipart(
+  fields: Record<string, string>,
+  files: UploadFile[] = [],
+): { payload: Buffer; contentType: string } {
   const boundary = `----test${randomBytes(12).toString('hex')}`;
   const parts: Buffer[] = [];
   for (const [name, value] of Object.entries(fields)) {
-    parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`));
+    parts.push(
+      Buffer.from(
+        `--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`,
+      ),
+    );
   }
   for (const f of files) {
     parts.push(
@@ -26,5 +33,8 @@ export function multipart(fields: Record<string, string>, files: UploadFile[] = 
     );
   }
   parts.push(Buffer.from(`--${boundary}--\r\n`));
-  return { payload: Buffer.concat(parts), contentType: `multipart/form-data; boundary=${boundary}` };
+  return {
+    payload: Buffer.concat(parts),
+    contentType: `multipart/form-data; boundary=${boundary}`,
+  };
 }

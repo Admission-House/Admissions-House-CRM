@@ -1,4 +1,15 @@
-import { Controller, Delete, Get, HttpCode, Inject, Param, ParseUUIDPipe, Post, Req, Res } from '@nestjs/common';
+import {
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Inject,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Req,
+  Res,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { ZodValidationException } from 'nestjs-zod';
@@ -46,9 +57,16 @@ export class DocumentsController {
   @ApiConsumes('multipart/form-data')
   @Heavy()
   @Post()
-  async upload(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Req() req: FastifyRequest) {
+  async upload(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: FastifyRequest,
+  ) {
     const { fields, file } = await readForm(req, this.env.MAX_UPLOAD_BYTES);
-    if (!file) throw AppError.badRequest('NO_FILE', 'No file was sent', [{ field: 'file', message: 'Attach the file' }]);
+    if (!file)
+      throw AppError.badRequest('NO_FILE', 'No file was sent', [
+        { field: 'file', message: 'Attach the file' },
+      ]);
 
     const parsed = fieldsSchema.safeParse(fields);
     if (!parsed.success) throw new ZodValidationException(parsed.error);
@@ -74,7 +92,11 @@ export class DocumentsController {
   @RequirePermissions('lead.read')
   @Post(':docId/link')
   @HttpCode(200)
-  async link(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Param('docId', ParseUUIDPipe) docId: string) {
+  async link(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('docId', ParseUUIDPipe) docId: string,
+  ) {
     const link = await this.documents.link(auth, id, docId);
     await this.downloads.record(auth, 'document', 'a student document');
     return link;
@@ -83,7 +105,11 @@ export class DocumentsController {
   @RequirePermissions('document.manage')
   @Delete(':docId')
   @HttpCode(204)
-  remove(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Param('docId', ParseUUIDPipe) docId: string): Promise<void> {
+  remove(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('docId', ParseUUIDPipe) docId: string,
+  ): Promise<void> {
     return this.documents.remove(auth, id, docId);
   }
 }
@@ -102,7 +128,13 @@ export class FilesController {
   async open(@Param('token') token: string, @Res({ passthrough: true }) reply: FastifyReply) {
     const checked = this.links.verify(token);
     if (!checked.ok) {
-      throw new AppError(checked.reason === 'expired' ? 'LINK_EXPIRED' : 'LINK_INVALID', checked.reason === 'expired' ? 'This link has expired. Ask for a new one.' : 'This link is not valid.', 403);
+      throw new AppError(
+        checked.reason === 'expired' ? 'LINK_EXPIRED' : 'LINK_INVALID',
+        checked.reason === 'expired'
+          ? 'This link has expired. Ask for a new one.'
+          : 'This link is not valid.',
+        403,
+      );
     }
     const file = await this.storage.get(checked.claims.key);
     if (!file) throw AppError.notFound('File');
@@ -120,6 +152,10 @@ export class DocumentLimitsController {
   @RequirePermissions('lead.read')
   @Get('limits')
   limits() {
-    return { maxBytes: this.env.MAX_UPLOAD_BYTES, accepts: ['jpg', 'jpeg', 'png', 'pdf'], imageOnly: ['photo', 'signature'] };
+    return {
+      maxBytes: this.env.MAX_UPLOAD_BYTES,
+      accepts: ['jpg', 'jpeg', 'png', 'pdf'],
+      imageOnly: ['photo', 'signature'],
+    };
   }
 }

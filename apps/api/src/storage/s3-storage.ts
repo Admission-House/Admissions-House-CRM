@@ -1,4 +1,9 @@
-import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
 import { Readable } from 'node:stream';
 import type { Env } from '../config/env.js';
 import { KEY, StorageService } from './storage.service.js';
@@ -25,7 +30,10 @@ export class S3Storage extends StorageService {
       region: env.S3_REGION,
       endpoint: env.S3_ENDPOINT,
       forcePathStyle: env.S3_FORCE_PATH_STYLE,
-      credentials: { accessKeyId: env.S3_ACCESS_KEY_ID!, secretAccessKey: env.S3_SECRET_ACCESS_KEY! },
+      credentials: {
+        accessKeyId: env.S3_ACCESS_KEY_ID!,
+        secretAccessKey: env.S3_SECRET_ACCESS_KEY!,
+      },
     });
     return new S3Storage(client, env.S3_BUCKET!);
   }
@@ -36,12 +44,21 @@ export class S3Storage extends StorageService {
   }
 
   async put(key: string, data: Buffer): Promise<void> {
-    await this.client.send(new PutObjectCommand({ Bucket: this.bucket, Key: this.check(key), Body: data, ContentLength: data.length, }));
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: this.check(key),
+        Body: data,
+        ContentLength: data.length,
+      }),
+    );
   }
 
   async get(key: string): Promise<{ stream: Readable; size: number } | null> {
     try {
-      const res = (await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: this.check(key) }))) as { Body?: unknown; ContentLength?: number };
+      const res = (await this.client.send(
+        new GetObjectCommand({ Bucket: this.bucket, Key: this.check(key) }),
+      )) as { Body?: unknown; ContentLength?: number };
       if (!res.Body) return null;
       return { stream: res.Body as Readable, size: res.ContentLength ?? 0 };
     } catch (err) {

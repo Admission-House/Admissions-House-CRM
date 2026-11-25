@@ -6,11 +6,21 @@ let cron: NestFastifyApplication;
 let server: NestFastifyApplication;
 
 const call = (app: NestFastifyApplication, group: string, token?: string) =>
-  app.inject({ method: 'GET', url: `/api/v1/internal/jobs/${group}`, headers: token ? { authorization: `Bearer ${token}` } : {}, remoteAddress: '198.51.100.30' });
+  app.inject({
+    method: 'GET',
+    url: `/api/v1/internal/jobs/${group}`,
+    headers: token ? { authorization: `Bearer ${token}` } : {},
+    remoteAddress: '198.51.100.30',
+  });
 
 beforeAll(async () => {
   // A scheduler setup (Vercel): no timers, jobs wait to be called. One job is switched on so there is something to run.
-  cron = await startApp({ JOBS_MODE: 'cron', CRON_SECRET: SECRET, COMMUNICATION_SWEEP_SEC: '60', INTAKE_RETRY_INTERVAL_SEC: '60' });
+  cron = await startApp({
+    JOBS_MODE: 'cron',
+    CRON_SECRET: SECRET,
+    COMMUNICATION_SWEEP_SEC: '60',
+    INTAKE_RETRY_INTERVAL_SEC: '60',
+  });
   // An ordinary server: timers do the work, and the scheduler's address is switched off.
   server = await startApp({ CRON_SECRET: SECRET });
 });
@@ -23,7 +33,9 @@ afterAll(async () => {
 describe('the address a scheduler calls', () => {
   it('refuses a request without the secret, or with another one', async () => {
     expect((await call(cron, 'minute')).statusCode).toBe(401);
-    expect((await call(cron, 'minute', 'wrong-secret-wrong-secret-wrong-secret')).statusCode).toBe(401);
+    expect((await call(cron, 'minute', 'wrong-secret-wrong-secret-wrong-secret')).statusCode).toBe(
+      401,
+    );
     expect((await call(cron, 'minute', SECRET.slice(0, -1))).statusCode).toBe(401);
   });
 

@@ -7,7 +7,10 @@ import { CurrentAuth, Heavy } from '../auth/decorators.js';
 import { PushTokensService } from './push-tokens.service.js';
 
 /** An Expo push token looks like ExponentPushToken[xxxxxxxx]. */
-const token = z.string().trim().regex(/^(Exponent|Expo)PushToken\[[A-Za-z0-9_-]{10,}\]$/, 'This is not a push token');
+const token = z
+  .string()
+  .trim()
+  .regex(/^(Exponent|Expo)PushToken\[[A-Za-z0-9_-]{10,}\]$/, 'This is not a push token');
 
 class RegisterDto extends createZodDto(z.object({ token, platform: z.enum(['android', 'ios']) })) {}
 class UnregisterDto extends createZodDto(z.object({ token })) {}

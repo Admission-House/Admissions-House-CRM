@@ -85,7 +85,9 @@ export class AuthRepository {
   async findLoginUser(trx: Trx, email: string): Promise<LoginUser | undefined> {
     const row = await trx
       .selectFrom('users as u')
-      .innerJoin('roles as r', (j) => j.onRef('r.id', '=', 'u.role_id').onRef('r.tenant_id', '=', 'u.tenant_id'))
+      .innerJoin('roles as r', (j) =>
+        j.onRef('r.id', '=', 'u.role_id').onRef('r.tenant_id', '=', 'u.tenant_id'),
+      )
       .select([
         'u.id',
         'u.name',
@@ -122,7 +124,14 @@ export class AuthRepository {
 
   async recordAttempt(
     trx: Trx,
-    a: { tenantId: string; userId: string | null; result: AttemptResult; ip: string; lat?: number; lng?: number },
+    a: {
+      tenantId: string;
+      userId: string | null;
+      result: AttemptResult;
+      ip: string;
+      lat?: number;
+      lng?: number;
+    },
   ): Promise<void> {
     await trx
       .insertInto('login_attempts')
@@ -141,7 +150,12 @@ export class AuthRepository {
    * Counts a wrong password and locks the account once the limit is reached. If an earlier lock
    * has run out, counting starts again from one rather than locking on the first mistake.
    */
-  async registerFailure(trx: Trx, userId: string, maxFailures: number, lockMinutes: number): Promise<void> {
+  async registerFailure(
+    trx: Trx,
+    userId: string,
+    maxFailures: number,
+    lockMinutes: number,
+  ): Promise<void> {
     await sql`
       UPDATE users SET
         failed_logins = next.n,
@@ -200,7 +214,13 @@ export class AuthRepository {
   /** The registered device, created (waiting for approval) the first time it is seen. */
   async findOrCreateDevice(
     trx: Trx,
-    d: { tenantId: string; userId: string; fingerprint: string; platform: 'android' | 'ios'; label?: string },
+    d: {
+      tenantId: string;
+      userId: string;
+      fingerprint: string;
+      platform: 'android' | 'ios';
+      label?: string;
+    },
   ): Promise<{ id: string; approved: boolean }> {
     const row = await trx
       .insertInto('user_devices')
@@ -211,7 +231,9 @@ export class AuthRepository {
         platform: d.platform,
         label: d.label ?? null,
       })
-      .onConflict((oc) => oc.columns(['user_id', 'device_fingerprint']).doUpdateSet({ platform: d.platform }))
+      .onConflict((oc) =>
+        oc.columns(['user_id', 'device_fingerprint']).doUpdateSet({ platform: d.platform }),
+      )
       .returning(['id', 'approved_at'])
       .executeTakeFirstOrThrow();
     return { id: row.id, approved: row.approved_at !== null };
@@ -224,7 +246,15 @@ export class AuthRepository {
     ip: string,
     wifiId: string | undefined,
   ): Promise<{
-    branch: { latitude: string | null; longitude: string | null; radius_m: number; is_active: boolean; office_check: string } | undefined;
+    branch:
+      | {
+          latitude: string | null;
+          longitude: string | null;
+          radius_m: number;
+          is_active: boolean;
+          office_check: string;
+        }
+      | undefined;
     hasNetworks: boolean;
     networkMatches: boolean;
     /** Dynamic DNS names of the office: the request is allowed if it comes from the address one of them points to now. */
@@ -288,7 +318,9 @@ export class AuthRepository {
   async touchSession(trx: Trx, sessionId: string): Promise<void> {
     await sql`
       UPDATE user_sessions SET last_active_at = now()
-      WHERE id = ${sessionId} AND ended_at IS NULL AND last_active_at < now() - interval '30 seconds'`.execute(trx);
+      WHERE id = ${sessionId} AND ended_at IS NULL AND last_active_at < now() - interval '30 seconds'`.execute(
+      trx,
+    );
   }
 
   async endSession(trx: Trx, sessionId: string, reason: SessionEndReason): Promise<void> {
@@ -298,7 +330,12 @@ export class AuthRepository {
   }
 
   /** Ends every other live session of a user. Returns how many were ended. */
-  async endOtherSessions(trx: Trx, userId: string, keepSessionId: string, reason: SessionEndReason): Promise<number> {
+  async endOtherSessions(
+    trx: Trx,
+    userId: string,
+    keepSessionId: string,
+    reason: SessionEndReason,
+  ): Promise<number> {
     const result = await sql`
       UPDATE user_sessions SET ended_at = now(), ended_reason = ${reason}
       WHERE user_id = ${userId} AND id <> ${keepSessionId} AND ended_at IS NULL`.execute(trx);
@@ -336,7 +373,12 @@ export class AuthRepository {
     return rows[0];
   }
 
-  async rotateRefreshToken(trx: Trx, sessionId: string, oldHash: string, newHash: string): Promise<void> {
+  async rotateRefreshToken(
+    trx: Trx,
+    sessionId: string,
+    oldHash: string,
+    newHash: string,
+  ): Promise<void> {
     await sql`
       UPDATE user_sessions
       SET prev_refresh_token_hash = ${oldHash}, refresh_token_hash = ${newHash}, last_active_at = now(), refresh_rotated_at = now()
@@ -363,7 +405,11 @@ export class AuthRepository {
   }
 
   async findPasswordHash(trx: Trx, userId: string): Promise<string | undefined> {
-    const row = await trx.selectFrom('users').select('password_hash').where('id', '=', userId).executeTakeFirst();
+    const row = await trx
+      .selectFrom('users')
+      .select('password_hash')
+      .where('id', '=', userId)
+      .executeTakeFirst();
     return row?.password_hash;
   }
 

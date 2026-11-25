@@ -165,7 +165,12 @@ export class LeadsService {
     @Inject(ENV) env: Env,
     live: LiveBus,
   ) {
-    this.queueCache = env.QUEUE_COUNT_CACHE_SEC > 0 ? new TtlCache<Awaited<ReturnType<LeadsService['countQueues']>>>(env.QUEUE_COUNT_CACHE_SEC * 1000) : undefined;
+    this.queueCache =
+      env.QUEUE_COUNT_CACHE_SEC > 0
+        ? new TtlCache<Awaited<ReturnType<LeadsService['countQueues']>>>(
+            env.QUEUE_COUNT_CACHE_SEC * 1000,
+          )
+        : undefined;
     // A lead changed (on this server or another): the counts are out of date now, not in a few seconds.
     live.on((e) => {
       if (e.topic === 'lead') this.queueCache?.invalidate(`${e.t}|`);
@@ -173,13 +178,15 @@ export class LeadsService {
     });
   }
 
-  private readonly queueCache: TtlCache<Awaited<ReturnType<LeadsService['countQueues']>>> | undefined;
+  private readonly queueCache:
+    TtlCache<Awaited<ReturnType<LeadsService['countQueues']>>> | undefined;
 
   // ------------------------------------------------------------------- list
 
   list(auth: AuthContext, query: ListLeadsDto): Promise<Page<LeadListItem>> {
     // Sorting by source would tell someone who may not see sources how leads are grouped by it.
-    if (query.orderBy && !(query.orderBy === 'source' && !canSeeSource(auth))) return this.listByColumn(auth, query, query.orderBy);
+    if (query.orderBy && !(query.orderBy === 'source' && !canSeeSource(auth)))
+      return this.listByColumn(auth, query, query.orderBy);
     return this.db.withTenant(auth.tenantId, async (trx) => {
       const after = decodeCursor(query.cursor, cursorShape);
       const conditions = this.filters(auth, query);
@@ -217,7 +224,10 @@ export class LeadsService {
 
       const page = toPage(rows, query.limit, (last) => ({ t: last.sort_key, i: last.id }));
       const showSource = canSeeSource(auth);
-      return { items: page.items.map((r) => toListItem(r, showSource)), nextCursor: page.nextCursor };
+      return {
+        items: page.items.map((r) => toListItem(r, showSource)),
+        nextCursor: page.nextCursor,
+      };
     });
   }
 
@@ -225,7 +235,11 @@ export class LeadsService {
    * The list sorted by one column, up or down. Leads without a value in that column come last either way, and the lead id
    * breaks ties, so paging with the cursor never skips or repeats a lead.
    */
-  private listByColumn(auth: AuthContext, query: ListLeadsDto, column: ListOrderColumn): Promise<Page<LeadListItem>> {
+  private listByColumn(
+    auth: AuthContext,
+    query: ListLeadsDto,
+    column: ListOrderColumn,
+  ): Promise<Page<LeadListItem>> {
     return this.db.withTenant(auth.tenantId, async (trx) => {
       const after = decodeCursor(query.cursor, columnCursor);
       const conditions = this.filters(auth, query);
@@ -238,11 +252,16 @@ export class LeadsService {
           conditions.push(sql<SqlBool>`(${key} IS NULL AND l.id ${op} ${after.i}::uuid)`);
         } else {
           const value = type === 'time' ? sql`${after.v}::timestamptz` : sql`${after.v}::text`;
-          conditions.push(sql<SqlBool>`(${key} IS NULL OR ${key} ${op} ${value} OR (${key} = ${value} AND l.id ${op} ${after.i}::uuid))`);
+          conditions.push(
+            sql<SqlBool>`(${key} IS NULL OR ${key} ${op} ${value} OR (${key} = ${value} AND l.id ${op} ${after.i}::uuid))`,
+          );
         }
       }
       // A time goes into the cursor with its microseconds, so the next page starts exactly after it.
-      const orderValue = type === 'time' ? sql`to_char(${key} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')` : sql`(${key})::text`;
+      const orderValue =
+        type === 'time'
+          ? sql`to_char(${key} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`
+          : sql`(${key})::text`;
 
       const { rows } = await sql<ListRow & { order_value: string | null }>`
         SELECT l.id, l.lead_no::text AS lead_no, l.name, l.primary_phone, l.email, l.intent, l.study_mode,
@@ -260,7 +279,10 @@ export class LeadsService {
 
       const page = toPage(rows, query.limit, (last) => ({ v: last.order_value, i: last.id }));
       const showSource = canSeeSource(auth);
-      return { items: page.items.map((r) => toListItem(r, showSource)), nextCursor: page.nextCursor };
+      return {
+        items: page.items.map((r) => toListItem(r, showSource)),
+        nextCursor: page.nextCursor,
+      };
     });
   }
 
@@ -329,7 +351,12 @@ export class LeadsService {
     // The key holds everything that changes the answer: company, scope, who asks, and whether they
     // also see unassigned leads.
     if (this.queueCache && auth.dataScope !== 'own') {
-      const key = [auth.tenantId, auth.dataScope, auth.dataScope === 'team' ? auth.userId : '-', auth.permissions.has('lead.assign') ? 'a' : '-'].join('|');
+      const key = [
+        auth.tenantId,
+        auth.dataScope,
+        auth.dataScope === 'team' ? auth.userId : '-',
+        auth.permissions.has('lead.assign') ? 'a' : '-',
+      ].join('|');
       return this.queueCache.get(key, () => this.countQueues(auth));
     }
     return this.countQueues(auth);
@@ -614,7 +641,12 @@ export class LeadsService {
         (dto.substatusId === undefined || dto.substatusId === lead.substatus_id);
 
       if (!sameStatus) {
-        if (!status.selectable) throw invalid('STATUS_NOT_OFFERED', 'statusId', `"${status.name}" is not one of the statuses to choose from`);
+        if (!status.selectable)
+          throw invalid(
+            'STATUS_NOT_OFFERED',
+            'statusId',
+            `"${status.name}" is not one of the statuses to choose from`,
+          );
         this.assertDisposition(status, !!dto.substatusId, dto.remark);
         assertFollowUpForStatus(
           { name: status.name, requiresFollowup: status.requires_followup, isOpen: status.is_open },
@@ -670,7 +702,10 @@ export class LeadsService {
             userId: auth.userId,
             type: 'followup',
             field: 'done',
-            remark: finished === 1 ? 'Earlier follow-up marked done' : `${finished} earlier follow-ups marked done`,
+            remark:
+              finished === 1
+                ? 'Earlier follow-up marked done'
+                : `${finished} earlier follow-ups marked done`,
           });
         }
       }
@@ -700,7 +735,12 @@ export class LeadsService {
   bulkStatus(auth: AuthContext, dto: BulkStatusDto) {
     return this.db.withTenant(auth.tenantId, async (trx) => {
       const status = await this.requireStatus(trx, dto.statusId, dto.substatusId);
-      if (!status.selectable) throw invalid('STATUS_NOT_OFFERED', 'statusId', `"${status.name}" is not one of the statuses to choose from`);
+      if (!status.selectable)
+        throw invalid(
+          'STATUS_NOT_OFFERED',
+          'statusId',
+          `"${status.name}" is not one of the statuses to choose from`,
+        );
       this.assertDisposition(status, !!dto.substatusId, dto.remark);
       if (status.requires_followup && status.is_open) {
         throw AppError.badRequest(
@@ -721,7 +761,13 @@ export class LeadsService {
                   WHERE id = ANY (${changing.map((l) => l.id)}::uuid[])`.execute(trx);
         const oldIds = [...new Set(changing.map((l) => l.status_id))];
         const names = new Map(
-          (await trx.selectFrom('lead_statuses').select(['id', 'name']).where('id', 'in', oldIds).execute()).map((r) => [r.id, r.name]),
+          (
+            await trx
+              .selectFrom('lead_statuses')
+              .select(['id', 'name'])
+              .where('id', 'in', oldIds)
+              .execute()
+          ).map((r) => [r.id, r.name]),
         );
         await this.writer.activities(
           trx,
@@ -736,7 +782,11 @@ export class LeadsService {
             remark: dto.remark,
           })),
         );
-        if (!status.is_open) await this.followUps.closeAllMany(trx, changing.map((l) => l.id));
+        if (!status.is_open)
+          await this.followUps.closeAllMany(
+            trx,
+            changing.map((l) => l.id),
+          );
         await this.announceWins(trx, auth, changing, status);
       }
       return { requested: leads.length, changed: changing.length };
@@ -748,7 +798,9 @@ export class LeadsService {
   assign(auth: AuthContext, id: string, dto: AssignDto) {
     return this.db.withTenant(auth.tenantId, async (trx) => {
       const lead = await this.lockVisible(trx, auth, id);
-      const target = dto.userId ? await this.assignable(trx, auth, dto.userId, dto.allowUnavailable) : null;
+      const target = dto.userId
+        ? await this.assignable(trx, auth, dto.userId, dto.allowUnavailable)
+        : null;
       if ((lead.assigned_to ?? null) !== (target?.id ?? null)) {
         await this.reassign(trx, auth, [lead], target);
       }
@@ -758,7 +810,9 @@ export class LeadsService {
 
   bulkAssign(auth: AuthContext, dto: BulkAssignDto) {
     return this.db.withTenant(auth.tenantId, async (trx) => {
-      const target = dto.userId ? await this.assignable(trx, auth, dto.userId, dto.allowUnavailable) : null;
+      const target = dto.userId
+        ? await this.assignable(trx, auth, dto.userId, dto.allowUnavailable)
+        : null;
       const leads = await this.lockMany(trx, auth, dto.leadIds);
       const moving = leads.filter((l) => (l.assigned_to ?? null) !== (target?.id ?? null));
       if (moving.length > 0) await this.reassign(trx, auth, moving, target);
@@ -776,16 +830,21 @@ export class LeadsService {
   transferAll(auth: AuthContext, dto: TransferLeadsDto) {
     return this.db.withTenant(auth.tenantId, async (trx) => {
       if (dto.toUserIds.includes(dto.fromUserId)) {
-        throw AppError.badRequest('TRANSFER_TO_SELF', 'Choose other people to give the leads to', [{ field: 'toUserIds', message: 'Choose other people to give the leads to' }]);
+        throw AppError.badRequest('TRANSFER_TO_SELF', 'Choose other people to give the leads to', [
+          { field: 'toUserIds', message: 'Choose other people to give the leads to' },
+        ]);
       }
       // The person the leads come from must be inside the caller's reach (404 otherwise).
       const reach = scopeCondition(auth, 'u.id');
       const { rows: from } = await sql<{ id: string; name: string }>`
-        SELECT u.id, u.name FROM users u WHERE u.id = ${dto.fromUserId}::uuid ${reach ? sql`AND ${reach}` : sql``}`.execute(trx);
+        SELECT u.id, u.name FROM users u WHERE u.id = ${dto.fromUserId}::uuid ${reach ? sql`AND ${reach}` : sql``}`.execute(
+        trx,
+      );
       if (!from[0]) throw AppError.notFound('Person');
 
       const targets: { id: string; name: string }[] = [];
-      for (const id of dto.toUserIds) targets.push(await this.assignable(trx, auth, id, dto.allowUnavailable));
+      for (const id of dto.toUserIds)
+        targets.push(await this.assignable(trx, auth, id, dto.allowUnavailable));
 
       const visible = leadVisibility(auth);
       const { rows: due } = await sql<{ id: string }>`
@@ -808,16 +867,36 @@ export class LeadsService {
           byTarget.set(target.id, [...(byTarget.get(target.id) ?? []), lead]);
         });
         for (const [targetId, leads] of byTarget) {
-          await this.reassign(trx, auth, leads, targets.find((t) => t.id === targetId)!);
+          await this.reassign(
+            trx,
+            auth,
+            leads,
+            targets.find((t) => t.id === targetId)!,
+          );
           given.set(targetId, (given.get(targetId) ?? 0) + leads.length);
         }
       }
 
-      if (dto.pauseAutomation) await sql`UPDATE users SET receives_auto_leads = false WHERE id = ${dto.fromUserId}::uuid`.execute(trx);
+      if (dto.pauseAutomation)
+        await sql`UPDATE users SET receives_auto_leads = false WHERE id = ${dto.fromUserId}::uuid`.execute(
+          trx,
+        );
       await this.audit.write(trx, {
-        tenantId: auth.tenantId, actorId: auth.userId, action: 'lead.transfer', entity: 'user', entityId: dto.fromUserId,
-        after: { from: from[0].name, moved: ids.length, remaining, which: dto.which, pausedAutomation: dto.pauseAutomation, to: targets.map((t) => ({ name: t.name, leads: given.get(t.id) ?? 0 })) },
-        ip: auth.ip, requestId: auth.requestId,
+        tenantId: auth.tenantId,
+        actorId: auth.userId,
+        action: 'lead.transfer',
+        entity: 'user',
+        entityId: dto.fromUserId,
+        after: {
+          from: from[0].name,
+          moved: ids.length,
+          remaining,
+          which: dto.which,
+          pausedAutomation: dto.pauseAutomation,
+          to: targets.map((t) => ({ name: t.name, leads: given.get(t.id) ?? 0 })),
+        },
+        ip: auth.ip,
+        requestId: auth.requestId,
       });
       return {
         moved: ids.length,
@@ -857,16 +936,30 @@ export class LeadsService {
   async erase(auth: AuthContext, id: string): Promise<{ filesRemoved: number }> {
     const keys = await this.db.withTenant(auth.tenantId, async (trx) => {
       const lead = await this.lockVisible(trx, auth, id);
-      const { rows } = await sql<{ keys: string[] | null }>`SELECT erase_lead(${id}::uuid) AS keys`.execute(trx);
+      const { rows } = await sql<{
+        keys: string[] | null;
+      }>`SELECT erase_lead(${id}::uuid) AS keys`.execute(trx);
       if (rows[0]?.keys == null) throw AppError.notFound('Lead');
       await this.followUps.closeAll(trx, id);
       await this.writer.activity(trx, {
-        tenantId: auth.tenantId, leadId: id, userId: auth.userId, type: 'field_change', field: 'erased',
-        oldValue: null, newValue: 'yes', remark: `Personal data of lead ${lead.lead_no} erased by ${auth.name}`,
+        tenantId: auth.tenantId,
+        leadId: id,
+        userId: auth.userId,
+        type: 'field_change',
+        field: 'erased',
+        oldValue: null,
+        newValue: 'yes',
+        remark: `Personal data of lead ${lead.lead_no} erased by ${auth.name}`,
       });
       await this.audit.write(trx, {
-        tenantId: auth.tenantId, actorId: auth.userId, action: 'lead.erase', entity: 'lead', entityId: id,
-        after: { leadNo: lead.lead_no, files: rows[0].keys.length }, ip: auth.ip, requestId: auth.requestId,
+        tenantId: auth.tenantId,
+        actorId: auth.userId,
+        action: 'lead.erase',
+        entity: 'lead',
+        entityId: id,
+        after: { leadNo: lead.lead_no, files: rows[0].keys.length },
+        ip: auth.ip,
+        requestId: auth.requestId,
       });
       return rows[0].keys;
     });
@@ -886,7 +979,9 @@ export class LeadsService {
     const term = q.q ? classifySearch(q.q) : null;
     if (term?.kind === 'lead_no') c.push(sql<SqlBool>`l.lead_no = ${term.value}::bigint`);
     else if (term?.kind === 'lead_no_or_phone') {
-      c.push(sql<SqlBool>`(l.lead_no = ${term.value}::bigint OR l.id = ANY (ARRAY(SELECT lead_ids_matching_phone(${likePattern(term.digits)}))))`);
+      c.push(
+        sql<SqlBool>`(l.lead_no = ${term.value}::bigint OR l.id = ANY (ARRAY(SELECT lead_ids_matching_phone(${likePattern(term.digits)}))))`,
+      );
     }
     // Name, email and phone searches go through two database functions (migration 025). Under
     // row-level security PostgreSQL cannot use a trigram index for LIKE directly, so a plain
@@ -896,11 +991,17 @@ export class LeadsService {
     // "= ANY (ARRAY(...))" makes the database fetch the ids first. With "IN (SELECT ...)" it walked all
     // leads in date order and checked each one (383 ms against 3 ms for a specific name at 300,000 leads).
     else if (term?.kind === 'text' && term.value.length < 3) {
-      throw AppError.badRequest('SEARCH_TOO_SHORT', 'Type at least 3 letters to search', [{ field: 'q', message: 'Type at least 3 letters to search' }]);
+      throw AppError.badRequest('SEARCH_TOO_SHORT', 'Type at least 3 letters to search', [
+        { field: 'q', message: 'Type at least 3 letters to search' },
+      ]);
     } else if (term?.kind === 'phone') {
-      c.push(sql<SqlBool>`l.id = ANY (ARRAY(SELECT lead_ids_matching_phone(${likePattern(term.value)})))`);
+      c.push(
+        sql<SqlBool>`l.id = ANY (ARRAY(SELECT lead_ids_matching_phone(${likePattern(term.value)})))`,
+      );
     } else if (term?.kind === 'text') {
-      c.push(sql<SqlBool>`l.id = ANY (ARRAY(SELECT lead_ids_matching_text(${likePattern(term.value)})))`);
+      c.push(
+        sql<SqlBool>`l.id = ANY (ARRAY(SELECT lead_ids_matching_text(${likePattern(term.value)})))`,
+      );
     }
 
     if (q.queue === 'open') c.push(sql<SqlBool>`${EFFECTIVE_QUEUE} <> 'closed'`);
@@ -1048,8 +1149,20 @@ export class LeadsService {
       extraPhones: phones.map((p) => ({ id: p.id, phone: p.phone, label: p.label })),
       enquiries: enquiries.map((e) =>
         canSeeSource(auth)
-          ? { source: e.source, formName: e.form_name, page: e.page_path, utm: { source: e.utm_source, medium: e.utm_medium, campaign: e.utm_campaign }, at: e.created_at }
-          : { source: null, formName: null, page: null, utm: { source: null, medium: null, campaign: null }, at: e.created_at },
+          ? {
+              source: e.source,
+              formName: e.form_name,
+              page: e.page_path,
+              utm: { source: e.utm_source, medium: e.utm_medium, campaign: e.utm_campaign },
+              at: e.created_at,
+            }
+          : {
+              source: null,
+              formName: null,
+              page: null,
+              utm: { source: null, medium: null, campaign: null },
+              at: e.created_at,
+            },
       ),
     };
   }
@@ -1078,7 +1191,8 @@ export class LeadsService {
   ): Promise<string | null> {
     if (!auth.permissions.has('lead.assign')) return auth.userId; // whoever adds a lead owns it
     if (dto.assignTo === null) return null;
-    if (dto.assignTo) return (await this.assignable(trx, auth, dto.assignTo, dto.allowUnavailable)).id;
+    if (dto.assignTo)
+      return (await this.assignable(trx, auth, dto.assignTo, dto.allowUnavailable)).id;
 
     const policy = await this.writer.policy(trx);
     if (!policy.autoAssign) return null;
@@ -1185,10 +1299,22 @@ export class LeadsService {
    * does). Only the counsellor's name and the Lead ID are shared, not the student's details, since most people cannot open
    * other people's leads. A lead that bounces out of "won" and back within a month is not announced twice.
    */
-  private async announceWins(trx: Trx, auth: AuthContext, moved: Pick<LockedLead, 'id' | 'lead_no' | 'status_id' | 'assigned_to'>[], status: { name: string; is_won: boolean }) {
+  private async announceWins(
+    trx: Trx,
+    auth: AuthContext,
+    moved: Pick<LockedLead, 'id' | 'lead_no' | 'status_id' | 'assigned_to'>[],
+    status: { name: string; is_won: boolean },
+  ) {
     if (!status.is_won || moved.length === 0) return;
     const wonBefore = new Set(
-      (await trx.selectFrom('lead_statuses').select('id').where('id', 'in', [...new Set(moved.map((l) => l.status_id))]).where('is_won', '=', true).execute()).map((r) => r.id),
+      (
+        await trx
+          .selectFrom('lead_statuses')
+          .select('id')
+          .where('id', 'in', [...new Set(moved.map((l) => l.status_id))])
+          .where('is_won', '=', true)
+          .execute()
+      ).map((r) => r.id),
     );
     const fresh = moved.filter((l) => !wonBefore.has(l.status_id));
     if (fresh.length === 0) return;
@@ -1200,15 +1326,28 @@ export class LeadsService {
     const wins = fresh.filter((l) => !already.has(l.id));
     if (wins.length === 0) return;
     const winnerIds = [...new Set(wins.map((l) => l.assigned_to ?? auth.userId))];
-    const names = new Map((await trx.selectFrom('users').select(['id', 'name']).where('id', 'in', winnerIds).execute()).map((u) => [u.id, u.name]));
-    const everyone = (await trx.selectFrom('users').select('id').where('status', '=', 'active').execute()).map((u) => u.id);
+    const names = new Map(
+      (
+        await trx.selectFrom('users').select(['id', 'name']).where('id', 'in', winnerIds).execute()
+      ).map((u) => [u.id, u.name]),
+    );
+    const everyone = (
+      await trx.selectFrom('users').select('id').where('status', '=', 'active').execute()
+    ).map((u) => u.id);
     for (const lead of wins) {
       const winnerId = lead.assigned_to ?? auth.userId;
       await this.notifications.notify(trx, {
         tenantId: auth.tenantId,
         userIds: everyone,
         type: 'system',
-        payload: { event: 'lead_won', leadId: lead.id, leadNo: Number(lead.lead_no), winnerId, winnerName: names.get(winnerId) ?? 'A counsellor', status: status.name },
+        payload: {
+          event: 'lead_won',
+          leadId: lead.id,
+          leadNo: Number(lead.lead_no),
+          winnerId,
+          winnerName: names.get(winnerId) ?? 'A counsellor',
+          status: status.name,
+        },
       });
     }
   }
@@ -1245,7 +1384,12 @@ export class LeadsService {
    * comment ("Other reasons"). Only a change of status is checked, so saving the same status again asks for nothing new.
    */
   private assertDisposition(
-    status: { name: string; requires_substatus: boolean; substatus_name: string | null; substatus_requires_comment: boolean },
+    status: {
+      name: string;
+      requires_substatus: boolean;
+      substatus_name: string | null;
+      substatus_requires_comment: boolean;
+    },
     substatusGiven: boolean,
     remark: string | undefined,
   ): void {
@@ -1253,7 +1397,11 @@ export class LeadsService {
       throw invalid('SUBSTATUS_REQUIRED', 'substatusId', `Choose the reason for "${status.name}"`);
     }
     if (status.substatus_requires_comment && !(remark ?? '').trim()) {
-      throw invalid('COMMENT_REQUIRED', 'remark', `A comment is needed for "${status.substatus_name ?? 'this reason'}"`);
+      throw invalid(
+        'COMMENT_REQUIRED',
+        'remark',
+        `A comment is needed for "${status.substatus_name ?? 'this reason'}"`,
+      );
     }
   }
 
@@ -1299,8 +1447,15 @@ interface DetailRow extends Omit<ListRow, 'sort_key'> {
 
 /** The fields a lead has in every view of it (the list and the single lead), named the way the API shows them. */
 function leadCore(r: {
-  id: string; lead_no: string; name: string; primary_phone: string; email: string | null; intent: string | null;
-  study_mode: string | null; expected_closure_on: string | null; interest_note: string | null;
+  id: string;
+  lead_no: string;
+  name: string;
+  primary_phone: string;
+  email: string | null;
+  intent: string | null;
+  study_mode: string | null;
+  expected_closure_on: string | null;
+  interest_note: string | null;
 }) {
   return {
     id: r.id,
@@ -1319,7 +1474,10 @@ function leadCore(r: {
 const canSeeSource = (auth: AuthContext): boolean => auth.permissions.has('lead.source');
 
 /** The history line that says where a lead came from, without the source: "New lead" or "Enquired again". */
-const withoutSource = (remark: string | null): string | null => (remark ? remark.replace(/^(New lead) from .*$/s, '$1').replace(/^(Enquired again) through .*$/s, '$1') : remark);
+const withoutSource = (remark: string | null): string | null =>
+  remark
+    ? remark.replace(/^(New lead) from .*$/s, '$1').replace(/^(Enquired again) through .*$/s, '$1')
+    : remark;
 
 function toListItem(r: ListRow, showSource: boolean): LeadListItem {
   return {

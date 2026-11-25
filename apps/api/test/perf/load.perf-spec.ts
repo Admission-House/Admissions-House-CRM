@@ -22,7 +22,11 @@ it('measures the main endpoints under load', async () => {
   // numbers show how lists, search and queues behave at volume instead of on an empty table.
   const SEED = Number(process.env.LOAD_SEED_LEADS ?? 0);
   if (SEED > 0) {
-    const statuses = (await owner.query(`SELECT id FROM lead_statuses WHERE tenant_id = $1 ORDER BY sort_order`, [fx.tenantId])).rows.map((r) => r.id as string);
+    const statuses = (
+      await owner.query(`SELECT id FROM lead_statuses WHERE tenant_id = $1 ORDER BY sort_order`, [
+        fx.tenantId,
+      ])
+    ).rows.map((r) => r.id as string);
     const owners = [fx.user('counsellor').id, fx.user('counsellor2').id, fx.user('mobile').id];
     const names = ['Amit', 'Priya', 'Rahul', 'Neha', 'Vikas', 'Pooja', 'Sandeep', 'Anjali'];
     const started = Date.now();
@@ -42,7 +46,9 @@ it('measures the main endpoints under load', async () => {
       [fx.tenantId, statuses, fx.sourceId('Website'), owners, names, SEED],
     );
     await owner.query('ANALYZE leads');
-    process.stdout.write(`Seeded ${SEED} leads in ${((Date.now() - started) / 1000).toFixed(1)}s\n`);
+    process.stdout.write(
+      `Seeded ${SEED} leads in ${((Date.now() - started) / 1000).toFixed(1)}s\n`,
+    );
   }
   const app = await startApp({
     LOGIN_IP_MAX_ATTEMPTS: '500',
@@ -74,7 +80,12 @@ it('measures the main endpoints under load', async () => {
     let seq = 0;
     const phone = () => `9${String(10_000_000 + ++seq).padStart(9, '0')}`;
 
-    type Scenario = { name: string; connections?: number; amount?: number; opts: Record<string, any> };
+    type Scenario = {
+      name: string;
+      connections?: number;
+      amount?: number;
+      opts: Record<string, any>;
+    };
     const scenarios: Scenario[] = [
       {
         name: 'POST /leads (write)',
@@ -122,11 +133,20 @@ it('measures the main endpoints under load', async () => {
         opts: { path: '/api/v1/leads?q=Load&limit=50', headers: read },
       },
       {
-        name: 'GET /leads?assignedTo=<counsellor> (one person\'s list)',
-        opts: { path: `/api/v1/leads?assignedTo=${fx.user('counsellor').id}&limit=50`, headers: read },
+        name: "GET /leads?assignedTo=<counsellor> (one person's list)",
+        opts: {
+          path: `/api/v1/leads?assignedTo=${fx.user('counsellor').id}&limit=50`,
+          headers: read,
+        },
       },
-      { name: 'GET /leads?queue=fresh', opts: { path: '/api/v1/leads?queue=fresh&limit=50', headers: read } },
-      { name: 'GET /leads?q=<phone digits> (search)', opts: { path: '/api/v1/leads?q=7000012345&limit=50', headers: read } },
+      {
+        name: 'GET /leads?queue=fresh',
+        opts: { path: '/api/v1/leads?queue=fresh&limit=50', headers: read },
+      },
+      {
+        name: 'GET /leads?q=<phone digits> (search)',
+        opts: { path: '/api/v1/leads?q=7000012345&limit=50', headers: read },
+      },
       { name: 'GET /leads/queues', opts: { path: '/api/v1/leads/queues', headers: read } },
       { name: 'GET /dashboard', opts: { path: '/api/v1/dashboard', headers: read } },
       {
@@ -162,12 +182,19 @@ it('measures the main endpoints under load', async () => {
         connections: s.connections ?? CONNECTIONS,
         ...(s.amount ? { amount: s.amount } : { duration: DURATION }),
       });
-      if (result.non2xx > 0) process.stdout.write(`${s.name}: ${JSON.stringify(result.statusCodeStats)}
+      if (result.non2xx > 0)
+        process.stdout.write(`${s.name}: ${JSON.stringify(result.statusCodeStats)}
 `);
-      const probe = await app.inject({ method: 'GET', url: '/api/v1/leads?limit=1', headers: read });
-    if (probe.statusCode !== 200) process.stdout.write(`probe after "${s.name}": ${probe.statusCode} ${probe.body.slice(0, 200)}
+      const probe = await app.inject({
+        method: 'GET',
+        url: '/api/v1/leads?limit=1',
+        headers: read,
+      });
+      if (probe.statusCode !== 200)
+        process.stdout
+          .write(`probe after "${s.name}": ${probe.statusCode} ${probe.body.slice(0, 200)}
 `);
-    rows.push({
+      rows.push({
         scenario: s.name,
         'req/s': Math.round(result.requests.average),
         'p50 ms': result.latency.p50,
@@ -188,7 +215,9 @@ it('measures the main endpoints under load', async () => {
   } finally {
     await app.close();
     // LOAD_KEEP=1 leaves the seeded company in place so its queries can be inspected with EXPLAIN.
-    if (process.env.LOAD_KEEP === '1') process.stdout.write(`Kept company ${fx.slug} (tenant ${fx.tenantId}). Remove it with: node --env-file=.env test/purge-test-tenants.mjs
+    if (process.env.LOAD_KEEP === '1')
+      process.stdout
+        .write(`Kept company ${fx.slug} (tenant ${fx.tenantId}). Remove it with: node --env-file=.env test/purge-test-tenants.mjs
 `);
     else await fx.cleanup();
     await owner.end();

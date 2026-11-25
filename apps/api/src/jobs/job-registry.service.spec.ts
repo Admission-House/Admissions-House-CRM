@@ -3,7 +3,12 @@ import type { Env } from '../config/env.js';
 import { JobRegistry, JobSpec } from './job-registry.service.js';
 
 const registry = (mode: 'interval' | 'cron') => new JobRegistry({ JOBS_MODE: mode } as Env);
-const job = (over: Partial<JobSpec> & { name: string }): JobSpec => ({ group: 'minute', everySec: 60, run: async () => undefined, ...over });
+const job = (over: Partial<JobSpec> & { name: string }): JobSpec => ({
+  group: 'minute',
+  everySec: 60,
+  run: async () => undefined,
+  ...over,
+});
 
 afterEach(() => vi.useRealTimers());
 
@@ -58,12 +63,24 @@ describe('JobRegistry for a scheduler (cron mode)', () => {
     const order: string[] = [];
     const r = registry('cron');
     r.register(job({ name: 'first', group: 'minute', run: async () => void order.push('first') }));
-    r.register(job({ name: 'broken', group: 'minute', run: async () => { throw new Error('database is down'); } }));
+    r.register(
+      job({
+        name: 'broken',
+        group: 'minute',
+        run: async () => {
+          throw new Error('database is down');
+        },
+      }),
+    );
     r.register(job({ name: 'last', group: 'minute', run: async () => void order.push('last') }));
     r.register(job({ name: 'other', group: 'daily', run: async () => void order.push('other') }));
     const out = await r.runGroup('minute');
     expect(order).toEqual(['first', 'last']);
-    expect(out.map((o) => [o.name, o.ok])).toEqual([['first', true], ['broken', false], ['last', true]]);
+    expect(out.map((o) => [o.name, o.ok])).toEqual([
+      ['first', true],
+      ['broken', false],
+      ['last', true],
+    ]);
     expect(out[1]!.error).toBe('database is down');
     expect(r.names('daily')).toEqual(['other']);
   });

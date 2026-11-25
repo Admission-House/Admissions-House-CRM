@@ -34,9 +34,20 @@ describe('loadEnv', () => {
 
   it('refuses an owner account as the application connection in production', () => {
     expect(() =>
-      loadEnv({ NODE_ENV: 'production', ...base, DATABASE_URL: 'postgresql://postgres:x@db:5432/app' }),
+      loadEnv({
+        NODE_ENV: 'production',
+        ...base,
+        DATABASE_URL: 'postgresql://postgres:x@db:5432/app',
+      }),
     ).toThrow(/restricted application role/);
-    expect(() => loadEnv({ NODE_ENV: 'production', ...base, MAIL_DRIVER: 'smtp', SMTP_HOST: 'smtp.example.com' })).not.toThrow();
+    expect(() =>
+      loadEnv({
+        NODE_ENV: 'production',
+        ...base,
+        MAIL_DRIVER: 'smtp',
+        SMTP_HOST: 'smtp.example.com',
+      }),
+    ).not.toThrow();
     expect(() => loadEnv({ NODE_ENV: 'production', ...base })).toThrow(/MAIL_DRIVER must be smtp/);
   });
 });

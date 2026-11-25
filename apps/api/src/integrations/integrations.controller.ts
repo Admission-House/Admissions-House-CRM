@@ -1,4 +1,15 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Query, Res } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+  Res,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { FastifyReply } from 'fastify';
 import { createZodDto } from 'nestjs-zod';
@@ -8,9 +19,13 @@ import { CurrentAuth, RequirePermissions } from '../auth/decorators.js';
 import { pageQuerySchema } from '../common/pagination.js';
 import { IntegrationsService } from './integrations.service.js';
 
-class CreateKeyDto extends createZodDto(z.object({ name: z.string().trim().min(2).max(80), sourceId: z.uuid() })) {}
+class CreateKeyDto extends createZodDto(
+  z.object({ name: z.string().trim().min(2).max(80), sourceId: z.uuid() }),
+) {}
 class ListEventsDto extends createZodDto(
-  pageQuerySchema.extend({ status: z.enum(['received', 'processed', 'failed', 'ignored']).optional() }),
+  pageQuerySchema.extend({
+    status: z.enum(['received', 'processed', 'failed', 'ignored']).optional(),
+  }),
 ) {}
 
 @ApiTags('integrations')
@@ -27,14 +42,21 @@ export class IntegrationsController {
 
   /** The key appears in this response only. Put it in the sender's settings straight away. */
   @Post('api-keys')
-  createKey(@CurrentAuth() auth: AuthContext, @Body() body: CreateKeyDto, @Res({ passthrough: true }) reply: FastifyReply) {
+  createKey(
+    @CurrentAuth() auth: AuthContext,
+    @Body() body: CreateKeyDto,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
     void reply.header('cache-control', 'no-store');
     return this.integrations.createKey(auth, body);
   }
 
   @Delete('api-keys/:id')
   @HttpCode(204)
-  revokeKey(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string): Promise<void> {
+  revokeKey(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<void> {
     return this.integrations.revokeKey(auth, id);
   }
 

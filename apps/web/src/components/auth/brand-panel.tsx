@@ -26,13 +26,31 @@ export function BrandPanel() {
         className="object-cover"
       />
       {/* One even tint over the whole photo, a little deeper towards the bottom: no bands, and the photo's own colours still show. */}
-      <div aria-hidden className="absolute inset-0" style={{ background: `linear-gradient(to bottom, ${TINT}73 0%, ${TINT}8c 50%, ${TINT}b3 100%)` }} />
+      <div
+        aria-hidden
+        className="absolute inset-0"
+        style={{
+          background: `linear-gradient(to bottom, ${TINT}73 0%, ${TINT}8c 50%, ${TINT}b3 100%)`,
+        }}
+      />
       {/* A very wide, soft shade behind the middle so the logo reads; it has no edge to see. */}
-      <div aria-hidden className="absolute inset-0" style={{ background: `radial-gradient(ellipse 130% 55% at 50% 50%, ${TINT}66 0%, ${TINT}33 55%, transparent 100%)` }} />
+      <div
+        aria-hidden
+        className="absolute inset-0"
+        style={{
+          background: `radial-gradient(ellipse 130% 55% at 50% 50%, ${TINT}66 0%, ${TINT}33 55%, transparent 100%)`,
+        }}
+      />
 
       <div className="relative flex h-full flex-col items-center justify-center">
-        <Suspense><BrandMark variant="panel" /></Suspense>
-        <p className="absolute inset-x-0 bottom-8 text-center text-xs tracking-wide text-white/75"><Suspense><BrandCopyright /></Suspense></p>
+        <Suspense>
+          <BrandMark variant="panel" />
+        </Suspense>
+        <p className="absolute inset-x-0 bottom-8 text-center text-xs tracking-wide text-white/75">
+          <Suspense>
+            <BrandCopyright />
+          </Suspense>
+        </p>
       </div>
     </aside>
   );
@@ -41,7 +59,9 @@ export function BrandPanel() {
 export function BrandStrip() {
   return (
     <div className="flex justify-center px-8 py-9 lg:hidden" style={{ background: PANEL_GREEN }}>
-      <Suspense><BrandMark variant="strip" /></Suspense>
+      <Suspense>
+        <BrandMark variant="strip" />
+      </Suspense>
     </div>
   );
 }

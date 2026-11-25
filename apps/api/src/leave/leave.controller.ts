@@ -1,4 +1,15 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { AuthContext } from '../auth/auth-context.js';
 import { CurrentAuth, RequireAnyPermission, RequirePermissions } from '../auth/decorators.js';
@@ -51,14 +62,21 @@ export class LeaveController {
 
   @RequirePermissions('leave.settings')
   @Patch('holidays/:id')
-  updateHoliday(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: UpdateHolidayDto) {
+  updateHoliday(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: UpdateHolidayDto,
+  ) {
     return this.holidays.update(auth, id, body);
   }
 
   @RequirePermissions('leave.settings')
   @Delete('holidays/:id')
   @HttpCode(204)
-  removeHoliday(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string): Promise<void> {
+  removeHoliday(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<void> {
     return this.holidays.remove(auth, id);
   }
 
@@ -78,7 +96,11 @@ export class LeaveController {
 
   @RequirePermissions('leave.settings')
   @Patch('leave/types/:id')
-  updateType(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: UpdateLeaveTypeDto) {
+  updateType(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: UpdateLeaveTypeDto,
+  ) {
     return this.leave.updateType(auth, id, body);
   }
 
@@ -115,7 +137,11 @@ export class LeaveController {
   @RequirePermissions('leave.approve')
   @Post('leave/requests/:id/decision')
   @HttpCode(200)
-  decide(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: DecisionDto) {
+  decide(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: DecisionDto,
+  ) {
     return this.leave.decide(auth, id, body);
   }
 

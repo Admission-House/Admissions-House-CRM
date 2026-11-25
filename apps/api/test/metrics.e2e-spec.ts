@@ -27,7 +27,11 @@ afterAll(async () => {
 });
 
 const scrape = (app: NestFastifyApplication, authorization?: string) =>
-  app.inject({ method: 'GET', url: '/api/v1/metrics', headers: authorization ? { authorization } : {} });
+  app.inject({
+    method: 'GET',
+    url: '/api/v1/metrics',
+    headers: authorization ? { authorization } : {},
+  });
 
 describe('the metrics address', () => {
   it('does not exist unless a token is set', async () => {
@@ -47,8 +51,12 @@ describe('the metrics address', () => {
   it('reports request counts and times, database pool and process numbers', async () => {
     await on.inject({ method: 'GET', url: '/api/v1/health/live' });
     const text = (await scrape(on, `Bearer ${TOKEN}`)).body;
-    expect(text).toMatch(/ah_http_requests_total\{method="GET",route="\/api\/v1\/health\/live",status="200"\} \d+/);
-    expect(text).toContain('ah_http_request_duration_seconds_bucket{le="0.5",method="GET",route="/api/v1/health/live"}');
+    expect(text).toMatch(
+      /ah_http_requests_total\{method="GET",route="\/api\/v1\/health\/live",status="200"\} \d+/,
+    );
+    expect(text).toContain(
+      'ah_http_request_duration_seconds_bucket{le="0.5",method="GET",route="/api/v1/health/live"}',
+    );
     expect(text).toContain('ah_db_pool_connections');
     expect(text).toContain('ah_db_pool_waiting');
     expect(text).toContain('ah_process_cpu_user_seconds_total');
@@ -59,7 +67,9 @@ describe('the metrics address', () => {
     const token = await api.signIn('super');
     const id = '00000000-0000-4000-8000-0000000000ab';
     expect((await api.call('GET', `/leads/${id}`, token)).statusCode).toBe(404);
-    expect((await on.inject({ method: 'GET', url: '/api/v1/no/such/place/12345' })).statusCode).toBe(404);
+    expect(
+      (await on.inject({ method: 'GET', url: '/api/v1/no/such/place/12345' })).statusCode,
+    ).toBe(404);
 
     const text = (await scrape(on, `Bearer ${TOKEN}`)).body;
     expect(text).toMatch(/route="\/api\/v1\/leads\/:id",status="404"/);

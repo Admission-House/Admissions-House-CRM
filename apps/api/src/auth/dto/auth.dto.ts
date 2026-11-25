@@ -64,7 +64,10 @@ export const forgotPasswordSchema = z.object({
 });
 export class ForgotPasswordDto extends createZodDto(forgotPasswordSchema) {}
 
-export const resetPasswordSchema = z.object({ token: z.string().max(200), newPassword: newPasswordSchema });
+export const resetPasswordSchema = z.object({
+  token: z.string().max(200),
+  newPassword: newPasswordSchema,
+});
 export class ResetPasswordDto extends createZodDto(resetPasswordSchema) {}
 
 export type LoginInput = z.infer<typeof loginSchema>;

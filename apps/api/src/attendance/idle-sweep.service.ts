@@ -35,12 +35,17 @@ export class IdleSweepService implements OnModuleInit {
     private readonly db: DatabaseService,
     @Inject(ENV) private readonly env: Env,
     private readonly notifications: NotificationsService,
-  
+
     private readonly jobs: JobRegistry,
   ) {}
 
   onModuleInit(): void {
-    this.jobs.register({ name: 'idle-sweep', group: 'minute', everySec: this.env.SWEEP_INTERVAL_SEC, run: () => this.runSafely() });
+    this.jobs.register({
+      name: 'idle-sweep',
+      group: 'minute',
+      everySec: this.env.SWEEP_INTERVAL_SEC,
+      run: () => this.runSafely(),
+    });
   }
 
   async runSafely(): Promise<void> {
@@ -49,7 +54,9 @@ export class IdleSweepService implements OnModuleInit {
     try {
       const total = await this.sweepOnce();
       if (total.idleEnded + total.expiredEnded + (total.shiftEndClosed ?? 0) > 0) {
-        this.logger.log(`sweep ended ${total.idleEnded} idle and ${total.expiredEnded} expired sessions, closed ${total.shiftEndClosed ?? 0} days at shift end, ${total.notified} alerts`);
+        this.logger.log(
+          `sweep ended ${total.idleEnded} idle and ${total.expiredEnded} expired sessions, closed ${total.shiftEndClosed ?? 0} days at shift end, ${total.notified} alerts`,
+        );
       }
     } catch (err) {
       this.logger.error(`sweep failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -60,8 +67,17 @@ export class IdleSweepService implements OnModuleInit {
 
   /** One pass over every active company. Safe to run on several servers at once. */
   async sweepOnce(): Promise<SweepResult> {
-    const { rows } = await sql<{ id: string }>`SELECT list_active_tenant_ids() AS id`.execute(this.db.unscoped());
-    const total: SweepResult = { idleEnded: 0, expiredEnded: 0, notified: 0, shiftEndClosed: 0, breaksWarned: 0, breaksStopped: 0 };
+    const { rows } = await sql<{ id: string }>`SELECT list_active_tenant_ids() AS id`.execute(
+      this.db.unscoped(),
+    );
+    const total: SweepResult = {
+      idleEnded: 0,
+      expiredEnded: 0,
+      notified: 0,
+      shiftEndClosed: 0,
+      breaksWarned: 0,
+      breaksStopped: 0,
+    };
     for (const { id } of rows) {
       const result = await this.db.withTenant(id, (trx) => this.sweepTenant(trx, id));
       total.breaksWarned = (total.breaksWarned ?? 0) + (result.breaksWarned ?? 0);
@@ -77,7 +93,9 @@ export class IdleSweepService implements OnModuleInit {
   private async sweepTenant(trx: Trx, tenantId: string): Promise<SweepResult> {
     // If another server holds the lock for this company, it is already doing the work.
     const { rows: lock } = await sql<{ ok: boolean }>`
-      SELECT pg_try_advisory_xact_lock(hashtext('idle-sweep'), hashtext(${tenantId})) AS ok`.execute(trx);
+      SELECT pg_try_advisory_xact_lock(hashtext('idle-sweep'), hashtext(${tenantId})) AS ok`.execute(
+      trx,
+    );
     if (!lock[0]!.ok) return { idleEnded: 0, expiredEnded: 0, notified: 0, shiftEndClosed: 0 };
 
     const { rows: limits } = await sql<{ idle_min: number }>`
@@ -113,7 +131,14 @@ export class IdleSweepService implements OnModuleInit {
         notified += rowCount;
       }
     }
-    return { idleEnded: idle.length, expiredEnded: expired.length, notified, shiftEndClosed, breaksWarned: breaks.warned, breaksStopped: breaks.stopped };
+    return {
+      idleEnded: idle.length,
+      expiredEnded: expired.length,
+      notified,
+      shiftEndClosed,
+      breaksWarned: breaks.warned,
+      breaksStopped: breaks.stopped,
+    };
   }
 
   /**
@@ -121,8 +146,22 @@ export class IdleSweepService implements OnModuleInit {
    * day, without waiting for it to end. One that has brought the day's break time to the hard limit is ended and its
    * person is signed out. The sign-out closes their attendance through the database trigger, like any other.
    */
-  private async sweepBreaks(trx: Trx, tenantId: string): Promise<{ warned: number; stopped: number }> {
-    const { rows } = await sql<{ attendance_id: string; user_id: string; user_name: string; break_id: string; break_name: string; allowed: number; kind_used: number; day_used: number; warned: boolean; hard: number }>`
+  private async sweepBreaks(
+    trx: Trx,
+    tenantId: string,
+  ): Promise<{ warned: number; stopped: number }> {
+    const { rows } = await sql<{
+      attendance_id: string;
+      user_id: string;
+      user_name: string;
+      break_id: string;
+      break_name: string;
+      allowed: number;
+      kind_used: number;
+      day_used: number;
+      warned: boolean;
+      hard: number;
+    }>`
       WITH limit_now AS (
         SELECT COALESCE((SELECT a.break_hard_limit_minutes FROM attendance_settings a, tenants t
                          WHERE a.effective_from <= (now() AT TIME ZONE t.timezone)::date ORDER BY a.effective_from DESC LIMIT 1), 100) AS hard)
@@ -143,18 +182,37 @@ export class IdleSweepService implements OnModuleInit {
     let stopped = 0;
     for (const r of rows) {
       if (r.day_used >= r.hard) {
-        await sql`UPDATE break_logs SET ended_at = now() WHERE id = ${r.break_id} AND ended_at IS NULL`.execute(trx);
-        await sql`UPDATE user_sessions SET ended_at = now(), ended_reason = 'revoked' WHERE user_id = ${r.user_id} AND ended_at IS NULL`.execute(trx);
+        await sql`UPDATE break_logs SET ended_at = now() WHERE id = ${r.break_id} AND ended_at IS NULL`.execute(
+          trx,
+        );
+        await sql`UPDATE user_sessions SET ended_at = now(), ended_reason = 'revoked' WHERE user_id = ${r.user_id} AND ended_at IS NULL`.execute(
+          trx,
+        );
         await this.notifications.notifyOversight(trx, {
           tenantId,
-          payload: { event: 'break_limit_signout', userId: r.user_id, userName: r.user_name, usedMinutes: r.day_used, limitMinutes: r.hard },
+          payload: {
+            event: 'break_limit_signout',
+            userId: r.user_id,
+            userName: r.user_name,
+            usedMinutes: r.day_used,
+            limitMinutes: r.hard,
+          },
         });
         stopped++;
       } else if (r.kind_used > r.allowed && !r.warned) {
-        await sql`UPDATE attendance_records SET break_warned_at = now() WHERE id = ${r.attendance_id}`.execute(trx);
+        await sql`UPDATE attendance_records SET break_warned_at = now() WHERE id = ${r.attendance_id}`.execute(
+          trx,
+        );
         await this.notifications.notifyOversight(trx, {
           tenantId,
-          payload: { event: 'break_over', userId: r.user_id, userName: r.user_name, breakName: r.break_name, allowedMinutes: r.allowed, usedMinutes: r.kind_used },
+          payload: {
+            event: 'break_over',
+            userId: r.user_id,
+            userName: r.user_name,
+            breakName: r.break_name,
+            allowedMinutes: r.allowed,
+            usedMinutes: r.kind_used,
+          },
         });
         warned++;
       }
@@ -198,14 +256,28 @@ export class IdleSweepService implements OnModuleInit {
   }
 
   /** Tells the Super Admins, and the Admin who manages the person, that someone in the office was signed out for inactivity. */
-  private async notifyIdleLogout(trx: Trx, tenantId: string, userId: string, lastActiveAt: Date, idleMin: number) {
+  private async notifyIdleLogout(
+    trx: Trx,
+    tenantId: string,
+    userId: string,
+    lastActiveAt: Date,
+    idleMin: number,
+  ) {
     const { rows } = await sql<{ name: string; office: boolean }>`
-      SELECT u.name, r.requires_office AS office FROM users u JOIN roles r ON r.id = u.role_id WHERE u.id = ${userId}`.execute(trx);
+      SELECT u.name, r.requires_office AS office FROM users u JOIN roles r ON r.id = u.role_id WHERE u.id = ${userId}`.execute(
+      trx,
+    );
     // Only people who work from the office are reported; a Super Admin stepping away is not news.
     if (!rows[0]?.office) return { rowCount: 0 };
     const rowCount = await this.notifications.notifyOversight(trx, {
       tenantId,
-      payload: { event: 'idle_logout', userId, userName: rows[0].name, lastActiveAt: lastActiveAt.toISOString(), idleMinutes: idleMin },
+      payload: {
+        event: 'idle_logout',
+        userId,
+        userName: rows[0].name,
+        lastActiveAt: lastActiveAt.toISOString(),
+        idleMinutes: idleMin,
+      },
     });
     return { rowCount };
   }

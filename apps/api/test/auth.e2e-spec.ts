@@ -6,7 +6,14 @@ import { TokenService } from '../src/auth/token.service.js';
 import { ENV } from '../src/config/config.module.js';
 import { loadEnv } from '../src/config/env.js';
 import { startApp } from './helpers/app.js';
-import { createFixture, Fixture, OFFICE, OFFICE_IP, OUTSIDE_IP, PASSWORD } from './helpers/fixtures.js';
+import {
+  createFixture,
+  Fixture,
+  OFFICE,
+  OFFICE_IP,
+  OUTSIDE_IP,
+  PASSWORD,
+} from './helpers/fixtures.js';
 
 let app: NestFastifyApplication;
 let owner: pg.Client;
@@ -32,7 +39,13 @@ afterAll(async () => {
 type Body = Record<string, unknown>;
 
 const login = (body: Body, ip = OUTSIDE_IP, headers: Record<string, string> = {}) =>
-  app.inject({ method: 'POST', url: '/api/v1/auth/login', payload: body, remoteAddress: ip, headers });
+  app.inject({
+    method: 'POST',
+    url: '/api/v1/auth/login',
+    payload: body,
+    remoteAddress: ip,
+    headers,
+  });
 
 const credentials = (name: string, password = PASSWORD) => ({
   tenant: fx.slug,
@@ -59,10 +72,20 @@ const bearer = (token: string) => ({ authorization: `Bearer ${token}` });
 const get = (url: string, token: string, ip = OUTSIDE_IP) =>
   app.inject({ method: 'GET', url, headers: bearer(token), remoteAddress: ip });
 const refreshWithCookie = (value: string) =>
-  app.inject({ method: 'POST', url: '/api/v1/auth/refresh', payload: {}, headers: { cookie: `${REFRESH_COOKIE}=${value}` } });
+  app.inject({
+    method: 'POST',
+    url: '/api/v1/auth/refresh',
+    payload: {},
+    headers: { cookie: `${REFRESH_COOKIE}=${value}` },
+  });
 
 const sessionOf = async (userName: string) =>
-  (await owner.query(`SELECT * FROM user_sessions WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1`, [fx.user(userName).id])).rows[0];
+  (
+    await owner.query(
+      `SELECT * FROM user_sessions WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1`,
+      [fx.user(userName).id],
+    )
+  ).rows[0];
 
 // ------------------------------------------------------------------ sign in
 
@@ -70,7 +93,11 @@ describe('sign in', () => {
   it('lets a Super Admin in from anywhere and keeps the refresh token out of reach of scripts', async () => {
     const { res } = await signIn('super');
     const body = res.json();
-    expect(body).toMatchObject({ expiresIn: 900, mustChangePassword: false, user: { role: { key: 'super_admin' } } });
+    expect(body).toMatchObject({
+      expiresIn: 900,
+      mustChangePassword: false,
+      user: { role: { key: 'super_admin' } },
+    });
     expect(body.refreshToken).toBeUndefined();
     expect(JSON.stringify(body)).not.toMatch(/argon2|password_hash/);
     expect(res.headers['cache-control']).toBe('no-store');
@@ -87,13 +114,22 @@ describe('sign in', () => {
 
     for (const res of [wrongPassword, unknownEmail, unknownCompany]) {
       expect(res.statusCode).toBe(401);
-      expect(res.json().error).toMatchObject({ code: 'INVALID_CREDENTIALS', message: 'The email or password is not correct' });
+      expect(res.json().error).toMatchObject({
+        code: 'INVALID_CREDENTIALS',
+        message: 'The email or password is not correct',
+      });
     }
   });
 
   it('does not tell a guesser the account is locked, but tells the owner who knows the password', async () => {
     const attemptsBefore = async () =>
-      Number((await owner.query(`SELECT count(*) FROM login_attempts WHERE user_id = $1`, [fx.user('lockme').id])).rows[0].count);
+      Number(
+        (
+          await owner.query(`SELECT count(*) FROM login_attempts WHERE user_id = $1`, [
+            fx.user('lockme').id,
+          ])
+        ).rows[0].count,
+      );
 
     for (let i = 0; i < 5; i++) {
       expect((await login(credentials('lockme', 'Wrong-password-1'))).statusCode).toBe(401);
@@ -108,9 +144,15 @@ describe('sign in', () => {
     expect(await attemptsBefore()).toBeGreaterThanOrEqual(7);
 
     // When the lock runs out the right password works again and the counter starts over.
-    await owner.query(`UPDATE users SET locked_until = now() - interval '1 minute' WHERE id = $1`, [fx.user('lockme').id]);
+    await owner.query(`UPDATE users SET locked_until = now() - interval '1 minute' WHERE id = $1`, [
+      fx.user('lockme').id,
+    ]);
     expect((await login(credentials('lockme'))).statusCode).toBe(200);
-    const row = (await owner.query(`SELECT failed_logins, locked_until FROM users WHERE id = $1`, [fx.user('lockme').id])).rows[0];
+    const row = (
+      await owner.query(`SELECT failed_logins, locked_until FROM users WHERE id = $1`, [
+        fx.user('lockme').id,
+      ])
+    ).rows[0];
     expect(row).toMatchObject({ failed_logins: 0, locked_until: null });
   });
 
@@ -126,7 +168,12 @@ describe('sign in', () => {
     const res = await login({ tenant: 'x', email: 'not-an-email', password: '' });
     expect(res.statusCode).toBe(400);
     expect(res.json().error.code).toBe('VALIDATION_FAILED');
-    expect(res.json().error.fieldErrors.map((f: { field: string }) => f.field).sort()).toEqual(['email', 'password', 'tenant']);
+    expect(
+      res
+        .json()
+        .error.fieldErrors.map((f: { field: string }) => f.field)
+        .sort(),
+    ).toEqual(['email', 'password', 'tenant']);
   });
 
   it('flags an account that must choose a new password', async () => {
@@ -145,7 +192,9 @@ describe('the office check (Admin and Counsellor only)', () => {
 
   it('accepts the office network with a position inside the radius', async () => {
     expect((await attempt({ location: inOffice })).statusCode).toBe(200);
-    expect((await login({ ...credentials('admin'), location: inOffice }, OFFICE_IP)).statusCode).toBe(200);
+    expect(
+      (await login({ ...credentials('admin'), location: inOffice }, OFFICE_IP)).statusCode,
+    ).toBe(200);
   });
 
   it('refuses the right position from the wrong network', async () => {
@@ -178,19 +227,32 @@ describe('the office check (Admin and Counsellor only)', () => {
   });
 
   it('refuses everyone when the office has no position or network set up', async () => {
-    await owner.query(`UPDATE branches SET latitude = NULL, longitude = NULL WHERE id = $1`, [fx.branchId]);
+    await owner.query(`UPDATE branches SET latitude = NULL, longitude = NULL WHERE id = $1`, [
+      fx.branchId,
+    ]);
     try {
       refused(await attempt({ location: inOffice }));
     } finally {
-      await owner.query(`UPDATE branches SET latitude = $2, longitude = $3 WHERE id = $1`, [fx.branchId, OFFICE.lat, OFFICE.lng]);
+      await owner.query(`UPDATE branches SET latitude = $2, longitude = $3 WHERE id = $1`, [
+        fx.branchId,
+        OFFICE.lat,
+        OFFICE.lng,
+      ]);
     }
   });
 });
 
 describe('mobile app sign-in', () => {
-  const device = { fingerprint: 'device-fingerprint-0001', platform: 'android', label: 'Test phone' };
+  const device = {
+    fingerprint: 'device-fingerprint-0001',
+    platform: 'android',
+    label: 'Test phone',
+  };
   const mobile = (extra: Body = {}) =>
-    login({ ...credentials('mobile'), clientType: 'mobile', location: inOffice, ...extra }, OFFICE_IP);
+    login(
+      { ...credentials('mobile'), clientType: 'mobile', location: inOffice, ...extra },
+      OFFICE_IP,
+    );
 
   it('needs the phone to identify itself', async () => {
     const res = await mobile();
@@ -212,25 +274,43 @@ describe('mobile app sign-in', () => {
     expect(res.json().refreshToken).toMatch(/^v1\./);
     expect(res.cookies.find((c) => c.name === REFRESH_COOKIE)).toBeUndefined();
 
-    const rotated = await app.inject({ method: 'POST', url: '/api/v1/auth/refresh', payload: { refreshToken: res.json().refreshToken } });
+    const rotated = await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/refresh',
+      payload: { refreshToken: res.json().refreshToken },
+    });
     expect(rotated.statusCode).toBe(200);
     expect(rotated.json().refreshToken).toMatch(/^v1\./);
     expect(rotated.json().refreshToken).not.toBe(res.json().refreshToken);
   });
 
   describe('a rooted or jailbroken phone', () => {
-    const rootedPhone = { fingerprint: 'rooted-phone-fingerprint-1', platform: 'android', label: 'Rooted phone', rooted: true };
+    const rootedPhone = {
+      fingerprint: 'rooted-phone-fingerprint-1',
+      platform: 'android',
+      label: 'Rooted phone',
+      rooted: true,
+    };
     const approve = (fingerprint: string) =>
-      owner.query(`UPDATE user_devices SET approved_by = $2, approved_at = now() WHERE user_id = $1 AND device_fingerprint = $3`, [fx.user('mobile').id, fx.user('admin').id, fingerprint]);
+      owner.query(
+        `UPDATE user_devices SET approved_by = $2, approved_at = now() WHERE user_id = $1 AND device_fingerprint = $3`,
+        [fx.user('mobile').id, fx.user('admin').id, fingerprint],
+      );
 
     it('is refused for an office person, is not registered, is logged and the Super Admins are told', async () => {
       const res = await mobile({ device: rootedPhone });
       expect(res.statusCode).toBe(403);
       expect(res.json().error.code).toBe('DEVICE_ROOTED');
 
-      const registered = await owner.query(`SELECT 1 FROM user_devices WHERE user_id = $1 AND device_fingerprint = $2`, [fx.user('mobile').id, rootedPhone.fingerprint]);
+      const registered = await owner.query(
+        `SELECT 1 FROM user_devices WHERE user_id = $1 AND device_fingerprint = $2`,
+        [fx.user('mobile').id, rootedPhone.fingerprint],
+      );
       expect(registered.rowCount).toBe(0);
-      const attempts = await owner.query(`SELECT result FROM login_attempts WHERE user_id = $1 ORDER BY id DESC LIMIT 1`, [fx.user('mobile').id]);
+      const attempts = await owner.query(
+        `SELECT result FROM login_attempts WHERE user_id = $1 ORDER BY id DESC LIMIT 1`,
+        [fx.user('mobile').id],
+      );
       expect(attempts.rows[0].result).toBe('device_blocked');
       const told = await owner.query(
         `SELECT 1 FROM notifications WHERE tenant_id = $1 AND payload->>'event' = 'login_refused' AND payload->>'reason' = 'device_rooted' AND payload->>'userId' = $2`,
@@ -256,7 +336,11 @@ describe('mobile app sign-in', () => {
     });
 
     it('does not stop a Super Admin, who is not tied to the office', async () => {
-      const res = await login({ ...credentials('super'), clientType: 'mobile', device: rootedPhone });
+      const res = await login({
+        ...credentials('super'),
+        clientType: 'mobile',
+        device: rootedPhone,
+      });
       expect(res.statusCode, res.body).toBe(200);
     });
   });
@@ -270,10 +354,18 @@ describe('the guard on protected routes', () => {
     expect(none.statusCode).toBe(401);
     expect(none.json().error.code).toBe('UNAUTHENTICATED');
 
-    const malformed = await app.inject({ method: 'GET', url: '/api/v1/auth/me', headers: { authorization: 'Bearer garbage' } });
+    const malformed = await app.inject({
+      method: 'GET',
+      url: '/api/v1/auth/me',
+      headers: { authorization: 'Bearer garbage' },
+    });
     expect(malformed.statusCode).toBe(401);
 
-    const forged = await app.inject({ method: 'GET', url: '/api/v1/auth/me', headers: { authorization: 'Bearer aaa.bbb.ccc' } });
+    const forged = await app.inject({
+      method: 'GET',
+      url: '/api/v1/auth/me',
+      headers: { authorization: 'Bearer aaa.bbb.ccc' },
+    });
     expect(forged.statusCode).toBe(401);
     expect(forged.json().error.code).toBe('TOKEN_INVALID');
   });
@@ -286,7 +378,10 @@ describe('the guard on protected routes', () => {
     const { token } = await signIn('super');
     const res = await get('/api/v1/auth/me', token);
     expect(res.statusCode).toBe(200);
-    expect(res.json().user).toMatchObject({ email: fx.user('super').email, role: { key: 'super_admin', dataScope: 'all' } });
+    expect(res.json().user).toMatchObject({
+      email: fx.user('super').email,
+      role: { key: 'super_admin', dataScope: 'all' },
+    });
     expect(res.json().permissions.length).toBeGreaterThan(40);
     expect(res.json().company.name).toMatch(/^Test /);
   });
@@ -321,7 +416,10 @@ describe('the guard on protected routes', () => {
       `INSERT INTO role_permissions (tenant_id, role_id, permission_id) SELECT $1, $2, id FROM permissions WHERE code = 'lead.read'`,
       [fx.tenantId, roleId],
     );
-    await owner.query(`UPDATE users SET role_id = $2, branch_id = NULL WHERE id = $1`, [fx.user('perms').id, roleId]);
+    await owner.query(`UPDATE users SET role_id = $2, branch_id = NULL WHERE id = $1`, [
+      fx.user('perms').id,
+      roleId,
+    ]);
 
     const { token } = await signIn('perms');
     expect((await get('/api/v1/test/leads', token)).statusCode).toBe(200);
@@ -332,7 +430,10 @@ describe('the guard on protected routes', () => {
   it('rejects a genuine token whose company does not match the session (cross-company use)', async () => {
     const { token } = await signIn('super');
     const claims = await new TokenService(loadEnv(process.env)).verifyAccess(token);
-    const wrongCompany = await new TokenService(loadEnv(process.env)).signAccess({ ...claims, tenantId: randomUUID() });
+    const wrongCompany = await new TokenService(loadEnv(process.env)).signAccess({
+      ...claims,
+      tenantId: randomUUID(),
+    });
     const res = await get('/api/v1/auth/me', wrongCompany.token);
     expect(res.statusCode).toBe(401);
     expect(res.json().error.code).toBe('SESSION_INVALID');
@@ -342,7 +443,11 @@ describe('the guard on protected routes', () => {
 describe('session lifetime', () => {
   it('signing out ends the session at once', async () => {
     const { token } = await signIn('logout');
-    const out = await app.inject({ method: 'POST', url: '/api/v1/auth/logout', headers: bearer(token) });
+    const out = await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/logout',
+      headers: bearer(token),
+    });
     expect(out.statusCode).toBe(204);
     const after = await get('/api/v1/auth/me', token);
     expect(after.statusCode).toBe(401);
@@ -352,15 +457,24 @@ describe('session lifetime', () => {
 
   it('signs office staff out after 30 minutes of inactivity, and counts a request as activity', async () => {
     const { token } = await signIn('att3', { location: inOffice }, OFFICE_IP);
-    await owner.query(`UPDATE user_sessions SET last_active_at = now() - interval '10 minutes' WHERE user_id = $1`, [fx.user('att3').id]);
+    await owner.query(
+      `UPDATE user_sessions SET last_active_at = now() - interval '10 minutes' WHERE user_id = $1`,
+      [fx.user('att3').id],
+    );
     expect((await get('/api/v1/auth/me', token)).statusCode).toBe(200);
     const touched = await sessionOf('att3');
     expect(Date.now() - new Date(touched.last_active_at).getTime()).toBeLessThan(60_000);
 
-    await owner.query(`UPDATE user_sessions SET last_active_at = now() - interval '31 minutes' WHERE user_id = $1`, [fx.user('att3').id]);
+    await owner.query(
+      `UPDATE user_sessions SET last_active_at = now() - interval '31 minutes' WHERE user_id = $1`,
+      [fx.user('att3').id],
+    );
     const res = await get('/api/v1/auth/me', token);
     expect(res.statusCode).toBe(401);
-    expect(res.json().error).toMatchObject({ code: 'SESSION_IDLE', message: expect.stringContaining('30 minutes') });
+    expect(res.json().error).toMatchObject({
+      code: 'SESSION_IDLE',
+      message: expect.stringContaining('30 minutes'),
+    });
     expect((await sessionOf('att3')).ended_reason).toBe('inactivity');
   });
 
@@ -370,7 +484,10 @@ describe('session lifetime', () => {
     await owner.query(role, [fx.tenantId, false]);
     try {
       const { token } = await signIn('idle');
-      await owner.query(`UPDATE user_sessions SET last_active_at = now() - interval '3 hours' WHERE user_id = $1 AND ended_at IS NULL`, [fx.user('idle').id]);
+      await owner.query(
+        `UPDATE user_sessions SET last_active_at = now() - interval '3 hours' WHERE user_id = $1 AND ended_at IS NULL`,
+        [fx.user('idle').id],
+      );
       expect((await get('/api/v1/auth/me', token)).statusCode).toBe(200);
       expect((await sessionOf('idle')).ended_at).toBeNull();
       // The sweep that ends idle sessions leaves it alone too.
@@ -383,16 +500,31 @@ describe('session lifetime', () => {
 
   it('counts working on the page (the activity ping) as activity', async () => {
     const { token } = await signIn('att2', { location: inOffice }, OFFICE_IP);
-    await owner.query(`UPDATE user_sessions SET last_active_at = now() - interval '14 minutes' WHERE user_id = $1 AND ended_at IS NULL`, [fx.user('att2').id]);
-    const ping = await app.inject({ method: 'POST', url: '/api/v1/auth/activity', headers: bearer(token), remoteAddress: OFFICE_IP });
+    await owner.query(
+      `UPDATE user_sessions SET last_active_at = now() - interval '14 minutes' WHERE user_id = $1 AND ended_at IS NULL`,
+      [fx.user('att2').id],
+    );
+    const ping = await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/activity',
+      headers: bearer(token),
+      remoteAddress: OFFICE_IP,
+    });
     expect(ping.statusCode).toBe(204);
-    expect(Date.now() - new Date((await sessionOf('att2')).last_active_at).getTime()).toBeLessThan(60_000);
-    expect((await app.inject({ method: 'POST', url: '/api/v1/auth/activity' })).statusCode).toBe(401);
+    expect(Date.now() - new Date((await sessionOf('att2')).last_active_at).getTime()).toBeLessThan(
+      60_000,
+    );
+    expect((await app.inject({ method: 'POST', url: '/api/v1/auth/activity' })).statusCode).toBe(
+      401,
+    );
   });
 
   it('ends a session that has reached its maximum age', async () => {
     const { token } = await signIn('expired');
-    await owner.query(`UPDATE user_sessions SET expires_at = now() - interval '1 minute' WHERE user_id = $1`, [fx.user('expired').id]);
+    await owner.query(
+      `UPDATE user_sessions SET expires_at = now() - interval '1 minute' WHERE user_id = $1`,
+      [fx.user('expired').id],
+    );
     const res = await get('/api/v1/auth/me', token);
     expect(res.json().error.code).toBe('SESSION_EXPIRED');
     expect((await sessionOf('expired')).ended_reason).toBe('expired');
@@ -400,7 +532,9 @@ describe('session lifetime', () => {
 
   it('stops a deactivated user on the next request', async () => {
     const { token } = await signIn('deactivate');
-    await owner.query(`UPDATE users SET status = 'inactive' WHERE id = $1`, [fx.user('deactivate').id]);
+    await owner.query(`UPDATE users SET status = 'inactive' WHERE id = $1`, [
+      fx.user('deactivate').id,
+    ]);
     const res = await get('/api/v1/auth/me', token);
     expect(res.statusCode).toBe(401);
     expect(res.json().error.code).toBe('ACCOUNT_INACTIVE');
@@ -424,9 +558,14 @@ describe('refresh tokens', () => {
 
   it('ends the whole session when an old token is used again, after the moment two tabs may share', async () => {
     const { refreshCookie: first, token } = await signIn('reuse');
-    const second = (await refreshWithCookie(first!)).cookies.find((c) => c.name === REFRESH_COOKIE)!.value;
+    const second = (await refreshWithCookie(first!)).cookies.find(
+      (c) => c.name === REFRESH_COOKIE,
+    )!.value;
     // Past the few seconds in which another tab of the same browser may still send the replaced token.
-    await owner.query(`UPDATE user_sessions SET refresh_rotated_at = now() - interval '2 minutes' WHERE user_id = $1 AND ended_at IS NULL`, [fx.user('reuse').id]);
+    await owner.query(
+      `UPDATE user_sessions SET refresh_rotated_at = now() - interval '2 minutes' WHERE user_id = $1 AND ended_at IS NULL`,
+      [fx.user('reuse').id],
+    );
 
     const replay = await refreshWithCookie(first!);
     expect(replay.statusCode).toBe(401);
@@ -436,38 +575,54 @@ describe('refresh tokens', () => {
     expect((await refreshWithCookie(second)).statusCode).toBe(401);
     expect((await get('/api/v1/auth/me', token)).json().error.code).toBe('SESSION_ENDED');
 
-    const audit = await owner.query(`SELECT count(*)::int AS n FROM audit_logs WHERE tenant_id = $1 AND action = 'auth.refresh_token_reuse'`, [fx.tenantId]);
+    const audit = await owner.query(
+      `SELECT count(*)::int AS n FROM audit_logs WHERE tenant_id = $1 AND action = 'auth.refresh_token_reuse'`,
+      [fx.tenantId],
+    );
     expect(audit.rows[0].n).toBe(1);
   });
 
   it('keeps the session when two tabs refresh at the same moment, renewing the token only once', async () => {
     const { refreshCookie } = await signIn('race');
-    const results = await Promise.all([refreshWithCookie(refreshCookie!), refreshWithCookie(refreshCookie!)]);
+    const results = await Promise.all([
+      refreshWithCookie(refreshCookie!),
+      refreshWithCookie(refreshCookie!),
+    ]);
     expect(results.map((r) => r.statusCode)).toEqual([200, 200]);
     // Only one answer carries a new cookie; the other tab already shares it through the browser.
-    const cookies = results.map((r) => r.cookies.find((c) => c.name === REFRESH_COOKIE)?.value).filter(Boolean);
+    const cookies = results
+      .map((r) => r.cookies.find((c) => c.name === REFRESH_COOKIE)?.value)
+      .filter(Boolean);
     expect(cookies).toHaveLength(1);
     expect((await sessionOf('race')).ended_at).toBeNull();
     // Both access tokens work, and the new cookie keeps working.
-    for (const r of results) expect((await get('/api/v1/auth/me', r.json().accessToken)).statusCode).toBe(200);
+    for (const r of results)
+      expect((await get('/api/v1/auth/me', r.json().accessToken)).statusCode).toBe(200);
     expect((await refreshWithCookie(cookies[0]!)).statusCode).toBe(200);
   });
 
   it.each([
     ['nothing', undefined],
     ['garbage', 'not-a-token'],
-    ['a well-formed token that was never issued', `v1.${randomUUID()}.${randomUUID()}.${'a'.repeat(43)}`],
+    [
+      'a well-formed token that was never issued',
+      `v1.${randomUUID()}.${randomUUID()}.${'a'.repeat(43)}`,
+    ],
   ])('refuses %s', async (_name, value) => {
-    const res = value === undefined
-      ? await app.inject({ method: 'POST', url: '/api/v1/auth/refresh', payload: {} })
-      : await refreshWithCookie(value);
+    const res =
+      value === undefined
+        ? await app.inject({ method: 'POST', url: '/api/v1/auth/refresh', payload: {} })
+        : await refreshWithCookie(value);
     expect(res.statusCode).toBe(401);
     expect(res.json().error.code).toBe('TOKEN_INVALID');
   });
 
   it('refuses to refresh a session that has been idle too long', async () => {
     const { refreshCookie } = await signIn('att1', { location: inOffice }, OFFICE_IP);
-    await owner.query(`UPDATE user_sessions SET last_active_at = now() - interval '31 minutes' WHERE user_id = $1 AND ended_at IS NULL`, [fx.user('att1').id]);
+    await owner.query(
+      `UPDATE user_sessions SET last_active_at = now() - interval '31 minutes' WHERE user_id = $1 AND ended_at IS NULL`,
+      [fx.user('att1').id],
+    );
     const res = await refreshWithCookie(refreshCookie!);
     expect(res.statusCode).toBe(401);
     expect(res.json().error.code).toBe('SESSION_IDLE');
@@ -478,11 +633,19 @@ describe('refresh tokens', () => {
 
 describe('changing the password', () => {
   const change = (token: string, body: Body) =>
-    app.inject({ method: 'POST', url: '/api/v1/auth/change-password', headers: bearer(token), payload: body });
+    app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/change-password',
+      headers: bearer(token),
+      payload: body,
+    });
 
   it('refuses the wrong current password', async () => {
     const { token } = await signIn('pwchange');
-    const res = await change(token, { currentPassword: 'Wrong-password-1', newPassword: 'Brand-new-pass-77' });
+    const res = await change(token, {
+      currentPassword: 'Wrong-password-1',
+      newPassword: 'Brand-new-pass-77',
+    });
     expect(res.statusCode).toBe(403);
     expect(res.json().error.code).toBe('CURRENT_PASSWORD_WRONG');
   });
@@ -497,14 +660,20 @@ describe('changing the password', () => {
     expect(same.json().error.code).toBe('PASSWORD_REJECTED');
 
     const local = fx.user('pwchange').email.split('@')[0];
-    const fromEmail = await change(token, { currentPassword: PASSWORD, newPassword: `${local}-2026` });
+    const fromEmail = await change(token, {
+      currentPassword: PASSWORD,
+      newPassword: `${local}-2026`,
+    });
     expect(fromEmail.json().error.code).toBe('PASSWORD_REJECTED');
   });
 
   it('changes it, ends the other sessions and clears the must-change flag', async () => {
     const first = await signIn('pwchange');
     const other = await signIn('pwchange');
-    const res = await change(first.token, { currentPassword: PASSWORD, newPassword: 'Brand-new-pass-77' });
+    const res = await change(first.token, {
+      currentPassword: PASSWORD,
+      newPassword: 'Brand-new-pass-77',
+    });
     expect(res.statusCode).toBe(200);
     expect(res.json().otherSessionsEnded).toBeGreaterThanOrEqual(1);
 
@@ -516,9 +685,14 @@ describe('changing the password', () => {
 
   it('frees an account that had to change it', async () => {
     const { token } = await signIn('mustchange');
-    expect((await change(token, { currentPassword: PASSWORD, newPassword: 'Fresh-choice-2026' })).statusCode).toBe(200);
+    expect(
+      (await change(token, { currentPassword: PASSWORD, newPassword: 'Fresh-choice-2026' }))
+        .statusCode,
+    ).toBe(200);
     expect((await get('/api/v1/test/leads', token)).statusCode).toBe(200);
-    expect((await login(credentials('mustchange', 'Fresh-choice-2026'))).json().mustChangePassword).toBe(false);
+    expect(
+      (await login(credentials('mustchange', 'Fresh-choice-2026'))).json().mustChangePassword,
+    ).toBe(false);
   });
 });
 
@@ -533,27 +707,48 @@ describe('own sessions', () => {
     expect(list.json().length).toBeGreaterThanOrEqual(2);
     expect(list.json().filter((s: { current: boolean }) => s.current)).toHaveLength(1);
 
-    const bId = (await owner.query(`SELECT id FROM user_sessions WHERE refresh_token_hash IS NOT NULL AND user_id = $1 AND ended_at IS NULL ORDER BY created_at DESC LIMIT 1`, [fx.user('sessions').id])).rows[0].id;
-    const revoke = await app.inject({ method: 'DELETE', url: `/api/v1/auth/sessions/${bId}`, headers: bearer(a.token) });
+    const bId = (
+      await owner.query(
+        `SELECT id FROM user_sessions WHERE refresh_token_hash IS NOT NULL AND user_id = $1 AND ended_at IS NULL ORDER BY created_at DESC LIMIT 1`,
+        [fx.user('sessions').id],
+      )
+    ).rows[0].id;
+    const revoke = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/auth/sessions/${bId}`,
+      headers: bearer(a.token),
+    });
     expect(revoke.statusCode).toBe(204);
     expect((await get('/api/v1/auth/me', b.token)).statusCode).toBe(401);
   });
 
-  it('does not let a person end their current session this way, or anyone else\'s', async () => {
+  it("does not let a person end their current session this way, or anyone else's", async () => {
     // A counsellor (not someone who manages users): their own current session and other people's are off limits.
     const mine = await signIn('victim', { location: inOffice }, OFFICE_IP);
     const theirs = await signIn('super');
     const theirId = (await sessionOf('super')).id as string;
     const myId = (await sessionOf('victim')).id as string;
 
-    const self = await app.inject({ method: 'DELETE', url: `/api/v1/auth/sessions/${myId}`, headers: bearer(mine.token) });
+    const self = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/auth/sessions/${myId}`,
+      headers: bearer(mine.token),
+    });
     expect(self.json().error.code).toBe('USE_LOGOUT');
 
-    const other = await app.inject({ method: 'DELETE', url: `/api/v1/auth/sessions/${theirId}`, headers: bearer(mine.token) });
+    const other = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/auth/sessions/${theirId}`,
+      headers: bearer(mine.token),
+    });
     expect(other.statusCode).toBe(404);
     expect((await get('/api/v1/auth/me', theirs.token)).statusCode).toBe(200);
 
-    const notAnId = await app.inject({ method: 'DELETE', url: '/api/v1/auth/sessions/not-a-uuid', headers: bearer(mine.token) });
+    const notAnId = await app.inject({
+      method: 'DELETE',
+      url: '/api/v1/auth/sessions/not-a-uuid',
+      headers: bearer(mine.token),
+    });
     expect(notAnId.statusCode).toBe(400);
   });
 });
@@ -566,14 +761,33 @@ describe('sessions managed by a Super Admin', () => {
 
     const all = await get('/api/v1/auth/sessions/all', sa.token);
     expect(all.statusCode).toBe(200);
-    expect(all.json().some((s: { id: string; user: { name: string } }) => s.id === victimSession && s.user.name === 'sessions')).toBe(true);
-    const filtered = await get(`/api/v1/auth/sessions/all?userId=${fx.user('sessions').id}`, sa.token);
-    expect(filtered.json().every((s: { user: { id: string } }) => s.user.id === fx.user('sessions').id)).toBe(true);
+    expect(
+      all
+        .json()
+        .some(
+          (s: { id: string; user: { name: string } }) =>
+            s.id === victimSession && s.user.name === 'sessions',
+        ),
+    ).toBe(true);
+    const filtered = await get(
+      `/api/v1/auth/sessions/all?userId=${fx.user('sessions').id}`,
+      sa.token,
+    );
+    expect(
+      filtered.json().every((s: { user: { id: string } }) => s.user.id === fx.user('sessions').id),
+    ).toBe(true);
 
-    const end = await app.inject({ method: 'DELETE', url: `/api/v1/auth/sessions/${victimSession}`, headers: bearer(sa.token) });
+    const end = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/auth/sessions/${victimSession}`,
+      headers: bearer(sa.token),
+    });
     expect(end.statusCode).toBe(204);
     expect((await get('/api/v1/auth/me', victim.token)).statusCode).toBe(401);
-    const logged = await owner.query(`SELECT actor_id FROM audit_logs WHERE tenant_id = $1 AND action = 'auth.session_revoked_by_admin' AND entity_id = $2`, [fx.tenantId, victimSession]);
+    const logged = await owner.query(
+      `SELECT actor_id FROM audit_logs WHERE tenant_id = $1 AND action = 'auth.session_revoked_by_admin' AND entity_id = $2`,
+      [fx.tenantId, victimSession],
+    );
     expect(logged.rows[0].actor_id).toBe(fx.user('super').id);
   });
 
@@ -591,28 +805,64 @@ describe('repeated attempts from one address', () => {
     try {
       const ip = '198.51.100.20';
       // Twelve people arriving together: more sign-ins than the limit on failures, every one of them right.
-      const results = await Promise.all(Array.from({ length: 12 }, () => office.inject({ method: 'POST', url: '/api/v1/auth/login', payload: credentials('super'), remoteAddress: ip })));
+      const results = await Promise.all(
+        Array.from({ length: 12 }, () =>
+          office.inject({
+            method: 'POST',
+            url: '/api/v1/auth/login',
+            payload: credentials('super'),
+            remoteAddress: ip,
+          }),
+        ),
+      );
       expect(results.map((r) => r.statusCode)).toEqual(Array(12).fill(200));
       // Guessing is still stopped: five wrong passwords and the address is slowed down.
       for (let i = 0; i < 5; i++) {
-        expect((await office.inject({ method: 'POST', url: '/api/v1/auth/login', payload: credentials('super', 'Wrong-password-1'), remoteAddress: ip })).statusCode).toBe(401);
+        expect(
+          (
+            await office.inject({
+              method: 'POST',
+              url: '/api/v1/auth/login',
+              payload: credentials('super', 'Wrong-password-1'),
+              remoteAddress: ip,
+            })
+          ).statusCode,
+        ).toBe(401);
       }
-      expect((await office.inject({ method: 'POST', url: '/api/v1/auth/login', payload: credentials('super'), remoteAddress: ip })).statusCode).toBe(429);
+      expect(
+        (
+          await office.inject({
+            method: 'POST',
+            url: '/api/v1/auth/login',
+            payload: credentials('super'),
+            remoteAddress: ip,
+          })
+        ).statusCode,
+      ).toBe(429);
     } finally {
       await office.close();
     }
   });
-
 
   it('are slowed down with a 429 and a Retry-After header', async () => {
     const strict = await startApp({ LOGIN_IP_MAX_ATTEMPTS: '5' });
     try {
       const ip = '198.51.100.9';
       for (let i = 0; i < 5; i++) {
-        const res = await strict.inject({ method: 'POST', url: '/api/v1/auth/login', payload: credentials('throttle', 'Wrong-password-1'), remoteAddress: ip });
+        const res = await strict.inject({
+          method: 'POST',
+          url: '/api/v1/auth/login',
+          payload: credentials('throttle', 'Wrong-password-1'),
+          remoteAddress: ip,
+        });
         expect(res.statusCode).toBe(401);
       }
-      const blocked = await strict.inject({ method: 'POST', url: '/api/v1/auth/login', payload: credentials('throttle'), remoteAddress: ip });
+      const blocked = await strict.inject({
+        method: 'POST',
+        url: '/api/v1/auth/login',
+        payload: credentials('throttle'),
+        remoteAddress: ip,
+      });
       expect(blocked.statusCode).toBe(429);
       expect(blocked.json().error.code).toBe('TOO_MANY_ATTEMPTS');
       expect(Number(blocked.headers['retry-after'])).toBeGreaterThan(0);

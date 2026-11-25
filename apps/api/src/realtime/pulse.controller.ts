@@ -39,8 +39,13 @@ export class PulseController {
       const ring = await sql<{ one: number }>`
         SELECT 1 AS one FROM video_session_invites i JOIN video_sessions s ON s.id = i.session_id
         WHERE i.user_id = ${auth.userId}::uuid AND i.state = 'ringing' AND s.status = 'open'
-          AND i.invited_at > now() - make_interval(secs => ${this.env.COMMUNICATION_RING_SECONDS}) LIMIT 1`.execute(trx);
-      return { stamps: Object.fromEntries(rows.map((r) => [r.topic, new Date(r.at).toISOString()])), ringing: ring.rows.length > 0 };
+          AND i.invited_at > now() - make_interval(secs => ${this.env.COMMUNICATION_RING_SECONDS}) LIMIT 1`.execute(
+        trx,
+      );
+      return {
+        stamps: Object.fromEntries(rows.map((r) => [r.topic, new Date(r.at).toISOString()])),
+        ringing: ring.rows.length > 0,
+      };
     });
   }
 }

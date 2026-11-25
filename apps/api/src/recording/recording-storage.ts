@@ -1,4 +1,10 @@
-import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, ListObjectsV2Command, S3Client } from '@aws-sdk/client-s3';
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  HeadObjectCommand,
+  ListObjectsV2Command,
+  S3Client,
+} from '@aws-sdk/client-s3';
 import { Inject, Injectable } from '@nestjs/common';
 import type { Readable } from 'node:stream';
 import { ENV } from '../config/config.module.js';
@@ -29,7 +35,10 @@ export class RecordingStorage {
   private s3(): S3Like {
     this.client ??= new S3Client({
       region: this.env.RECORDING_S3_REGION,
-      credentials: { accessKeyId: this.env.RECORDING_S3_ACCESS_KEY_ID!, secretAccessKey: this.env.RECORDING_S3_SECRET_ACCESS_KEY! },
+      credentials: {
+        accessKeyId: this.env.RECORDING_S3_ACCESS_KEY_ID!,
+        secretAccessKey: this.env.RECORDING_S3_SECRET_ACCESS_KEY!,
+      },
     });
     return this.client;
   }
@@ -43,12 +52,19 @@ export class RecordingStorage {
     const out: StoredFile[] = [];
     let token: string | undefined;
     do {
-      const res = (await this.s3().send(new ListObjectsV2Command({ Bucket: this.bucket, Prefix: `${prefix}/`, ContinuationToken: token }))) as {
+      const res = (await this.s3().send(
+        new ListObjectsV2Command({
+          Bucket: this.bucket,
+          Prefix: `${prefix}/`,
+          ContinuationToken: token,
+        }),
+      )) as {
         Contents?: { Key?: string; Size?: number }[];
         IsTruncated?: boolean;
         NextContinuationToken?: string;
       };
-      for (const o of res.Contents ?? []) if (o.Key) out.push({ key: o.Key, size: Number(o.Size ?? 0) });
+      for (const o of res.Contents ?? [])
+        if (o.Key) out.push({ key: o.Key, size: Number(o.Size ?? 0) });
       token = res.IsTruncated ? res.NextContinuationToken : undefined;
     } while (token);
     return out;
@@ -56,25 +72,39 @@ export class RecordingStorage {
 
   async size(key: string): Promise<number | null> {
     try {
-      const res = (await this.s3().send(new HeadObjectCommand({ Bucket: this.bucket, Key: key }))) as { ContentLength?: number };
+      const res = (await this.s3().send(
+        new HeadObjectCommand({ Bucket: this.bucket, Key: key }),
+      )) as { ContentLength?: number };
       return Number(res.ContentLength ?? 0);
     } catch (err) {
       const e = err as { name?: string; $metadata?: { httpStatusCode?: number } };
-      if (e.name === 'NotFound' || e.name === 'NoSuchKey' || e.$metadata?.httpStatusCode === 404) return null;
+      if (e.name === 'NotFound' || e.name === 'NoSuchKey' || e.$metadata?.httpStatusCode === 404)
+        return null;
       throw err;
     }
   }
 
   /** The file, or a part of it (a browser asks for parts when someone skips ahead). */
-  async get(key: string, range?: { start: number; end: number }): Promise<{ stream: Readable; size: number; total: number } | null> {
+  async get(
+    key: string,
+    range?: { start: number; end: number },
+  ): Promise<{ stream: Readable; size: number; total: number } | null> {
     try {
-      const res = (await this.s3().send(new GetObjectCommand({ Bucket: this.bucket, Key: key, Range: range ? `bytes=${range.start}-${range.end}` : undefined }))) as {
+      const res = (await this.s3().send(
+        new GetObjectCommand({
+          Bucket: this.bucket,
+          Key: key,
+          Range: range ? `bytes=${range.start}-${range.end}` : undefined,
+        }),
+      )) as {
         Body?: unknown;
         ContentLength?: number;
         ContentRange?: string;
       };
       if (!res.Body) return null;
-      const total = res.ContentRange ? Number(res.ContentRange.split('/')[1]) : Number(res.ContentLength ?? 0);
+      const total = res.ContentRange
+        ? Number(res.ContentRange.split('/')[1])
+        : Number(res.ContentLength ?? 0);
       return { stream: res.Body as Readable, size: Number(res.ContentLength ?? 0), total };
     } catch (err) {
       const e = err as { name?: string; $metadata?: { httpStatusCode?: number } };

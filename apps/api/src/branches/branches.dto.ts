@@ -13,7 +13,10 @@ export const createBranchSchema = z
     longitude: longitude.optional(),
     radiusM: radius.optional(),
   })
-  .refine((v) => (v.latitude === undefined) === (v.longitude === undefined), 'Give both latitude and longitude, or neither');
+  .refine(
+    (v) => (v.latitude === undefined) === (v.longitude === undefined),
+    'Give both latitude and longitude, or neither',
+  );
 export class CreateBranchDto extends createZodDto(createBranchSchema) {}
 
 export const updateBranchSchema = z
@@ -40,9 +43,11 @@ export const addNetworkSchema = z
   })
   .refine(
     (v) =>
-      v.kind === 'ip_range' ? !!v.ipRange && !v.wifiId && !v.hostname
-      : v.kind === 'wifi' ? !!v.wifiId && !v.ipRange && !v.hostname
-      : !!v.hostname && !v.ipRange && !v.wifiId,
+      v.kind === 'ip_range'
+        ? !!v.ipRange && !v.wifiId && !v.hostname
+        : v.kind === 'wifi'
+          ? !!v.wifiId && !v.ipRange && !v.hostname
+          : !!v.hostname && !v.ipRange && !v.wifiId,
     'Give an ipRange for an IP network, a wifiId for a WiFi network, or a hostname for a dynamic DNS name',
   );
 export class AddNetworkDto extends createZodDto(addNetworkSchema) {}

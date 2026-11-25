@@ -1,4 +1,13 @@
-import { deriveExternalId, firstMatchingRule, interestNote, parseIntake, isDownloadForm, pickAssignee, RuleLike, stableStringify } from './intake-rules.js';
+import {
+  deriveExternalId,
+  firstMatchingRule,
+  interestNote,
+  parseIntake,
+  isDownloadForm,
+  pickAssignee,
+  RuleLike,
+  stableStringify,
+} from './intake-rules.js';
 
 // The exact shape the Admissions House website sends.
 const websitePayload = {
@@ -23,9 +32,17 @@ describe('parseIntake', () => {
     expect(r).toEqual({
       ok: true,
       lead: {
-        name: 'Riya Sharma', phone: '919876543210', email: 'riya@example.com', level: 'UG', studyMode: 'online',
-        stream: 'Engineering', city: 'Noida', interest: 'B.Tech at XYZ University', formName: 'home-popup',
-        pagePath: '/colleges/xyz', utm: { source: 'google', medium: 'cpc', campaign: 'btech-2026' },
+        name: 'Riya Sharma',
+        phone: '919876543210',
+        email: 'riya@example.com',
+        level: 'UG',
+        studyMode: 'online',
+        stream: 'Engineering',
+        city: 'Noida',
+        interest: 'B.Tech at XYZ University',
+        formName: 'home-popup',
+        pagePath: '/colleges/xyz',
+        utm: { source: 'google', medium: 'cpc', campaign: 'btech-2026' },
       },
     });
   });
@@ -36,8 +53,24 @@ describe('parseIntake', () => {
   });
 
   it('keeps the lead when optional details are bad: a bad email, empty strings, an unknown mode', () => {
-    const r = parseIntake({ ...websitePayload, email: 'not-an-email', stream: '', city: '   ', mode: 'Hybrid', level: 'PhD' });
-    expect(r).toMatchObject({ ok: true, lead: { email: undefined, stream: undefined, city: undefined, studyMode: undefined, level: undefined } });
+    const r = parseIntake({
+      ...websitePayload,
+      email: 'not-an-email',
+      stream: '',
+      city: '   ',
+      mode: 'Hybrid',
+      level: 'PhD',
+    });
+    expect(r).toMatchObject({
+      ok: true,
+      lead: {
+        email: undefined,
+        stream: undefined,
+        city: undefined,
+        studyMode: undefined,
+        level: undefined,
+      },
+    });
   });
 
   it('cuts over-long text instead of refusing the lead', () => {
@@ -77,13 +110,17 @@ describe('interestNote', () => {
   };
   it('keeps the free text and adds only what could not be matched', () => {
     expect(interestNote(lead(), { city: false, stream: false })).toBe('B.Tech at XYZ University');
-    expect(interestNote(lead(), { city: true, stream: true })).toBe('B.Tech at XYZ University | Stream: Engineering | City: Noida');
-    expect(interestNote(lead({ interest: '', stream: '', city: '' }), { city: true, stream: true })).toBeUndefined();
+    expect(interestNote(lead(), { city: true, stream: true })).toBe(
+      'B.Tech at XYZ University | Stream: Engineering | City: Noida',
+    );
+    expect(
+      interestNote(lead({ interest: '', stream: '', city: '' }), { city: true, stream: true }),
+    ).toBeUndefined();
   });
 });
 
 describe('deriveExternalId', () => {
-  it('prefers the sender\'s idempotency key, then the payload id', () => {
+  it("prefers the sender's idempotency key, then the payload id", () => {
     expect(deriveExternalId('abc-123', websitePayload)).toBe('abc-123');
     expect(deriveExternalId(undefined, websitePayload)).toBe(websitePayload.id);
   });
@@ -102,29 +139,56 @@ describe('deriveExternalId', () => {
   });
 
   it('stableStringify handles nesting and arrays', () => {
-    expect(stableStringify({ b: [1, { d: 1, c: 2 }], a: null })).toBe('{"a":null,"b":[1,{"c":2,"d":1}]}');
+    expect(stableStringify({ b: [1, { d: 1, c: 2 }], a: null })).toBe(
+      '{"a":null,"b":[1,{"c":2,"d":1}]}',
+    );
   });
 });
 
 describe('firstMatchingRule', () => {
   const rule = (over: Partial<RuleLike>): RuleLike => ({
-    id: 'r', priority: 1, sourceId: null, courseId: null, locationId: null, studyMode: null, strategy: 'round_robin', ...over,
+    id: 'r',
+    priority: 1,
+    sourceId: null,
+    courseId: null,
+    locationId: null,
+    studyMode: null,
+    strategy: 'round_robin',
+    ...over,
   });
-  const lead = { sourceId: 'web', courseId: null, locationId: 'noida', studyMode: 'online' as const };
+  const lead = {
+    sourceId: 'web',
+    courseId: null,
+    locationId: 'noida',
+    studyMode: 'online' as const,
+  };
 
   it('takes the lowest priority number that matches, treating empty conditions as "any"', () => {
-    const rules = [rule({ id: 'any', priority: 9 }), rule({ id: 'web-only', priority: 2, sourceId: 'web' }), rule({ id: 'ads', priority: 1, sourceId: 'ads' })];
+    const rules = [
+      rule({ id: 'any', priority: 9 }),
+      rule({ id: 'web-only', priority: 2, sourceId: 'web' }),
+      rule({ id: 'ads', priority: 1, sourceId: 'ads' }),
+    ];
     expect(firstMatchingRule(rules, lead)?.id).toBe('web-only');
   });
 
   it('requires every set condition to hold', () => {
-    expect(firstMatchingRule([rule({ sourceId: 'web', studyMode: 'regular' })], lead)).toBeUndefined();
-    expect(firstMatchingRule([rule({ sourceId: 'web', studyMode: 'online', locationId: 'noida' })], lead)).toBeDefined();
+    expect(
+      firstMatchingRule([rule({ sourceId: 'web', studyMode: 'regular' })], lead),
+    ).toBeUndefined();
+    expect(
+      firstMatchingRule(
+        [rule({ sourceId: 'web', studyMode: 'online', locationId: 'noida' })],
+        lead,
+      ),
+    ).toBeDefined();
   });
 
   it('never matches a rule about a course for a lead that has no course', () => {
     expect(firstMatchingRule([rule({ courseId: 'btech' })], lead)).toBeUndefined();
-    expect(firstMatchingRule([rule({ courseId: 'btech' })], { ...lead, courseId: 'btech' })).toBeDefined();
+    expect(
+      firstMatchingRule([rule({ courseId: 'btech' })], { ...lead, courseId: 'btech' }),
+    ).toBeDefined();
   });
 
   it('returns nothing when there are no rules', () => {
@@ -134,7 +198,11 @@ describe('firstMatchingRule', () => {
 
 describe('pickAssignee', () => {
   const day = (n: number) => new Date(Date.UTC(2026, 9, n));
-  const c = (userId: string, last: Date | null, openLeads = 0) => ({ userId, lastAssignedAt: last, openLeads });
+  const c = (userId: string, last: Date | null, openLeads = 0) => ({
+    userId,
+    lastAssignedAt: last,
+    openLeads,
+  });
 
   it('gives nobody when nobody is available', () => {
     expect(pickAssignee([], 'round_robin')).toBeNull();
@@ -147,10 +215,17 @@ describe('pickAssignee', () => {
   });
 
   it('round robin rotates through everyone fairly', () => {
-    const state = new Map<string, Date | null>([['a', null], ['b', null], ['c', null]]);
+    const state = new Map<string, Date | null>([
+      ['a', null],
+      ['b', null],
+      ['c', null],
+    ]);
     const order: string[] = [];
     for (let i = 1; i <= 6; i++) {
-      const next = pickAssignee([...state].map(([id, at]) => c(id, at)), 'round_robin')!;
+      const next = pickAssignee(
+        [...state].map(([id, at]) => c(id, at)),
+        'round_robin',
+      )!;
       order.push(next);
       state.set(next, day(i));
     }
@@ -158,7 +233,9 @@ describe('pickAssignee', () => {
   });
 
   it('least busy: fewest open leads, then the one who waited longest', () => {
-    expect(pickAssignee([c('a', day(1), 5), c('b', day(2), 2), c('c', day(3), 2)], 'least_busy')).toBe('b');
+    expect(
+      pickAssignee([c('a', day(1), 5), c('b', day(2), 2), c('c', day(3), 2)], 'least_busy'),
+    ).toBe('b');
   });
 
   it('fixed: always the same person, whatever the history', () => {
@@ -167,7 +244,9 @@ describe('pickAssignee', () => {
 
   it('gives the same answer however the list is ordered', () => {
     const people = [c('a', day(2)), c('b', day(2)), c('c', day(2))];
-    expect(pickAssignee(people, 'round_robin')).toBe(pickAssignee([...people].reverse(), 'round_robin'));
+    expect(pickAssignee(people, 'round_robin')).toBe(
+      pickAssignee([...people].reverse(), 'round_robin'),
+    );
   });
 });
 

@@ -1,5 +1,13 @@
 import { timingSafeEqual } from 'node:crypto';
-import { Controller, Get, Headers, Inject, NotFoundException, Res, UnauthorizedException } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Headers,
+  Inject,
+  NotFoundException,
+  Res,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ApiExcludeController } from '@nestjs/swagger';
 import type { FastifyReply } from 'fastify';
 import { Public } from '../auth/decorators.js';
@@ -7,7 +15,8 @@ import { ENV } from '../config/config.module.js';
 import type { Env } from '../config/env.js';
 import { MetricsService } from './metrics.service.js';
 
-const same = (a: string, b: string): boolean => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
+const same = (a: string, b: string): boolean =>
+  a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 
 /**
  * The numbers for a monitoring tool. Off unless METRICS_TOKEN is set; then the tool must send it as
@@ -23,7 +32,10 @@ export class MetricsController {
   ) {}
 
   @Get()
-  async scrape(@Headers('authorization') authorization: string | undefined, @Res({ passthrough: true }) reply: FastifyReply): Promise<string> {
+  async scrape(
+    @Headers('authorization') authorization: string | undefined,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<string> {
     // Switched off: the address does not exist, so there is nothing to find.
     if (!this.env.METRICS_TOKEN) throw new NotFoundException();
     const given = /^Bearer (.+)$/.exec(authorization ?? '')?.[1];

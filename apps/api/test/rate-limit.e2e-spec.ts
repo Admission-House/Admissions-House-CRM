@@ -15,7 +15,11 @@ beforeAll(async () => {
   await owner.connect();
   fx = await createFixture(owner);
   // Small allowances so the limits can be reached in a test.
-  app = await startApp({ LOGIN_IP_MAX_ATTEMPTS: '500', USER_RATE_PER_MIN: '30', HEAVY_RATE_PER_MIN: '3' });
+  app = await startApp({
+    LOGIN_IP_MAX_ATTEMPTS: '500',
+    USER_RATE_PER_MIN: '30',
+    HEAVY_RATE_PER_MIN: '3',
+  });
   api = makeClient(app, fx);
   t.sa = await api.signIn('super');
   t.sa2 = await api.signIn('lockme');

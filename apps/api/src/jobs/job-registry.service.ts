@@ -52,7 +52,8 @@ export class JobRegistry implements OnModuleDestroy {
   /** Runs every job of a group, one after the other. A failing job does not stop the others. */
   async runGroup(group: JobGroup): Promise<JobOutcome[]> {
     const out: JobOutcome[] = [];
-    for (const spec of this.jobs.values()) if (spec.group === group) out.push(await this.runOne(spec));
+    for (const spec of this.jobs.values())
+      if (spec.group === group) out.push(await this.runOne(spec));
     return out;
   }
 

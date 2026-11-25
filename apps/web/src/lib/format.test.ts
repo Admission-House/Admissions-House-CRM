@@ -18,7 +18,7 @@ describe('fmtMinutes', () => {
 
 describe('greeting', () => {
   const at = (h: number, m = 0) => new Date(2026, 10, 23, h, m);
-  it('follows the time of day on the viewer\'s own clock', () => {
+  it("follows the time of day on the viewer's own clock", () => {
     expect(greeting(at(4))).toBe('Good morning');
     expect(greeting(at(9, 30))).toBe('Good morning');
     expect(greeting(at(11, 59))).toBe('Good morning');

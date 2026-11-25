@@ -9,7 +9,14 @@ import { LocationLogService } from './location-log.service.js';
 
 @Module({
   controllers: [AttendanceController],
-  providers: [AttendanceRepository, AttendanceSummaryService, AttendanceService, AttendanceSettingsService, IdleSweepService, LocationLogService],
+  providers: [
+    AttendanceRepository,
+    AttendanceSummaryService,
+    AttendanceService,
+    AttendanceSettingsService,
+    IdleSweepService,
+    LocationLogService,
+  ],
   // The sign-in code records the check-in; the sweep is exported so it can be run on demand.
   exports: [AttendanceRepository, IdleSweepService, AttendanceSummaryService],
 })

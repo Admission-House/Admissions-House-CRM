@@ -24,13 +24,19 @@ export class TelephonyWebhookService {
     private readonly events: CallEventsService,
   ) {}
 
-  async receive(ctx: TelephonyContext, body: unknown, namedProvider?: string): Promise<{ received: number; repeated: number }> {
-    if (namedProvider !== undefined && namedProvider !== ctx.provider) throw new AppError('INVALID_WEBHOOK_KEY', 'The webhook key is missing or not valid', 401);
+  async receive(
+    ctx: TelephonyContext,
+    body: unknown,
+    namedProvider?: string,
+  ): Promise<{ received: number; repeated: number }> {
+    if (namedProvider !== undefined && namedProvider !== ctx.provider)
+      throw new AppError('INVALID_WEBHOOK_KEY', 'The webhook key is missing or not valid', 401);
     let events: CallEvent[];
     try {
       events = this.registry.get(ctx.provider).normalize(body);
     } catch (err) {
-      if (err instanceof ProviderPayloadError) throw new AppError('INVALID_EVENT', err.message, 422);
+      if (err instanceof ProviderPayloadError)
+        throw new AppError('INVALID_EVENT', err.message, 422);
       throw err;
     }
 
@@ -57,14 +63,18 @@ export class TelephonyWebhookService {
     try {
       await this.db.withTenant(tenantId, async (trx) => {
         await this.events.apply(trx, tenantId, event);
-        await sql`UPDATE inbound_events SET status = 'processed', processed_at = now(), error = NULL, attempts = attempts + 1 WHERE id = ${state.id}`.execute(trx);
+        await sql`UPDATE inbound_events SET status = 'processed', processed_at = now(), error = NULL, attempts = attempts + 1 WHERE id = ${state.id}`.execute(
+          trx,
+        );
       });
       return true;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.logger.error(`call event ${event.providerCallId}/${event.event} failed: ${message}`);
       await this.db.withTenant(tenantId, (trx) =>
-        sql`UPDATE inbound_events SET status = 'failed', error = ${message.slice(0, 500)}, attempts = attempts + 1 WHERE id = ${state.id}`.execute(trx),
+        sql`UPDATE inbound_events SET status = 'failed', error = ${message.slice(0, 500)}, attempts = attempts + 1 WHERE id = ${state.id}`.execute(
+          trx,
+        ),
       );
       throw err;
     }

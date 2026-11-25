@@ -13,12 +13,19 @@ export interface PushText {
 }
 
 const REFUSED_REASON: Record<string, string> = {
-  network: 'wrong network', gps_missing: 'no location', gps_mocked: 'fake location', gps_inaccurate: 'location not exact', gps_far: 'too far from the office', not_configured: 'office not set up',
+  network: 'wrong network',
+  gps_missing: 'no location',
+  gps_mocked: 'fake location',
+  gps_inaccurate: 'location not exact',
+  gps_far: 'too far from the office',
+  not_configured: 'office not set up',
 };
 
-const str = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() !== '' ? v.trim() : undefined);
+const str = (v: unknown): string | undefined =>
+  typeof v === 'string' && v.trim() !== '' ? v.trim() : undefined;
 const text = (v: unknown, fallback: string): string => str(v) ?? fallback;
-const num = (v: unknown): string => (typeof v === 'number' || typeof v === 'string' ? String(v) : '0');
+const num = (v: unknown): string =>
+  typeof v === 'number' || typeof v === 'string' ? String(v) : '0';
 
 /** The alert for a notification, or null when it is not one that goes to phones. */
 export function pushText(payload: Record<string, unknown>): PushText | null {
@@ -29,11 +36,23 @@ export function pushText(payload: Record<string, unknown>): PushText | null {
 
   switch (payload.event) {
     case 'lead_assigned':
-      return { title: `New lead assigned: ${name}`, body: str(payload.source) && `From ${str(payload.source)}`, data: lead };
+      return {
+        title: `New lead assigned: ${name}`,
+        body: str(payload.source) && `From ${str(payload.source)}`,
+        data: lead,
+      };
     case 'lead_unassigned':
-      return { title: `Nobody was available for ${name}`, body: 'It is waiting in the unassigned pool', data: lead };
+      return {
+        title: `Nobody was available for ${name}`,
+        body: 'It is waiting in the unassigned pool',
+        data: lead,
+      };
     case 'resource_download':
-      return { title: `${name} asked to download: ${text(payload.resource, 'a resource')}`, body: str(payload.phone), data: lead };
+      return {
+        title: `${name} asked to download: ${text(payload.resource, 'a resource')}`,
+        body: str(payload.phone),
+        data: lead,
+      };
     case 'repeat_enquiry':
       return { title: `${name} enquired again`, data: lead };
     case 'followup_due':
@@ -42,11 +61,23 @@ export function pushText(payload: Record<string, unknown>): PushText | null {
       return { title: `Missed call from ${name}`, data: lead };
     case 'lead_won':
       // Sent to the whole team, most of whom cannot open the lead: it opens nothing, and names only the counsellor.
-      return { title: `${text(payload.winnerName, 'A counsellor')} won an admission`, body: `Lead ${num(payload.leadNo)} moved to ${text(payload.status, 'won')}. Well done!`, data: {} };
+      return {
+        title: `${text(payload.winnerName, 'A counsellor')} won an admission`,
+        body: `Lead ${num(payload.leadNo)} moved to ${text(payload.status, 'won')}. Well done!`,
+        data: {},
+      };
     case 'leads_imported':
-      return { title: `${num(payload.count)} leads were added for you`, body: str(payload.fileName), data: {} };
+      return {
+        title: `${num(payload.count)} leads were added for you`,
+        body: str(payload.fileName),
+        data: {},
+      };
     case 'leads_assigned':
-      return { title: `${num(payload.count)} leads were given to you`, body: str(payload.by) && `By ${str(payload.by)}`, data: {} };
+      return {
+        title: `${num(payload.count)} leads were given to you`,
+        body: str(payload.by) && `By ${str(payload.by)}`,
+        data: {},
+      };
     case 'leave_requested': {
       const to = str(payload.toDate);
       const range = `${text(payload.leaveType, 'Leave')}, ${text(payload.fromDate, '')}${to && to !== payload.fromDate ? ` to ${to}` : ''}`;
@@ -55,36 +86,92 @@ export function pushText(payload: Record<string, unknown>): PushText | null {
     case 'leave_decided':
       return {
         title: `Your leave was ${payload.decision === 'approved' ? 'approved' : 'turned down'}`,
-        body: [str(payload.decidedBy) && `By ${str(payload.decidedBy)}`, str(payload.note)].filter(Boolean).join('. ') || undefined,
+        body:
+          [str(payload.decidedBy) && `By ${str(payload.decidedBy)}`, str(payload.note)]
+            .filter(Boolean)
+            .join('. ') || undefined,
         data: { screen: 'leave' },
       };
     case 'login_ok':
-      return { title: `${who} signed in`, body: `${text(payload.role, 'Staff')} · ${payload.clientType === 'mobile' ? 'phone' : 'web'}`, data: {} };
+      return {
+        title: `${who} signed in`,
+        body: `${text(payload.role, 'Staff')} · ${payload.clientType === 'mobile' ? 'phone' : 'web'}`,
+        data: {},
+      };
     case 'login_refused':
-      return { title: `${who} was refused at sign-in`, body: payload.reason === 'device_rooted' ? 'This phone is rooted or jailbroken' : `Not at the office (${REFUSED_REASON[String(payload.reason)] ?? text(payload.reason, 'outside the office')})`, data: {} };
+      return {
+        title: `${who} was refused at sign-in`,
+        body:
+          payload.reason === 'device_rooted'
+            ? 'This phone is rooted or jailbroken'
+            : `Not at the office (${REFUSED_REASON[String(payload.reason)] ?? text(payload.reason, 'outside the office')})`,
+        data: {},
+      };
     case 'forced_logout':
       return { title: `${who} was signed out by an admin`, data: {} };
     case 'attendance_exception':
-      return { title: `Attendance marked by hand for ${text(payload.userName, 'someone')}`, body: [str(payload.date), str(payload.reason)].filter(Boolean).join(': ') || undefined, data: {} };
+      return {
+        title: `Attendance marked by hand for ${text(payload.userName, 'someone')}`,
+        body: [str(payload.date), str(payload.reason)].filter(Boolean).join(': ') || undefined,
+        data: {},
+      };
     // Calls and meetings between staff, and with outside guests (voice, video, group meetings).
     case 'comm_incoming':
-      return { title: `Incoming ${payload.kind === 'voice' ? 'voice' : 'video'} call from ${who === 'Someone' ? text(payload.fromName, 'a colleague') : who}`, body: str(payload.leadName) && `About ${str(payload.leadName)}`, data: { screen: 'communications', ...lead } };
+      return {
+        title: `Incoming ${payload.kind === 'voice' ? 'voice' : 'video'} call from ${who === 'Someone' ? text(payload.fromName, 'a colleague') : who}`,
+        body: str(payload.leadName) && `About ${str(payload.leadName)}`,
+        data: { screen: 'communications', ...lead },
+      };
     case 'comm_missed':
-      return { title: `Missed ${payload.kind === 'voice' ? 'voice' : 'video'} call from ${text(payload.fromName, 'a colleague')}`, data: { screen: 'communications', ...lead } };
+      return {
+        title: `Missed ${payload.kind === 'voice' ? 'voice' : 'video'} call from ${text(payload.fromName, 'a colleague')}`,
+        data: { screen: 'communications', ...lead },
+      };
     case 'comm_declined':
-      return { title: `${text(payload.fromName, 'Your colleague')} turned down your call`, data: { screen: 'communications' } };
+      return {
+        title: `${text(payload.fromName, 'Your colleague')} turned down your call`,
+        data: { screen: 'communications' },
+      };
     case 'comm_meeting_invite':
-      return { title: `Meeting invitation: ${text(payload.title, 'a meeting')}`, body: [str(payload.fromName) && `From ${str(payload.fromName)}`, str(payload.scheduledFor)].filter(Boolean).join(', ') || undefined, data: { screen: 'communications' } };
+      return {
+        title: `Meeting invitation: ${text(payload.title, 'a meeting')}`,
+        body:
+          [str(payload.fromName) && `From ${str(payload.fromName)}`, str(payload.scheduledFor)]
+            .filter(Boolean)
+            .join(', ') || undefined,
+        data: { screen: 'communications' },
+      };
     case 'comm_meeting_reminder':
-      return { title: `Meeting soon: ${text(payload.title, 'a meeting')}`, body: str(payload.scheduledFor), data: { screen: 'communications' } };
+      return {
+        title: `Meeting soon: ${text(payload.title, 'a meeting')}`,
+        body: str(payload.scheduledFor),
+        data: { screen: 'communications' },
+      };
     case 'comm_meeting_started':
-      return { title: `${text(payload.title, 'A meeting')} has started`, body: str(payload.fromName) && `Hosted by ${str(payload.fromName)}`, data: { screen: 'communications' } };
+      return {
+        title: `${text(payload.title, 'A meeting')} has started`,
+        body: str(payload.fromName) && `Hosted by ${str(payload.fromName)}`,
+        data: { screen: 'communications' },
+      };
     case 'comm_ended':
-      return { title: payload.cancelled ? `${text(payload.title, 'A session')} was cancelled` : `${text(payload.title, 'A session')} has ended`, body: str(payload.fromName) && `By ${str(payload.fromName)}`, data: { screen: 'communications' } };
+      return {
+        title: payload.cancelled
+          ? `${text(payload.title, 'A session')} was cancelled`
+          : `${text(payload.title, 'A session')} has ended`,
+        body: str(payload.fromName) && `By ${str(payload.fromName)}`,
+        data: { screen: 'communications' },
+      };
     case 'comm_recording_ready':
-      return { title: `Recording ready: ${text(payload.title, payload.kind === 'voice' ? 'voice call' : 'video call')}`, data: { screen: 'communications' } };
+      return {
+        title: `Recording ready: ${text(payload.title, payload.kind === 'voice' ? 'voice call' : 'video call')}`,
+        data: { screen: 'communications' },
+      };
     case 'comm_recording_failed':
-      return { title: `Recording failed: ${text(payload.title, payload.kind === 'voice' ? 'voice call' : 'video call')}`, body: str(payload.reason), data: { screen: 'communications' } };
+      return {
+        title: `Recording failed: ${text(payload.title, payload.kind === 'voice' ? 'voice call' : 'video call')}`,
+        body: str(payload.reason),
+        data: { screen: 'communications' },
+      };
     default:
       return null;
   }

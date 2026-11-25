@@ -37,14 +37,20 @@ describe('what changed since the last answer', () => {
     expect(changedTopics(a, pulse({ ...a.stamps }), false)).toEqual([]);
   });
   it('names only the topics whose time moved', () => {
-    expect(changedTopics(a, pulse({ ...a.stamps, lead: '2026-11-14T10:05:00.000Z' }), false)).toEqual(['lead']);
+    expect(
+      changedTopics(a, pulse({ ...a.stamps, lead: '2026-11-14T10:05:00.000Z' }), false),
+    ).toEqual(['lead']);
   });
   it('counts a topic that appears for the first time as a change', () => {
-    expect(changedTopics(a, pulse({ ...a.stamps, notification: '2026-11-14T10:06:00.000Z' }), false)).toEqual(['notification']);
+    expect(
+      changedTopics(a, pulse({ ...a.stamps, notification: '2026-11-14T10:06:00.000Z' }), false),
+    ).toEqual(['notification']);
   });
   it('keeps the ring screen fresh while it rings, without repeating the topic', () => {
     expect(changedTopics(a, pulse({ ...a.stamps }, true), false)).toEqual(['call']);
-    expect(changedTopics(a, pulse({ ...a.stamps, call: '2026-11-14T10:07:00.000Z' }, true), false)).toEqual(['call']);
+    expect(
+      changedTopics(a, pulse({ ...a.stamps, call: '2026-11-14T10:07:00.000Z' }, true), false),
+    ).toEqual(['call']);
   });
   it('adds a "look at everything again" when the safety net is due', () => {
     expect(changedTopics(a, pulse({ ...a.stamps }), true)).toEqual(['resync']);

@@ -1,4 +1,10 @@
-import { RealtimeHub, wants, type LiveEvent, type LiveSocket, type Subscriber } from './realtime.hub.js';
+import {
+  RealtimeHub,
+  wants,
+  type LiveEvent,
+  type LiveSocket,
+  type Subscriber,
+} from './realtime.hub.js';
 
 const T1 = '11111111-1111-4111-8111-111111111111';
 const T2 = '22222222-2222-4222-8222-222222222222';
@@ -6,20 +12,36 @@ const T2 = '22222222-2222-4222-8222-222222222222';
 class FakeSocket implements LiveSocket {
   sent: unknown[] = [];
   closed: [number, string] | null = null;
-  send(text: string) { this.sent.push(JSON.parse(text)); }
-  close(code: number, reason: string) { this.closed = [code, reason]; }
+  send(text: string) {
+    this.sent.push(JSON.parse(text));
+  }
+  close(code: number, reason: string) {
+    this.closed = [code, reason];
+  }
 }
 
-const sub = (userId: string, over: Partial<Omit<Subscriber, 'socket'>> = {}): Subscriber & { socket: FakeSocket } => ({
-  socket: new FakeSocket(), tenantId: T1, userId, sessionId: `s-${userId}`, canSeeTeam: false, ...over,
+const sub = (
+  userId: string,
+  over: Partial<Omit<Subscriber, 'socket'>> = {},
+): Subscriber & { socket: FakeSocket } => ({
+  socket: new FakeSocket(),
+  tenantId: T1,
+  userId,
+  sessionId: `s-${userId}`,
+  canSeeTeam: false,
+  ...over,
 });
-const ev = (topic: LiveEvent['topic'], u: string | null = null, t = T1): LiveEvent => ({ t, topic, u });
+const ev = (topic: LiveEvent['topic'], u: string | null = null, t = T1): LiveEvent => ({
+  t,
+  topic,
+  u,
+});
 
 describe('who hears about what', () => {
   const counsellor = { tenantId: T1, userId: 'c1', canSeeTeam: false };
   const admin = { tenantId: T1, userId: 'a1', canSeeTeam: true };
 
-  it('tells a person about their own notifications and nobody else\'s', () => {
+  it("tells a person about their own notifications and nobody else's", () => {
     expect(wants(counsellor, ev('notification', 'c1'))).toBe(true);
     expect(wants(counsellor, ev('notification', 'c2'))).toBe(false);
     expect(wants(admin, ev('notification', 'c1'))).toBe(false);
@@ -90,7 +112,8 @@ describe('RealtimeHub', () => {
     const hub = new RealtimeHub(100);
     const c = sub('c1');
     const other = sub('c2');
-    hub.add(c, 5); hub.add(other, 5);
+    hub.add(c, 5);
+    hub.add(other, 5);
     hub.dispatch(ev('notification', 'c1'));
     hub.dispatch(ev('team'));
     vi.advanceTimersByTime(100);
@@ -100,8 +123,10 @@ describe('RealtimeHub', () => {
 
   it('sends to every connection of the same person', () => {
     const hub = new RealtimeHub(100);
-    const a = sub('c1'); const b = sub('c1');
-    hub.add(a, 5); hub.add(b, 5);
+    const a = sub('c1');
+    const b = sub('c1');
+    hub.add(a, 5);
+    hub.add(b, 5);
     hub.dispatch(ev('notification', 'c1'));
     vi.advanceTimersByTime(100);
     expect(a.socket.sent).toHaveLength(1);
@@ -131,9 +156,12 @@ describe('RealtimeHub', () => {
   it('keeps going when one connection cannot be written to', () => {
     const hub = new RealtimeHub(100);
     const broken = sub('c1');
-    broken.socket.send = () => { throw new Error('closed'); };
+    broken.socket.send = () => {
+      throw new Error('closed');
+    };
     const fine = sub('c2');
-    hub.add(broken, 5); hub.add(fine, 5);
+    hub.add(broken, 5);
+    hub.add(fine, 5);
     hub.dispatch({ t: T1, topic: 'resync', u: null });
     vi.advanceTimersByTime(100);
     expect(fine.socket.sent).toEqual([{ type: 'event', topics: ['resync'] }]);
@@ -141,8 +169,10 @@ describe('RealtimeHub', () => {
 
   it('closes everything on shutdown', () => {
     const hub = new RealtimeHub();
-    const a = sub('c1'); const b = sub('c2');
-    hub.add(a, 5); hub.add(b, 5);
+    const a = sub('c1');
+    const b = sub('c2');
+    hub.add(a, 5);
+    hub.add(b, 5);
     hub.closeAll(1001, 'server stopping');
     expect(a.socket.closed).toEqual([1001, 'server stopping']);
     expect(b.socket.closed).toEqual([1001, 'server stopping']);

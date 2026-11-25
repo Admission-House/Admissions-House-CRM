@@ -10,7 +10,11 @@ import { CurrentAuth, Public, RequirePermissions } from './decorators.js';
 import { loginSchema } from './dto/auth.dto.js';
 import { RemoteSigninService } from './remote-signin.service.js';
 
-const statusSchema = z.object({ tenant: loginSchema.shape.tenant, requestId: z.uuid(), token: z.string().min(20).max(64) });
+const statusSchema = z.object({
+  tenant: loginSchema.shape.tenant,
+  requestId: z.uuid(),
+  token: z.string().min(20).max(64),
+});
 class StatusDto extends createZodDto(statusSchema) {}
 const listSchema = z.object({ state: z.enum(['pending', 'decided']).default('pending') });
 class ListDto extends createZodDto(listSchema) {}
@@ -31,10 +35,15 @@ export class RemoteSigninController {
   @Post('auth/remote-signin/status')
   @HttpCode(200)
   async status(@Body() body: StatusDto) {
-    const { rows } = await sql<{ id: string; status: string }>`SELECT id, status FROM find_tenant_by_slug(${body.tenant})`.execute(this.db.unscoped());
+    const { rows } = await sql<{
+      id: string;
+      status: string;
+    }>`SELECT id, status FROM find_tenant_by_slug(${body.tenant})`.execute(this.db.unscoped());
     const tenant = rows[0];
     if (!tenant || tenant.status !== 'active') throw AppError.notFound('Request');
-    return this.db.withTenant(tenant.id, (trx) => this.remote.status(trx, body.requestId, body.token));
+    return this.db.withTenant(tenant.id, (trx) =>
+      this.remote.status(trx, body.requestId, body.token),
+    );
   }
 
   @ApiBearerAuth()

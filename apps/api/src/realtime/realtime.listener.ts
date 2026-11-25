@@ -1,4 +1,10 @@
-import { Inject, Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  OnApplicationBootstrap,
+  OnModuleDestroy,
+} from '@nestjs/common';
 import pg from 'pg';
 import { ENV } from '../config/config.module.js';
 import type { Env } from '../config/env.js';
@@ -17,8 +23,10 @@ export function parseEvent(payload: string | undefined): LiveEvent | null {
     return null;
   }
   if (typeof raw.t !== 'string' || !UUID.test(raw.t)) return null;
-  if (typeof raw.topic !== 'string' || !(TOPICS as readonly string[]).includes(raw.topic)) return null;
-  if (raw.u !== null && raw.u !== undefined && (typeof raw.u !== 'string' || !UUID.test(raw.u))) return null;
+  if (typeof raw.topic !== 'string' || !(TOPICS as readonly string[]).includes(raw.topic))
+    return null;
+  if (raw.u !== null && raw.u !== undefined && (typeof raw.u !== 'string' || !UUID.test(raw.u)))
+    return null;
   return { t: raw.t, topic: raw.topic as Topic, u: (raw.u as string | null | undefined) ?? null };
 }
 
@@ -57,7 +65,10 @@ export class RealtimeListener implements OnApplicationBootstrap, OnModuleDestroy
 
   private async connect(): Promise<void> {
     if (this.stopped) return;
-    const client = new pg.Client({ connectionString: this.env.DATABASE_URL, application_name: 'ah-live' });
+    const client = new pg.Client({
+      connectionString: this.env.DATABASE_URL,
+      application_name: 'ah-live',
+    });
     try {
       client.on('notification', (msg) => {
         const event = parseEvent(msg.payload);
@@ -74,7 +85,9 @@ export class RealtimeListener implements OnApplicationBootstrap, OnModuleDestroy
       if (this.everConnected) this.bus.emit({ t: '', topic: 'resync', u: null });
       this.everConnected = true;
     } catch (e) {
-      this.logger.warn(`live updates could not listen: ${e instanceof Error ? e.message : String(e)}`);
+      this.logger.warn(
+        `live updates could not listen: ${e instanceof Error ? e.message : String(e)}`,
+      );
       this.reconnect(client);
     }
   }
@@ -85,7 +98,10 @@ export class RealtimeListener implements OnApplicationBootstrap, OnModuleDestroy
     old.removeAllListeners();
     old.on('error', () => undefined);
     void old.end().catch(() => undefined);
-    this.retry = setTimeout(() => { this.retry = null; void this.connect(); }, this.delayMs);
+    this.retry = setTimeout(() => {
+      this.retry = null;
+      void this.connect();
+    }, this.delayMs);
     this.retry.unref();
     this.delayMs = Math.min(this.delayMs * 2, 30_000);
   }

@@ -1,11 +1,29 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Put, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Put,
+  Query,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 import type { AuthContext } from '../auth/auth-context.js';
 import { CurrentAuth, RequireAnyPermission, RequirePermissions } from '../auth/decorators.js';
 import { PayrollPolicyService, policySchema } from './payroll-policy.service.js';
-import { addLineSchema, changeLineSchema, PayrollRunService, recalculateSchema, reopenSchema } from './payroll-run.service.js';
+import {
+  addLineSchema,
+  changeLineSchema,
+  PayrollRunService,
+  recalculateSchema,
+  reopenSchema,
+} from './payroll-run.service.js';
 import { SalaryStructureService, structureSchema } from './salary-structure.service.js';
 
 class PolicyDto extends createZodDto(policySchema) {}
@@ -57,7 +75,10 @@ export class PayrollRunController {
 
   @RequirePermissions('salary.read')
   @Get('salary-structures/:userId/history')
-  structureHistory(@CurrentAuth() auth: AuthContext, @Param('userId', ParseUUIDPipe) userId: string) {
+  structureHistory(
+    @CurrentAuth() auth: AuthContext,
+    @Param('userId', ParseUUIDPipe) userId: string,
+  ) {
     return this.structures.history(auth, userId);
   }
 
@@ -90,7 +111,11 @@ export class PayrollRunController {
   @RequirePermissions('payroll.manage')
   @Post('payroll/runs/:id/recalculate')
   @HttpCode(200)
-  recalculate(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: RecalculateDto) {
+  recalculate(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: RecalculateDto,
+  ) {
     return this.runs.recalculate(auth, id, body);
   }
 
@@ -104,7 +129,11 @@ export class PayrollRunController {
   @RequirePermissions('payroll.approve')
   @Post('payroll/runs/:id/reopen')
   @HttpCode(200)
-  reopen(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: ReopenDto) {
+  reopen(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: ReopenDto,
+  ) {
     return this.runs.reopen(auth, id, body);
   }
 
@@ -119,7 +148,11 @@ export class PayrollRunController {
   /** Adds a line (an extra payment or deduction) to a draft payslip. A reason is required. */
   @RequirePermissions('salary.write')
   @Post('payroll/payslips/:id/lines')
-  addLine(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: AddLineDto) {
+  addLine(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: AddLineDto,
+  ) {
     return this.runs.addLine(auth, id, body);
   }
 
@@ -137,7 +170,11 @@ export class PayrollRunController {
 
   @RequirePermissions('salary.write')
   @Delete('payroll/payslips/:id/lines/:lineId')
-  removeLine(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Param('lineId', ParseUUIDPipe) lineId: string) {
+  removeLine(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('lineId', ParseUUIDPipe) lineId: string,
+  ) {
     return this.runs.removeLine(auth, id, lineId);
   }
 }

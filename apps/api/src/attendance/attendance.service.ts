@@ -62,12 +62,35 @@ export class AttendanceService {
    * there, with the place proved, and cannot do it from anywhere else. A second press changes nothing.
    */
   async checkInSelf(auth: AuthContext) {
-    if (!auth.tracksAttendance) throw AppError.badRequest('NOT_TRACKED', 'Attendance is not recorded for your role');
-    if (auth.requiresOffice) throw new AppError('OFFICE_SIGN_IN_REQUIRED', 'Your attendance is marked when you sign in from the office.', 403);
+    if (!auth.tracksAttendance)
+      throw AppError.badRequest('NOT_TRACKED', 'Attendance is not recorded for your role');
+    if (auth.requiresOffice)
+      throw new AppError(
+        'OFFICE_SIGN_IN_REQUIRED',
+        'Your attendance is marked when you sign in from the office.',
+        403,
+      );
     await this.db.withTenant(auth.tenantId, async (trx) => {
-      const me = await trx.selectFrom('users').select('branch_id').where('id', '=', auth.userId).executeTakeFirstOrThrow();
-      await this.repo.checkIn(trx, { tenantId: auth.tenantId, userId: auth.userId, branchId: me.branch_id, ip: auth.ip });
-      await this.audit.write(trx, { tenantId: auth.tenantId, actorId: auth.userId, action: 'attendance.self_check_in', entity: 'user', entityId: auth.userId, ip: auth.ip, requestId: auth.requestId });
+      const me = await trx
+        .selectFrom('users')
+        .select('branch_id')
+        .where('id', '=', auth.userId)
+        .executeTakeFirstOrThrow();
+      await this.repo.checkIn(trx, {
+        tenantId: auth.tenantId,
+        userId: auth.userId,
+        branchId: me.branch_id,
+        ip: auth.ip,
+      });
+      await this.audit.write(trx, {
+        tenantId: auth.tenantId,
+        actorId: auth.userId,
+        action: 'attendance.self_check_in',
+        entity: 'user',
+        entityId: auth.userId,
+        ip: auth.ip,
+        requestId: auth.requestId,
+      });
     });
     return this.today(auth);
   }
@@ -77,11 +100,23 @@ export class AttendanceService {
     return this.db.withTenant(auth.tenantId, async (trx) => {
       if (!auth.tracksAttendance) return { tracked: false as const };
 
-      const [today, settings] = await Promise.all([this.repo.localToday(trx), this.repo.currentSettings(trx)]);
+      const [today, settings] = await Promise.all([
+        this.repo.localToday(trx),
+        this.repo.currentSettings(trx),
+      ]);
       const { rows } = await sql<{
-        id: string; work_date: string; check_in_at: Date; check_out_at: Date | null; late_minutes: number; method: string;
-        break_id: string | null; break_started_at: Date | null; break_type_id: string | null; break_name: string | null;
-        allowed_minutes: number | null; break_minutes: number;
+        id: string;
+        work_date: string;
+        check_in_at: Date;
+        check_out_at: Date | null;
+        late_minutes: number;
+        method: string;
+        break_id: string | null;
+        break_started_at: Date | null;
+        break_type_id: string | null;
+        break_name: string | null;
+        allowed_minutes: number | null;
+        break_minutes: number;
       }>`
         SELECT a.id, a.work_date::text AS work_date, a.check_in_at, a.check_out_at, a.late_minutes, a.method,
                ob.id AS break_id, ob.started_at AS break_started_at, bt.id AS break_type_id, bt.name AS break_name,
@@ -93,7 +128,12 @@ export class AttendanceService {
         LEFT JOIN break_types bt ON bt.id = ob.break_type_id
         WHERE a.user_id = ${auth.userId} AND a.work_date = ${today}::date`.execute(trx);
       const r = rows[0];
-      const { rows: kinds } = await sql<{ id: string; name: string; allowed_minutes: number; used: number }>`
+      const { rows: kinds } = await sql<{
+        id: string;
+        name: string;
+        allowed_minutes: number;
+        used: number;
+      }>`
         SELECT bt.id, bt.name, bt.allowed_minutes,
                COALESCE(floor(sum(EXTRACT(EPOCH FROM COALESCE(b.ended_at, now()) - b.started_at)) / 60)::int, 0) AS used
         FROM break_types bt
@@ -108,18 +148,31 @@ export class AttendanceService {
         /** Someone who signs in from anywhere can also check in with a button, for example after being signed in already. */
         canCheckIn: !checkedIn && !auth.requiresOffice,
         record: r && {
-          id: r.id, workDate: r.work_date, checkInAt: r.check_in_at, checkOutAt: r.check_out_at,
-          lateMinutes: r.late_minutes, method: r.method,
+          id: r.id,
+          workDate: r.work_date,
+          checkInAt: r.check_in_at,
+          checkOutAt: r.check_out_at,
+          lateMinutes: r.late_minutes,
+          method: r.method,
         },
         onBreak: r?.break_id
-          ? { id: r.break_id, startedAt: r.break_started_at, type: { id: r.break_type_id, name: r.break_name, allowedMinutes: r.allowed_minutes } }
+          ? {
+              id: r.break_id,
+              startedAt: r.break_started_at,
+              type: { id: r.break_type_id, name: r.break_name, allowedMinutes: r.allowed_minutes },
+            }
           : null,
         breakMinutesToday: r?.break_minutes ?? 0,
         /** The server's clock at this moment, so a screen counts a running break correctly even if its own clock is wrong. */
         serverNow: new Date().toISOString(),
         /** Each kind of break with the minutes of it used today, so a screen can show what is left. */
         hardLimitMinutes: settings?.break_hard_limit_minutes ?? 100,
-        breaks: kinds.map((k) => ({ id: k.id, name: k.name, allowedMinutes: k.allowed_minutes, usedMinutes: k.used })),
+        breaks: kinds.map((k) => ({
+          id: k.id,
+          name: k.name,
+          allowedMinutes: k.allowed_minutes,
+          usedMinutes: k.used,
+        })),
         shift: settings && {
           start: settings.shift_start.slice(0, 5),
           end: settings.shift_end.slice(0, 5),
@@ -135,16 +188,30 @@ export class AttendanceService {
   startBreak(auth: AuthContext, breakTypeId: string) {
     return this.db.withTenant(auth.tenantId, async (trx) => {
       const open = await this.openAttendance(trx, auth);
-      const type = await trx.selectFrom('break_types').select(['id', 'name', 'allowed_minutes', 'is_active']).where('id', '=', breakTypeId).executeTakeFirst();
+      const type = await trx
+        .selectFrom('break_types')
+        .select(['id', 'name', 'allowed_minutes', 'is_active'])
+        .where('id', '=', breakTypeId)
+        .executeTakeFirst();
       if (!type) throw AppError.notFound('Break type');
-      if (!type.is_active) throw AppError.badRequest('BREAK_TYPE_INACTIVE', 'This kind of break is not in use');
+      if (!type.is_active)
+        throw AppError.badRequest('BREAK_TYPE_INACTIVE', 'This kind of break is not in use');
 
-      const running = await trx.selectFrom('break_logs').select('id').where('attendance_id', '=', open.id).where('ended_at', 'is', null).executeTakeFirst();
-      if (running) throw AppError.conflict('BREAK_ALREADY_OPEN', 'You are already on a break. End it first.');
+      const running = await trx
+        .selectFrom('break_logs')
+        .select('id')
+        .where('attendance_id', '=', open.id)
+        .where('ended_at', 'is', null)
+        .executeTakeFirst();
+      if (running)
+        throw AppError.conflict('BREAK_ALREADY_OPEN', 'You are already on a break. End it first.');
       // The day's break time has a hard limit; past the allowance of a kind the supervisors are told, but it is not refused.
       const limit = (await this.repo.currentSettings(trx))?.break_hard_limit_minutes ?? 100;
       if ((await this.dayBreakMinutes(trx, open.id)) >= limit) {
-        throw AppError.conflict('BREAK_LIMIT_REACHED', `You have used all ${limit} minutes of break time for today.`);
+        throw AppError.conflict(
+          'BREAK_LIMIT_REACHED',
+          `You have used all ${limit} minutes of break time for today.`,
+        );
       }
 
       const row = await trx
@@ -173,16 +240,31 @@ export class AttendanceService {
         .executeTakeFirst();
       if (!ended) throw AppError.conflict('NO_OPEN_BREAK', 'You are not on a break');
 
-      const type = await trx.selectFrom('break_types').select(['id', 'name', 'allowed_minutes']).where('id', '=', ended.break_type_id).executeTakeFirstOrThrow();
+      const type = await trx
+        .selectFrom('break_types')
+        .select(['id', 'name', 'allowed_minutes'])
+        .where('id', '=', ended.break_type_id)
+        .executeTakeFirstOrThrow();
       const used = await this.minutesUsed(trx, open.id, type.id);
       // Going over the day's allowance is told to the people who oversee attendance, once, when the break ends.
       if (used > type.allowed_minutes) {
         // Once a day: the sweep may already have told them while the break was still running.
-        const { rows: first } = await sql<{ id: string }>`UPDATE attendance_records SET break_warned_at = now() WHERE id = ${open.id} AND break_warned_at IS NULL RETURNING id`.execute(trx);
+        const { rows: first } = await sql<{
+          id: string;
+        }>`UPDATE attendance_records SET break_warned_at = now() WHERE id = ${open.id} AND break_warned_at IS NULL RETURNING id`.execute(
+          trx,
+        );
         if (first.length > 0) {
           await this.notifications.notifyOversight(trx, {
             tenantId: auth.tenantId,
-            payload: { event: 'break_over', userId: auth.userId, userName: auth.name, breakName: type.name, allowedMinutes: type.allowed_minutes, usedMinutes: used },
+            payload: {
+              event: 'break_over',
+              userId: auth.userId,
+              userName: auth.name,
+              breakName: type.name,
+              allowedMinutes: type.allowed_minutes,
+              usedMinutes: used,
+            },
           });
         }
       }
@@ -212,7 +294,8 @@ export class AttendanceService {
       if (query.branchId) conditions.push(sql<SqlBool>`a.branch_id = ${query.branchId}::uuid`);
       if (query.method) conditions.push(sql<SqlBool>`a.method = ${query.method}`);
       if (query.lateOnly) conditions.push(sql<SqlBool>`a.late_minutes > 0`);
-      if (after) conditions.push(sql<SqlBool>`(a.work_date, a.id) < (${after.d}::date, ${after.i}::uuid)`);
+      if (after)
+        conditions.push(sql<SqlBool>`(a.work_date, a.id) < (${after.d}::date, ${after.i}::uuid)`);
 
       const { rows } = await sql<ListRow>`
         SELECT a.id, a.user_id, u.name AS user_name, a.work_date::text AS work_date, a.check_in_at, a.check_out_at,
@@ -257,19 +340,38 @@ export class AttendanceService {
       }
 
       const today = await this.repo.localToday(trx);
-      if (dto.date > today) throw AppError.badRequest('DATE_IN_FUTURE', 'You cannot mark attendance for a future day', [{ field: 'date', message: 'Choose today or an earlier day' }]);
-      const { rows: age } = await sql<{ days: number }>`SELECT (${today}::date - ${dto.date}::date) AS days`.execute(trx);
+      if (dto.date > today)
+        throw AppError.badRequest('DATE_IN_FUTURE', 'You cannot mark attendance for a future day', [
+          { field: 'date', message: 'Choose today or an earlier day' },
+        ]);
+      const { rows: age } = await sql<{
+        days: number;
+      }>`SELECT (${today}::date - ${dto.date}::date) AS days`.execute(trx);
       if (age[0]!.days > MAX_BACKDATE_DAYS) {
-        throw AppError.badRequest('DATE_TOO_OLD', `Attendance can be filled in for the last ${MAX_BACKDATE_DAYS} days only`, [{ field: 'date', message: `Choose a day within the last ${MAX_BACKDATE_DAYS} days` }]);
+        throw AppError.badRequest(
+          'DATE_TOO_OLD',
+          `Attendance can be filled in for the last ${MAX_BACKDATE_DAYS} days only`,
+          [{ field: 'date', message: `Choose a day within the last ${MAX_BACKDATE_DAYS} days` }],
+        );
       }
 
-      const existing = await trx.selectFrom('attendance_records').select('id').where('user_id', '=', dto.userId).where('work_date', '=', dto.date).executeTakeFirst();
-      if (existing) throw AppError.conflict('ATTENDANCE_EXISTS', 'This person already has attendance for that day');
+      const existing = await trx
+        .selectFrom('attendance_records')
+        .select('id')
+        .where('user_id', '=', dto.userId)
+        .where('work_date', '=', dto.date)
+        .executeTakeFirst();
+      if (existing)
+        throw AppError.conflict(
+          'ATTENDANCE_EXISTS',
+          'This person already has attendance for that day',
+        );
 
       const settings = await this.repo.currentSettings(trx);
       const checkInTime = dto.checkInTime ?? settings?.shift_start.slice(0, 5) ?? '10:00';
       const isToday = dto.date === today;
-      const checkOutTime = dto.checkOutTime ?? (isToday ? undefined : (settings?.shift_end.slice(0, 5) ?? '19:00'));
+      const checkOutTime =
+        dto.checkOutTime ?? (isToday ? undefined : (settings?.shift_end.slice(0, 5) ?? '19:00'));
 
       const { rows } = await sql<{ id: string }>`
         INSERT INTO attendance_records
@@ -284,17 +386,44 @@ export class AttendanceService {
 
       await trx
         .insertInto('attendance_exceptions')
-        .values({ tenant_id: auth.tenantId, attendance_id: id, requested_for: dto.userId, approved_by: auth.userId, reason: dto.reason })
+        .values({
+          tenant_id: auth.tenantId,
+          attendance_id: id,
+          requested_for: dto.userId,
+          approved_by: auth.userId,
+          reason: dto.reason,
+        })
         .execute();
       await this.audit.write(trx, {
-        tenantId: auth.tenantId, actorId: auth.userId, action: 'attendance.exception', entity: 'attendance', entityId: id,
-        after: { userId: dto.userId, date: dto.date, reason: dto.reason, checkInTime, checkOutTime: checkOutTime ?? null },
-        ip: auth.ip, requestId: auth.requestId,
+        tenantId: auth.tenantId,
+        actorId: auth.userId,
+        action: 'attendance.exception',
+        entity: 'attendance',
+        entityId: id,
+        after: {
+          userId: dto.userId,
+          date: dto.date,
+          reason: dto.reason,
+          checkInTime,
+          checkOutTime: checkOutTime ?? null,
+        },
+        ip: auth.ip,
+        requestId: auth.requestId,
       });
-      const { rows: who } = await sql<{ name: string }>`SELECT name FROM users WHERE id = ${dto.userId}::uuid`.execute(trx);
+      const { rows: who } = await sql<{
+        name: string;
+      }>`SELECT name FROM users WHERE id = ${dto.userId}::uuid`.execute(trx);
       await this.notifications.notifyOversight(trx, {
-        tenantId: auth.tenantId, exceptUserId: auth.userId,
-        payload: { event: 'attendance_exception', userId: dto.userId, userName: who[0]?.name ?? '', date: dto.date, reason: dto.reason, byUserId: auth.userId },
+        tenantId: auth.tenantId,
+        exceptUserId: auth.userId,
+        payload: {
+          event: 'attendance_exception',
+          userId: dto.userId,
+          userName: who[0]?.name ?? '',
+          date: dto.date,
+          reason: dto.reason,
+          byUserId: auth.userId,
+        },
       });
 
       return this.one(trx, id);
@@ -315,7 +444,11 @@ export class AttendanceService {
       .where('check_out_at', 'is', null)
       .orderBy('work_date', 'desc')
       .executeTakeFirst();
-    if (!open) throw AppError.conflict('NOT_CHECKED_IN', 'You are not checked in. Sign in from the office first.');
+    if (!open)
+      throw AppError.conflict(
+        'NOT_CHECKED_IN',
+        'You are not checked in. Sign in from the office first.',
+      );
     return open;
   }
 
@@ -330,7 +463,9 @@ export class AttendanceService {
   private async minutesUsed(trx: Trx, attendanceId: string, breakTypeId: string): Promise<number> {
     const { rows } = await sql<{ m: number }>`
       SELECT COALESCE(floor(sum(EXTRACT(EPOCH FROM COALESCE(ended_at, now()) - started_at)) / 60)::int, 0) AS m
-      FROM break_logs WHERE attendance_id = ${attendanceId} AND break_type_id = ${breakTypeId}`.execute(trx);
+      FROM break_logs WHERE attendance_id = ${attendanceId} AND break_type_id = ${breakTypeId}`.execute(
+      trx,
+    );
     return rows[0]!.m;
   }
 

@@ -2,13 +2,14 @@
 
 import { useState } from 'react';
 import { Button, Field, Input, Notice, Panel, Select, Spinner, Textarea } from '@/components/ui';
-import { api, ApiError } from '@/lib/api';
+import { api, errorText } from '@/lib/api';
 import type { RecordingPolicy } from '@/lib/communications';
 import { useApi } from '@/lib/use-api';
 
 const MODE_HELP: Record<RecordingPolicy['mode'], string> = {
   off: 'Calls and meetings are not recorded.',
-  optional: 'The person who starts a meeting chooses whether to record it. Calls from a lead are recorded.',
+  optional:
+    'The person who starts a meeting chooses whether to record it. Calls from a lead are recorded.',
   always: 'Every call and meeting is recorded.',
 };
 
@@ -33,12 +34,17 @@ export default function RecordingSettingsPage() {
     setBusy(true);
     setMsg(null);
     try {
-      await api('/communications/recording/policy', { method: 'PUT', body: { mode: m, retentionDays: Number(d), noticeText: n.trim() } });
-      setMode(null); setDays(null); setNotice(null);
+      await api('/communications/recording/policy', {
+        method: 'PUT',
+        body: { mode: m, retentionDays: Number(d), noticeText: n.trim() },
+      });
+      setMode(null);
+      setDays(null);
+      setNotice(null);
       policy.reload();
       setMsg({ tone: 'ok', text: 'Saved.' });
     } catch (err) {
-      setMsg({ tone: 'bad', text: err instanceof ApiError ? err.message : 'Cannot reach the server. Try again.' });
+      setMsg({ tone: 'bad', text: errorText(err) });
     } finally {
       setBusy(false);
     }
@@ -48,7 +54,8 @@ export default function RecordingSettingsPage() {
     <div className="max-w-2xl space-y-4">
       {!p.ready && (
         <Notice tone="warn">
-          Recording is not set up on the server yet, so nothing is recorded whatever you choose here.
+          Recording is not set up on the server yet, so nothing is recorded whatever you choose
+          here.
           {p.missing && p.missing.length > 0 && <> Still missing: {p.missing.join(', ')}.</>}
         </Notice>
       )}
@@ -56,18 +63,48 @@ export default function RecordingSettingsPage() {
         <Panel title="Recording rules">
           <div className="space-y-4">
             <Field label="Record calls and meetings" htmlFor="rec-mode" hint={MODE_HELP[m]}>
-              <Select id="rec-mode" value={m} onChange={(e) => setMode(e.target.value as RecordingPolicy['mode'])}>
-                <option value="off">Never</option><option value="optional">When chosen</option><option value="always">Always</option>
+              <Select
+                id="rec-mode"
+                value={m}
+                onChange={(e) => setMode(e.target.value as RecordingPolicy['mode'])}
+              >
+                <option value="off">Never</option>
+                <option value="optional">When chosen</option>
+                <option value="always">Always</option>
               </Select>
             </Field>
-            <Field label="Keep recordings for (days)" htmlFor="rec-days" hint="After this, the files are deleted for good.">
-              <Input id="rec-days" type="number" min={1} max={3650} value={d} onChange={(e) => setDays(e.target.value)} className="max-w-32" />
+            <Field
+              label="Keep recordings for (days)"
+              htmlFor="rec-days"
+              hint="After this, the files are deleted for good."
+            >
+              <Input
+                id="rec-days"
+                type="number"
+                min={1}
+                max={3650}
+                value={d}
+                onChange={(e) => setDays(e.target.value)}
+                className="max-w-32"
+              />
             </Field>
-            <Field label="Notice shown before joining" htmlFor="rec-notice" hint="People must agree to this to join a recorded session. Have your legal advisor approve the words.">
-              <Textarea id="rec-notice" rows={4} value={n} onChange={(e) => setNotice(e.target.value)} maxLength={1000} />
+            <Field
+              label="Notice shown before joining"
+              htmlFor="rec-notice"
+              hint="People must agree to this to join a recorded session. Have your legal advisor approve the words."
+            >
+              <Textarea
+                id="rec-notice"
+                rows={4}
+                value={n}
+                onChange={(e) => setNotice(e.target.value)}
+                maxLength={1000}
+              />
             </Field>
             {msg && <Notice tone={msg.tone}>{msg.text}</Notice>}
-            <Button type="submit" loading={busy}>Save</Button>
+            <Button type="submit" loading={busy}>
+              Save
+            </Button>
           </div>
         </Panel>
       </form>

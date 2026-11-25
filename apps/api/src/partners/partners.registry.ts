@@ -42,12 +42,16 @@ const UNIVERSAL_AI: Partner = {
   source: 'admissions_house',
   programs: [...UNIVERSAL_AI_PROGRAMS, UNIVERSAL_AI_DUAL],
   locations: UNIVERSAL_AI_LOCATIONS,
-  credentials: (env) => ({ secret: env.PARTNER_UAU_SECRET_KEY, url: env.PARTNER_UAU_URL ?? 'https://api.nopaperforms.com/dataporting/382/admissions_house' }),
+  credentials: (env) => ({
+    secret: env.PARTNER_UAU_SECRET_KEY,
+    url: env.PARTNER_UAU_URL ?? 'https://api.nopaperforms.com/dataporting/382/admissions_house',
+  }),
 };
 
 export const PARTNERS: readonly Partner[] = [UNIVERSAL_AI];
 
-export const partnerByKey = (key: string): Partner | undefined => PARTNERS.find((p) => p.key === key);
+export const partnerByKey = (key: string): Partner | undefined =>
+  PARTNERS.find((p) => p.key === key);
 
 /** The student's mobile as the college wants it: the ten digits, without the country code the CRM keeps in front. */
 export function nationalMobile(phone: string): string {
@@ -66,13 +70,24 @@ export interface SendFields {
  * Checks the choices against the college's own lists and returns the program's campus. Anything not on a list is refused here,
  * before a student's details leave the CRM, rather than being left for the college to reject.
  */
-export function checkChoices(partner: Partner, f: SendFields): { campus: string } | { field: keyof SendFields; message: string } {
+export function checkChoices(
+  partner: Partner,
+  f: SendFields,
+): { campus: string } | { field: keyof SendFields; message: string } {
   const program = partner.programs.find((p) => p.course === f.course);
   if (!program) return { field: 'course', message: `${partner.name} does not offer this course` };
-  if (!program.specializations.includes(f.specialization)) return { field: 'specialization', message: 'This specialization is not offered with the chosen course' };
+  if (!program.specializations.includes(f.specialization))
+    return {
+      field: 'specialization',
+      message: 'This specialization is not offered with the chosen course',
+    };
   const cities = partner.locations[f.state];
   if (!cities) return { field: 'state', message: `${partner.name} does not accept this state` };
-  if (!cities.includes(f.city)) return { field: 'city', message: 'This city is not in the chosen state, on the college\'s list' };
+  if (!cities.includes(f.city))
+    return {
+      field: 'city',
+      message: "This city is not in the chosen state, on the college's list",
+    };
   return { campus: program.campus };
 }
 
@@ -84,7 +99,13 @@ export interface LeadFacts {
 }
 
 /** What is sent to the college. */
-export function buildPayload(partner: Partner, secret: string, lead: LeadFacts, f: SendFields, campus: string): Record<string, string> {
+export function buildPayload(
+  partner: Partner,
+  secret: string,
+  lead: LeadFacts,
+  f: SendFields,
+  campus: string,
+): Record<string, string> {
   return {
     secret_key: secret,
     source: partner.source,
@@ -118,9 +139,21 @@ export function readAnswer(status: number, text: string): { ok: boolean; message
   } catch {
     // not JSON: judged by the HTTP status alone
   }
-  const o = (body && typeof body === 'object' ? (body as Record<string, unknown>) : {}) as Record<string, unknown>;
-  const said = typeof o.message === 'string' ? o.message : typeof o.error === 'string' ? o.error : '';
-  const failed = o.status === false || (typeof o.status === 'string' && /^(error|fail|failed|false)$/i.test(o.status)) || (typeof o.error === 'string' && o.error !== '') || o.success === false;
+  const o = (body && typeof body === 'object' ? (body as Record<string, unknown>) : {}) as Record<
+    string,
+    unknown
+  >;
+  const said =
+    typeof o.message === 'string' ? o.message : typeof o.error === 'string' ? o.error : '';
+  const failed =
+    o.status === false ||
+    (typeof o.status === 'string' && /^(error|fail|failed|false)$/i.test(o.status)) ||
+    (typeof o.error === 'string' && o.error !== '') ||
+    o.success === false;
   const ok = status >= 200 && status < 300 && !failed;
-  return { ok, message: said || (ok ? 'Accepted by the college' : `The college did not accept it (HTTP ${status})`) };
+  return {
+    ok,
+    message:
+      said || (ok ? 'Accepted by the college' : `The college did not accept it (HTTP ${status})`),
+  };
 }

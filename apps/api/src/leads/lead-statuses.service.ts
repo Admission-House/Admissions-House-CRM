@@ -40,10 +40,28 @@ export class LeadStatusesService {
     return this.db.withTenant(auth.tenantId, async (trx) => {
       await this.assertNameFree(trx, dto.name);
       assertWonOrJunk(dto.isWon ?? false, dto.isJunk ?? false);
-      const next = dto.sortOrder ?? (await trx.selectFrom('lead_statuses').select(sql<number>`COALESCE(max(sort_order), -1) + 1`.as('n')).executeTakeFirstOrThrow()).n;
+      const next =
+        dto.sortOrder ??
+        (
+          await trx
+            .selectFrom('lead_statuses')
+            .select(sql<number>`COALESCE(max(sort_order), -1) + 1`.as('n'))
+            .executeTakeFirstOrThrow()
+        ).n;
       const row = await trx
         .insertInto('lead_statuses')
-        .values({ tenant_id: auth.tenantId, name: dto.name, queue: dto.queue, is_open: dto.isOpen, requires_followup: dto.requiresFollowup, requires_substatus: dto.requiresSubstatus ?? false, selectable: dto.selectable ?? true, is_junk: dto.isJunk ?? false, is_won: dto.isWon ?? false, sort_order: next })
+        .values({
+          tenant_id: auth.tenantId,
+          name: dto.name,
+          queue: dto.queue,
+          is_open: dto.isOpen,
+          requires_followup: dto.requiresFollowup,
+          requires_substatus: dto.requiresSubstatus ?? false,
+          selectable: dto.selectable ?? true,
+          is_junk: dto.isJunk ?? false,
+          is_won: dto.isWon ?? false,
+          sort_order: next,
+        })
         .returning('id')
         .executeTakeFirstOrThrow();
       await this.record(trx, auth, 'lead_status.create', row.id, undefined, dto);
@@ -54,13 +72,20 @@ export class LeadStatusesService {
   update(auth: AuthContext, id: string, dto: UpdateStatusDto): Promise<StatusView> {
     return this.db.withTenant(auth.tenantId, async (trx) => {
       const before = await this.one(trx, id);
-      if (dto.name && dto.name.toLowerCase() !== before.name.toLowerCase()) await this.assertNameFree(trx, dto.name);
+      if (dto.name && dto.name.toLowerCase() !== before.name.toLowerCase())
+        await this.assertNameFree(trx, dto.name);
       assertWonOrJunk(dto.isWon ?? before.isWon, dto.isJunk ?? before.isJunk);
 
       // New leads need a place to start. The last active "fresh" status cannot be switched off or moved elsewhere.
-      const leavesFresh = before.queue === 'fresh' && before.isActive && (dto.isActive === false || (dto.queue !== undefined && dto.queue !== 'fresh'));
+      const leavesFresh =
+        before.queue === 'fresh' &&
+        before.isActive &&
+        (dto.isActive === false || (dto.queue !== undefined && dto.queue !== 'fresh'));
       if (leavesFresh && (await this.countActiveFresh(trx)) <= 1) {
-        throw AppError.conflict('LAST_FRESH_STATUS', 'New leads start in a "fresh" status, so at least one must stay active');
+        throw AppError.conflict(
+          'LAST_FRESH_STATUS',
+          'New leads start in a "fresh" status, so at least one must stay active',
+        );
       }
 
       const changes = {
@@ -75,49 +100,113 @@ export class LeadStatusesService {
         ...(dto.sortOrder !== undefined && { sort_order: dto.sortOrder }),
         ...(dto.isActive !== undefined && { is_active: dto.isActive }),
       };
-      if (Object.keys(changes).length > 0) await trx.updateTable('lead_statuses').set(changes).where('id', '=', id).execute();
+      if (Object.keys(changes).length > 0)
+        await trx.updateTable('lead_statuses').set(changes).where('id', '=', id).execute();
       const after = await this.one(trx, id);
       await this.record(trx, auth, 'lead_status.update', id, strip(before), strip(after));
       return after;
     });
   }
 
-  createSubstatus(auth: AuthContext, statusId: string, dto: CreateSubstatusDto): Promise<StatusView> {
+  createSubstatus(
+    auth: AuthContext,
+    statusId: string,
+    dto: CreateSubstatusDto,
+  ): Promise<StatusView> {
     return this.db.withTenant(auth.tenantId, async (trx) => {
       await this.one(trx, statusId);
-      const taken = await trx.selectFrom('lead_substatuses').select('id').where('status_id', '=', statusId).where(sql`lower(name)`, '=', dto.name.toLowerCase()).executeTakeFirst();
-      if (taken) throw AppError.conflict('SUBSTATUS_EXISTS', 'This status already has a sub-status with this name');
+      const taken = await trx
+        .selectFrom('lead_substatuses')
+        .select('id')
+        .where('status_id', '=', statusId)
+        .where(sql`lower(name)`, '=', dto.name.toLowerCase())
+        .executeTakeFirst();
+      if (taken)
+        throw AppError.conflict(
+          'SUBSTATUS_EXISTS',
+          'This status already has a sub-status with this name',
+        );
       const row = await trx
         .insertInto('lead_substatuses')
-        .values({ tenant_id: auth.tenantId, status_id: statusId, name: dto.name, requires_comment: dto.requiresComment ?? false, sort_order: dto.sortOrder ?? 0 })
+        .values({
+          tenant_id: auth.tenantId,
+          status_id: statusId,
+          name: dto.name,
+          requires_comment: dto.requiresComment ?? false,
+          sort_order: dto.sortOrder ?? 0,
+        })
         .returning('id')
         .executeTakeFirstOrThrow();
-      await this.record(trx, auth, 'lead_substatus.create', row.id, undefined, { statusId, ...dto });
+      await this.record(trx, auth, 'lead_substatus.create', row.id, undefined, {
+        statusId,
+        ...dto,
+      });
       return this.one(trx, statusId);
     });
   }
 
-  updateSubstatus(auth: AuthContext, id: string, dto: { name?: string; requiresComment?: boolean }): Promise<StatusView> {
+  updateSubstatus(
+    auth: AuthContext,
+    id: string,
+    dto: { name?: string; requiresComment?: boolean },
+  ): Promise<StatusView> {
     return this.db.withTenant(auth.tenantId, async (trx) => {
-      const row = await trx.selectFrom('lead_substatuses').select(['status_id', 'name', 'requires_comment']).where('id', '=', id).executeTakeFirst();
+      const row = await trx
+        .selectFrom('lead_substatuses')
+        .select(['status_id', 'name', 'requires_comment'])
+        .where('id', '=', id)
+        .executeTakeFirst();
       if (!row) throw AppError.notFound('Sub-status');
       if (dto.name && dto.name.toLowerCase() !== row.name.toLowerCase()) {
-        const taken = await trx.selectFrom('lead_substatuses').select('id').where('status_id', '=', row.status_id).where(sql`lower(name)`, '=', dto.name.toLowerCase()).executeTakeFirst();
-        if (taken) throw AppError.conflict('SUBSTATUS_EXISTS', 'This status already has a sub-status with this name');
+        const taken = await trx
+          .selectFrom('lead_substatuses')
+          .select('id')
+          .where('status_id', '=', row.status_id)
+          .where(sql`lower(name)`, '=', dto.name.toLowerCase())
+          .executeTakeFirst();
+        if (taken)
+          throw AppError.conflict(
+            'SUBSTATUS_EXISTS',
+            'This status already has a sub-status with this name',
+          );
       }
-      const changes = { ...(dto.name !== undefined && { name: dto.name }), ...(dto.requiresComment !== undefined && { requires_comment: dto.requiresComment }) };
-      if (Object.keys(changes).length > 0) await trx.updateTable('lead_substatuses').set(changes).where('id', '=', id).execute();
-      await this.record(trx, auth, 'lead_substatus.update', id, { name: row.name, requiresComment: row.requires_comment }, { ...dto });
+      const changes = {
+        ...(dto.name !== undefined && { name: dto.name }),
+        ...(dto.requiresComment !== undefined && { requires_comment: dto.requiresComment }),
+      };
+      if (Object.keys(changes).length > 0)
+        await trx.updateTable('lead_substatuses').set(changes).where('id', '=', id).execute();
+      await this.record(
+        trx,
+        auth,
+        'lead_substatus.update',
+        id,
+        { name: row.name, requiresComment: row.requires_comment },
+        { ...dto },
+      );
       return this.one(trx, row.status_id);
     });
   }
 
   removeSubstatus(auth: AuthContext, id: string): Promise<void> {
     return this.db.withTenant(auth.tenantId, async (trx) => {
-      const row = await trx.selectFrom('lead_substatuses').select(['name']).where('id', '=', id).executeTakeFirst();
+      const row = await trx
+        .selectFrom('lead_substatuses')
+        .select(['name'])
+        .where('id', '=', id)
+        .executeTakeFirst();
       if (!row) throw AppError.notFound('Sub-status');
-      const used = await trx.selectFrom('leads').select('id').where('substatus_id', '=', id).limit(1).executeTakeFirst();
-      if (used) throw AppError.conflict('SUBSTATUS_IN_USE', 'Leads still use this sub-status. Move them first.');
+      const used = await trx
+        .selectFrom('leads')
+        .select('id')
+        .where('substatus_id', '=', id)
+        .limit(1)
+        .executeTakeFirst();
+      if (used)
+        throw AppError.conflict(
+          'SUBSTATUS_IN_USE',
+          'Leads still use this sub-status. Move them first.',
+        );
       await trx.deleteFrom('lead_substatuses').where('id', '=', id).execute();
       await this.record(trx, auth, 'lead_substatus.delete', id, { name: row.name }, undefined);
     });
@@ -127,7 +216,17 @@ export class LeadStatusesService {
 
   private async load(trx: Trx, includeInactive: boolean, onlyId?: string): Promise<StatusView[]> {
     const { rows } = await sql<{
-      id: string; name: string; queue: string; is_open: boolean; requires_followup: boolean; requires_substatus: boolean; selectable: boolean; is_junk: boolean; is_won: boolean; sort_order: number; is_active: boolean;
+      id: string;
+      name: string;
+      queue: string;
+      is_open: boolean;
+      requires_followup: boolean;
+      requires_substatus: boolean;
+      selectable: boolean;
+      is_junk: boolean;
+      is_won: boolean;
+      sort_order: number;
+      is_active: boolean;
       subs: { id: string; name: string; sortOrder: number; requiresComment: boolean }[];
     }>`
       SELECT s.id, s.name, s.queue, s.is_open, s.requires_followup, s.requires_substatus, s.selectable, s.is_junk, s.is_won, s.sort_order, s.is_active,
@@ -137,8 +236,18 @@ export class LeadStatusesService {
       WHERE ${onlyId ? sql`s.id = ${onlyId}` : sql`true`} ${includeInactive ? sql`` : sql`AND s.is_active`}
       GROUP BY s.id ORDER BY s.sort_order, s.name`.execute(trx);
     return rows.map((r) => ({
-      id: r.id, name: r.name, queue: r.queue, isOpen: r.is_open, requiresFollowup: r.requires_followup, requiresSubstatus: r.requires_substatus, selectable: r.selectable, isJunk: r.is_junk, isWon: r.is_won,
-      sortOrder: r.sort_order, isActive: r.is_active, substatuses: r.subs,
+      id: r.id,
+      name: r.name,
+      queue: r.queue,
+      isOpen: r.is_open,
+      requiresFollowup: r.requires_followup,
+      requiresSubstatus: r.requires_substatus,
+      selectable: r.selectable,
+      isJunk: r.is_junk,
+      isWon: r.is_won,
+      sortOrder: r.sort_order,
+      isActive: r.is_active,
+      substatuses: r.subs,
     }));
   }
 
@@ -149,26 +258,63 @@ export class LeadStatusesService {
   }
 
   private async countActiveFresh(trx: Trx): Promise<number> {
-    const row = await trx.selectFrom('lead_statuses').select(sql<string>`count(*)`.as('n')).where('queue', '=', 'fresh').where('is_active', '=', true).executeTakeFirstOrThrow();
+    const row = await trx
+      .selectFrom('lead_statuses')
+      .select(sql<string>`count(*)`.as('n'))
+      .where('queue', '=', 'fresh')
+      .where('is_active', '=', true)
+      .executeTakeFirstOrThrow();
     return Number(row.n);
   }
 
   private async assertNameFree(trx: Trx, name: string): Promise<void> {
-    const taken = await trx.selectFrom('lead_statuses').select('id').where(sql`lower(name)`, '=', name.toLowerCase()).executeTakeFirst();
+    const taken = await trx
+      .selectFrom('lead_statuses')
+      .select('id')
+      .where(sql`lower(name)`, '=', name.toLowerCase())
+      .executeTakeFirst();
     if (taken) throw AppError.conflict('STATUS_EXISTS', 'A status with this name already exists');
   }
 
-  private record(trx: Trx, auth: AuthContext, action: string, id: string, before: unknown, after: unknown) {
-    return this.audit.write(trx, { tenantId: auth.tenantId, actorId: auth.userId, action, entity: 'lead_status', entityId: id, before, after, ip: auth.ip, requestId: auth.requestId });
+  private record(
+    trx: Trx,
+    auth: AuthContext,
+    action: string,
+    id: string,
+    before: unknown,
+    after: unknown,
+  ) {
+    return this.audit.write(trx, {
+      tenantId: auth.tenantId,
+      actorId: auth.userId,
+      action,
+      entity: 'lead_status',
+      entityId: id,
+      before,
+      after,
+      ip: auth.ip,
+      requestId: auth.requestId,
+    });
   }
 }
 
 /** What is worth keeping in the audit log about a status: its own settings, without the sub-status list. */
 function strip(s: StatusView) {
-  return { id: s.id, name: s.name, queue: s.queue, isOpen: s.isOpen, requiresFollowup: s.requiresFollowup, sortOrder: s.sortOrder, isActive: s.isActive };
+  return {
+    id: s.id,
+    name: s.name,
+    queue: s.queue,
+    isOpen: s.isOpen,
+    requiresFollowup: s.requiresFollowup,
+    sortOrder: s.sortOrder,
+    isActive: s.isActive,
+  };
 }
 
 /** A status means a junk lead or a won one, never both. */
 function assertWonOrJunk(won: boolean, junk: boolean) {
-  if (won && junk) throw AppError.badRequest('WON_AND_JUNK', 'A status cannot count as both won and junk', [{ field: 'isWon', message: 'A status cannot count as both won and junk' }]);
+  if (won && junk)
+    throw AppError.badRequest('WON_AND_JUNK', 'A status cannot count as both won and junk', [
+      { field: 'isWon', message: 'A status cannot count as both won and junk' },
+    ]);
 }

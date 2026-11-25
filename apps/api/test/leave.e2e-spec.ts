@@ -25,7 +25,9 @@ beforeAll(async () => {
   admin = await api.signIn('admin', { office: true });
   admin2 = await api.signIn('admin2', { office: true });
   // Sunday is the weekly off.
-  await owner.query(`UPDATE attendance_settings SET weekly_off_days = '{0}' WHERE tenant_id = $1`, [fx.tenantId]);
+  await owner.query(`UPDATE attendance_settings SET weekly_off_days = '{0}' WHERE tenant_id = $1`, [
+    fx.tenantId,
+  ]);
 });
 
 afterAll(async () => {
@@ -41,7 +43,11 @@ const asOffice = (name: string) => api.signIn(name, { office: true });
 
 /** The company's date `offset` days from today, as YYYY-MM-DD. */
 const day = async (offset: number) =>
-  (await owner.query(`SELECT ((now() AT TIME ZONE 'Asia/Kolkata')::date + $1::int)::text AS d`, [offset])).rows[0].d as string;
+  (
+    await owner.query(`SELECT ((now() AT TIME ZONE 'Asia/Kolkata')::date + $1::int)::text AS d`, [
+      offset,
+    ])
+  ).rows[0].d as string;
 
 /** The next Sunday at least `minAhead` days from today. */
 async function nextSunday(minAhead = 3): Promise<string> {
@@ -60,7 +66,9 @@ async function nextSunday(minAhead = 3): Promise<string> {
  * balance these tests read.
  */
 async function sundayInThisYear(): Promise<string> {
-  const thisYear = (await owner.query(`SELECT EXTRACT(YEAR FROM now() AT TIME ZONE 'Asia/Kolkata')::int AS y`)).rows[0].y as number;
+  const thisYear = (
+    await owner.query(`SELECT EXTRACT(YEAR FROM now() AT TIME ZONE 'Asia/Kolkata')::int AS y`)
+  ).rows[0].y as number;
   for (const ahead of [50, 30, 10, 3]) {
     const sunday = await nextSunday(ahead);
     if (Number(sunday.slice(0, 4)) === thisYear) return sunday;
@@ -71,7 +79,12 @@ const plusDays = async (date: string, n: number) =>
   (await owner.query(`SELECT ($1::date + $2::int)::text AS d`, [date, n])).rows[0].d as string;
 
 const typeId = async (name: string) =>
-  (await owner.query(`SELECT id FROM leave_types WHERE tenant_id = $1 AND name = $2`, [fx.tenantId, name])).rows[0].id as string;
+  (
+    await owner.query(`SELECT id FROM leave_types WHERE tenant_id = $1 AND name = $2`, [
+      fx.tenantId,
+      name,
+    ])
+  ).rows[0].id as string;
 
 const request = (token: string, body: Record<string, unknown>, ip?: string) =>
   api.call('POST', '/leave/requests', token, body, ip);
@@ -79,7 +92,9 @@ const request = (token: string, body: Record<string, unknown>, ip?: string) =>
 const balanceOf = async (token: string, typeName: string, query = '') => {
   const res = await api.call('GET', `/leave/balances${query}`, token);
   expect(res.statusCode, res.body).toBe(200);
-  return res.json().balances.find((b: { leaveType: { name: string } }) => b.leaveType.name === typeName);
+  return res
+    .json()
+    .balances.find((b: { leaveType: { name: string } }) => b.leaveType.name === typeName);
 };
 
 const notificationsFor = async (name: string, event: string) =>
@@ -96,17 +111,64 @@ describe('kinds of leave', () => {
   it('are visible to those who take part in leave, and managed by those who set the rules', async () => {
     const token = await asOffice('lv1');
     const list = await api.call('GET', '/leave/types', token, undefined, OFFICE_IP);
-    expect(list.json().map((t: { name: string }) => t.name)).toEqual(['Casual Leave', 'Sick Leave', 'Unpaid Leave']);
-    expect((await api.call('POST', '/leave/types', token, { name: 'Study', isPaid: true, yearlyQuota: 3 }, OFFICE_IP)).statusCode).toBe(403);
-    expect((await api.call('POST', '/leave/types', admin, { name: 'Study', isPaid: true, yearlyQuota: 3 }, OFFICE_IP)).statusCode).toBe(403);
+    expect(list.json().map((t: { name: string }) => t.name)).toEqual([
+      'Casual Leave',
+      'Sick Leave',
+      'Unpaid Leave',
+    ]);
+    expect(
+      (
+        await api.call(
+          'POST',
+          '/leave/types',
+          token,
+          { name: 'Study', isPaid: true, yearlyQuota: 3 },
+          OFFICE_IP,
+        )
+      ).statusCode,
+    ).toBe(403);
+    expect(
+      (
+        await api.call(
+          'POST',
+          '/leave/types',
+          admin,
+          { name: 'Study', isPaid: true, yearlyQuota: 3 },
+          OFFICE_IP,
+        )
+      ).statusCode,
+    ).toBe(403);
 
-    const created = await api.call('POST', '/leave/types', sa, { name: 'Comp Off', isPaid: true, yearlyQuota: 2.5 });
+    const created = await api.call('POST', '/leave/types', sa, {
+      name: 'Comp Off',
+      isPaid: true,
+      yearlyQuota: 2.5,
+    });
     expect(created.statusCode).toBe(201);
-    expect(created.json()).toMatchObject({ name: 'Comp Off', isPaid: true, yearlyQuota: 2.5, isActive: true });
-    expect(errorCode(await api.call('POST', '/leave/types', sa, { name: 'comp off', isPaid: true, yearlyQuota: 1 }))).toBe('LEAVE_TYPE_EXISTS');
-    expect(errorCode(await api.call('POST', '/leave/types', sa, { name: 'Odd', isPaid: true, yearlyQuota: 1.3 }))).toBe('VALIDATION_FAILED');
+    expect(created.json()).toMatchObject({
+      name: 'Comp Off',
+      isPaid: true,
+      yearlyQuota: 2.5,
+      isActive: true,
+    });
+    expect(
+      errorCode(
+        await api.call('POST', '/leave/types', sa, {
+          name: 'comp off',
+          isPaid: true,
+          yearlyQuota: 1,
+        }),
+      ),
+    ).toBe('LEAVE_TYPE_EXISTS');
+    expect(
+      errorCode(
+        await api.call('POST', '/leave/types', sa, { name: 'Odd', isPaid: true, yearlyQuota: 1.3 }),
+      ),
+    ).toBe('VALIDATION_FAILED');
 
-    const off = await api.call('PATCH', `/leave/types/${created.json().id}`, sa, { isActive: false });
+    const off = await api.call('PATCH', `/leave/types/${created.json().id}`, sa, {
+      isActive: false,
+    });
     expect(off.json().isActive).toBe(false);
     const hidden = await api.call('GET', '/leave/types', token, undefined, OFFICE_IP);
     expect(hidden.json().map((t: { name: string }) => t.name)).not.toContain('Comp Off');
@@ -124,15 +186,31 @@ describe('holidays', () => {
     const created = await api.call('POST', '/holidays', sa, { date, name: 'Founders Day' });
     expect(created.statusCode).toBe(201);
     expect(created.json()).toMatchObject({ date, name: 'Founders Day' });
-    expect(errorCode(await api.call('POST', '/holidays', sa, { date, name: 'Again' }))).toBe('HOLIDAY_EXISTS');
-    expect(errorCode(await api.call('POST', '/holidays', sa, { date: '2026-02-31', name: 'Fake' }))).toBe('VALIDATION_FAILED');
+    expect(errorCode(await api.call('POST', '/holidays', sa, { date, name: 'Again' }))).toBe(
+      'HOLIDAY_EXISTS',
+    );
+    expect(
+      errorCode(await api.call('POST', '/holidays', sa, { date: '2026-02-31', name: 'Fake' })),
+    ).toBe('VALIDATION_FAILED');
 
     const token = await asOffice('lv2');
     const list = await api.call('GET', `/holidays?year=${year}`, token, undefined, OFFICE_IP);
     expect(list.json().map((h: { date: string }) => h.date)).toContain(date);
-    expect((await api.call('POST', '/holidays', token, { date: await plusDays(date, 1), name: 'Mine' }, OFFICE_IP)).statusCode).toBe(403);
+    expect(
+      (
+        await api.call(
+          'POST',
+          '/holidays',
+          token,
+          { date: await plusDays(date, 1), name: 'Mine' },
+          OFFICE_IP,
+        )
+      ).statusCode,
+    ).toBe(403);
 
-    const renamed = await api.call('PATCH', `/holidays/${created.json().id}`, sa, { name: 'Foundation Day' });
+    const renamed = await api.call('PATCH', `/holidays/${created.json().id}`, sa, {
+      name: 'Foundation Day',
+    });
     expect(renamed.json().name).toBe('Foundation Day');
     expect((await api.call('DELETE', `/holidays/${created.json().id}`, sa)).statusCode).toBe(204);
     expect((await api.call('DELETE', `/holidays/${created.json().id}`, sa)).statusCode).toBe(404);
@@ -144,21 +222,54 @@ describe('holidays', () => {
     const d3 = await plusDays(d1, 2);
     await api.call('POST', '/holidays', sa, { date: d2, name: 'Already there' });
 
-    const res = await api.call('POST', '/holidays/bulk', sa, { items: [{ date: d3, name: 'Third' }, { date: d1, name: 'First' }, { date: d2, name: 'Second' }] });
+    const res = await api.call('POST', '/holidays/bulk', sa, {
+      items: [
+        { date: d3, name: 'Third' },
+        { date: d1, name: 'First' },
+        { date: d2, name: 'Second' },
+      ],
+    });
     expect(res.statusCode, res.body).toBe(201);
-    expect(res.json().added.map((h: { date: string; name: string }) => `${h.date} ${h.name}`)).toEqual([`${d1} First`, `${d3} Third`]);
-    expect(res.json().skipped).toEqual([{ date: d2, name: 'Second', reason: 'There is already a holiday on that day' }]);
-    const names = (await api.call('GET', `/holidays?year=${d1.slice(0, 4)}`, sa)).json().filter((h: { date: string }) => [d1, d2, d3].includes(h.date)).map((h: { name: string }) => h.name);
+    expect(
+      res.json().added.map((h: { date: string; name: string }) => `${h.date} ${h.name}`),
+    ).toEqual([`${d1} First`, `${d3} Third`]);
+    expect(res.json().skipped).toEqual([
+      { date: d2, name: 'Second', reason: 'There is already a holiday on that day' },
+    ]);
+    const names = (await api.call('GET', `/holidays?year=${d1.slice(0, 4)}`, sa))
+      .json()
+      .filter((h: { date: string }) => [d1, d2, d3].includes(h.date))
+      .map((h: { name: string }) => h.name);
     expect(names).toEqual(['First', 'Already there', 'Third']);
 
     // Sending the same list again changes nothing.
-    const again = await api.call('POST', '/holidays/bulk', sa, { items: [{ date: d1, name: 'First' }] });
+    const again = await api.call('POST', '/holidays/bulk', sa, {
+      items: [{ date: d1, name: 'First' }],
+    });
     expect(again.json()).toMatchObject({ added: [], skipped: [{ date: d1 }] });
 
-    expect(errorCode(await api.call('POST', '/holidays/bulk', sa, { items: [] }))).toBe('VALIDATION_FAILED');
-    expect(errorCode(await api.call('POST', '/holidays/bulk', sa, { items: [{ date: '2026-02-31', name: 'Bad' }] }))).toBe('VALIDATION_FAILED');
+    expect(errorCode(await api.call('POST', '/holidays/bulk', sa, { items: [] }))).toBe(
+      'VALIDATION_FAILED',
+    );
+    expect(
+      errorCode(
+        await api.call('POST', '/holidays/bulk', sa, {
+          items: [{ date: '2026-02-31', name: 'Bad' }],
+        }),
+      ),
+    ).toBe('VALIDATION_FAILED');
     const token = await asOffice('lv2');
-    expect((await api.call('POST', '/holidays/bulk', token, { items: [{ date: await plusDays(d1, 5), name: 'Mine' }] }, OFFICE_IP)).statusCode).toBe(403);
+    expect(
+      (
+        await api.call(
+          'POST',
+          '/holidays/bulk',
+          token,
+          { items: [{ date: await plusDays(d1, 5), name: 'Mine' }] },
+          OFFICE_IP,
+        )
+      ).statusCode,
+    ).toBe(403);
   });
 });
 
@@ -167,19 +278,47 @@ describe('holidays', () => {
 describe('balances', () => {
   it('start at the yearly quota', async () => {
     const token = await asOffice('lv3');
-    expect(await balanceOf(token, 'Casual Leave')).toMatchObject({ yearlyQuota: 12, remaining: 12, pending: 0, available: 12 });
+    expect(await balanceOf(token, 'Casual Leave')).toMatchObject({
+      yearlyQuota: 12,
+      remaining: 12,
+      pending: 0,
+      available: 12,
+    });
     expect(await balanceOf(token, 'Sick Leave')).toMatchObject({ yearlyQuota: 6, remaining: 6 });
-    expect(await balanceOf(token, 'Unpaid Leave')).toMatchObject({ yearlyQuota: 0, available: null });
+    expect(await balanceOf(token, 'Unpaid Leave')).toMatchObject({
+      yearlyQuota: 0,
+      available: null,
+    });
   });
 
   it('can be read for others only inside your own scope', async () => {
     const counsellor = await asOffice('lv3');
-    expect((await api.call('GET', `/leave/balances?userId=${fx.user('lv4').id}`, counsellor, undefined, OFFICE_IP)).statusCode).toBe(403);
+    expect(
+      (
+        await api.call(
+          'GET',
+          `/leave/balances?userId=${fx.user('lv4').id}`,
+          counsellor,
+          undefined,
+          OFFICE_IP,
+        )
+      ).statusCode,
+    ).toBe(403);
 
-    expect(await balanceOf(admin, 'Casual Leave', `&userId=${fx.user('lv3').id}`.replace('&', '?'))).toMatchObject({ remaining: 12 });
-    const outside = await api.call('GET', `/leave/balances?userId=${fx.user('counsellor2').id}`, admin, undefined, OFFICE_IP);
+    expect(
+      await balanceOf(admin, 'Casual Leave', `&userId=${fx.user('lv3').id}`.replace('&', '?')),
+    ).toMatchObject({ remaining: 12 });
+    const outside = await api.call(
+      'GET',
+      `/leave/balances?userId=${fx.user('counsellor2').id}`,
+      admin,
+      undefined,
+      OFFICE_IP,
+    );
     expect(outside.statusCode).toBe(404);
-    expect((await api.call('GET', `/leave/balances?userId=${fx.user('counsellor2').id}`, sa)).statusCode).toBe(200);
+    expect(
+      (await api.call('GET', `/leave/balances?userId=${fx.user('counsellor2').id}`, sa)).statusCode,
+    ).toBe(200);
   });
 });
 
@@ -192,22 +331,47 @@ describe('asking for leave', () => {
     const saturday = await plusDays(sunday, -1);
     const monday = await plusDays(sunday, 1);
 
-    const res = await request(token, { leaveTypeId: await typeId('Casual Leave'), fromDate: saturday, toDate: monday, reason: 'Family function' }, OFFICE_IP);
+    const res = await request(
+      token,
+      {
+        leaveTypeId: await typeId('Casual Leave'),
+        fromDate: saturday,
+        toDate: monday,
+        reason: 'Family function',
+      },
+      OFFICE_IP,
+    );
     expect(res.statusCode, res.body).toBe(201);
     expect(res.json()).toMatchObject({
-      status: 'pending', days: 2, reason: 'Family function', fromDate: saturday, toDate: monday,
-      user: { name: 'lv1' }, leaveType: { name: 'Casual Leave', isPaid: true }, decidedBy: null,
+      status: 'pending',
+      days: 2,
+      reason: 'Family function',
+      fromDate: saturday,
+      toDate: monday,
+      user: { name: 'lv1' },
+      leaveType: { name: 'Casual Leave', isPaid: true },
+      decidedBy: null,
     });
 
-    expect(await balanceOf(token, 'Casual Leave')).toMatchObject({ remaining: 12, pending: 2, available: 10 });
+    expect(await balanceOf(token, 'Casual Leave')).toMatchObject({
+      remaining: 12,
+      pending: 2,
+      available: 10,
+    });
 
-    const activeSuperAdmins = Number((await owner.query(
-      `SELECT count(*) FROM users u JOIN roles r ON r.id = u.role_id WHERE u.tenant_id = $1 AND r.system_key = 'super_admin' AND u.status = 'active'`,
-      [fx.tenantId],
-    )).rows[0].count);
+    const activeSuperAdmins = Number(
+      (
+        await owner.query(
+          `SELECT count(*) FROM users u JOIN roles r ON r.id = u.role_id WHERE u.tenant_id = $1 AND r.system_key = 'super_admin' AND u.status = 'active'`,
+          [fx.tenantId],
+        )
+      ).rows[0].count,
+    );
     // The approvers are also told by email (NOT-4): the manager and every Super Admin, not the requester.
     await new Promise((r) => setTimeout(r, 50));
-    const sent = app.get(MailerService).outbox.filter((m) => m.subject === 'Leave request from lv1');
+    const sent = app
+      .get(MailerService)
+      .outbox.filter((m) => m.subject === 'Leave request from lv1');
     expect(sent.map((m) => m.to.toLowerCase())).toContain(fx.user('admin').email.toLowerCase());
     expect(sent.map((m) => m.to.toLowerCase())).not.toContain(fx.user('lv1').email.toLowerCase());
     expect(sent.length).toBe(activeSuperAdmins + 1);
@@ -215,7 +379,14 @@ describe('asking for leave', () => {
     expect(toManager.some((n) => n.payload.userName === 'lv1' && n.payload.days === 2)).toBe(true);
     const toSuper = await notificationsFor('super', 'leave_requested');
     expect(toSuper.length).toBeGreaterThanOrEqual(1);
-    const total = Number((await owner.query(`SELECT count(*) FROM notifications WHERE tenant_id = $1 AND payload->>'event' = 'leave_requested' AND payload->>'userName' = 'lv1'`, [fx.tenantId])).rows[0].count);
+    const total = Number(
+      (
+        await owner.query(
+          `SELECT count(*) FROM notifications WHERE tenant_id = $1 AND payload->>'event' = 'leave_requested' AND payload->>'userName' = 'lv1'`,
+          [fx.tenantId],
+        )
+      ).rows[0].count,
+    );
     expect(total).toBe(activeSuperAdmins + 1);
   });
 
@@ -224,32 +395,87 @@ describe('asking for leave', () => {
     const sunday = await nextSunday(10);
     const monday = await plusDays(sunday, 1);
     await api.call('POST', '/holidays', sa, { date: monday, name: 'Test Holiday' });
-    const res = await request(token, { leaveTypeId: await typeId('Casual Leave'), fromDate: monday, toDate: await plusDays(monday, 1) }, OFFICE_IP);
+    const res = await request(
+      token,
+      {
+        leaveTypeId: await typeId('Casual Leave'),
+        fromDate: monday,
+        toDate: await plusDays(monday, 1),
+      },
+      OFFICE_IP,
+    );
     expect(res.json().days).toBe(1); // Tuesday only
-    expect(errorCode(await request(token, { leaveTypeId: await typeId('Sick Leave'), fromDate: monday }, OFFICE_IP))).toBe('NO_WORKING_DAYS');
+    expect(
+      errorCode(
+        await request(
+          token,
+          { leaveTypeId: await typeId('Sick Leave'), fromDate: monday },
+          OFFICE_IP,
+        ),
+      ),
+    ).toBe('NO_WORKING_DAYS');
   });
 
   it('allows a half day', async () => {
     const token = await asOffice('lv3');
     const monday = await plusDays(await nextSunday(20), 1);
-    const res = await request(token, { leaveTypeId: await typeId('Casual Leave'), fromDate: monday, halfDay: true }, OFFICE_IP);
+    const res = await request(
+      token,
+      { leaveTypeId: await typeId('Casual Leave'), fromDate: monday, halfDay: true },
+      OFFICE_IP,
+    );
     expect(res.json()).toMatchObject({ days: 0.5, fromDate: monday, toDate: monday });
   });
 
   it('records which half of the day a half day is, the first half unless the second is asked for', async () => {
     const token = await asOffice('lv5');
     const monday = await plusDays(await nextSunday(21), 1);
-    const second = await request(token, { leaveTypeId: await typeId('Casual Leave'), fromDate: monday, half: 'second' }, OFFICE_IP);
+    const second = await request(
+      token,
+      { leaveTypeId: await typeId('Casual Leave'), fromDate: monday, half: 'second' },
+      OFFICE_IP,
+    );
     expect(second.json()).toMatchObject({ days: 0.5, half: 'second' });
     const tuesday = await plusDays(monday, 1);
-    const plain = await request(token, { leaveTypeId: await typeId('Casual Leave'), fromDate: tuesday, halfDay: true }, OFFICE_IP);
+    const plain = await request(
+      token,
+      { leaveTypeId: await typeId('Casual Leave'), fromDate: tuesday, halfDay: true },
+      OFFICE_IP,
+    );
     expect(plain.json()).toMatchObject({ days: 0.5, half: 'first' });
-    const whole = await request(token, { leaveTypeId: await typeId('Casual Leave'), fromDate: await plusDays(tuesday, 1) }, OFFICE_IP);
+    const whole = await request(
+      token,
+      { leaveTypeId: await typeId('Casual Leave'), fromDate: await plusDays(tuesday, 1) },
+      OFFICE_IP,
+    );
     expect(whole.json()).toMatchObject({ days: 1, half: null });
-    const several = await request(token, { leaveTypeId: await typeId('Casual Leave'), fromDate: await plusDays(tuesday, 3), toDate: await plusDays(tuesday, 4), half: 'first' }, OFFICE_IP);
+    const several = await request(
+      token,
+      {
+        leaveTypeId: await typeId('Casual Leave'),
+        fromDate: await plusDays(tuesday, 3),
+        toDate: await plusDays(tuesday, 4),
+        half: 'first',
+      },
+      OFFICE_IP,
+    );
     expect(errorCode(several)).toBe('HALF_DAY_SINGLE');
-    expect(errorCode(await request(token, { leaveTypeId: await typeId('Casual Leave'), fromDate: await plusDays(tuesday, 5), half: 'evening' }, OFFICE_IP))).toBe('VALIDATION_FAILED');
-    const mine = (await api.call('GET', '/leave/requests/mine?limit=50', token, undefined, OFFICE_IP)).json().items as { half: string | null; days: number }[];
+    expect(
+      errorCode(
+        await request(
+          token,
+          {
+            leaveTypeId: await typeId('Casual Leave'),
+            fromDate: await plusDays(tuesday, 5),
+            half: 'evening',
+          },
+          OFFICE_IP,
+        ),
+      ),
+    ).toBe('VALIDATION_FAILED');
+    const mine = (
+      await api.call('GET', '/leave/requests/mine?limit=50', token, undefined, OFFICE_IP)
+    ).json().items as { half: string | null; days: number }[];
     expect(mine.filter((r) => r.half === 'second')).toHaveLength(1);
   });
 
@@ -257,8 +483,16 @@ describe('asking for leave', () => {
     const token = await asOffice('lv9');
     const who = fx.user('lv9').id;
     // A shift from midnight to the end of the day puts the middle at noon, so which half it is now is known.
-    await owner.query(`UPDATE attendance_settings SET shift_start = '00:00', shift_end = '23:58' WHERE tenant_id = $1`, [fx.tenantId]);
-    const now = (await owner.query(`SELECT CASE WHEN (now() AT TIME ZONE t.timezone)::time < '11:59' THEN 'first' ELSE 'second' END AS half FROM tenants t WHERE t.id = $1`, [fx.tenantId])).rows[0].half as 'first' | 'second';
+    await owner.query(
+      `UPDATE attendance_settings SET shift_start = '00:00', shift_end = '23:58' WHERE tenant_id = $1`,
+      [fx.tenantId],
+    );
+    const now = (
+      await owner.query(
+        `SELECT CASE WHEN (now() AT TIME ZONE t.timezone)::time < '11:59' THEN 'first' ELSE 'second' END AS half FROM tenants t WHERE t.id = $1`,
+        [fx.tenantId],
+      )
+    ).rows[0].half as 'first' | 'second';
     const other = now === 'first' ? 'second' : 'first';
     const insert = (half: string) =>
       owner.query(
@@ -267,7 +501,10 @@ describe('asking for leave', () => {
          FROM leave_types lt, tenants t WHERE lt.tenant_id = $1 AND lt.name = 'Casual Leave' AND t.id = $1`,
         [fx.tenantId, who, half],
       );
-    const reason = () => app.get(DatabaseService).withTenant(fx.tenantId, (trx) => app.get(Assignees).unavailableReason(trx, who));
+    const reason = () =>
+      app
+        .get(DatabaseService)
+        .withTenant(fx.tenantId, (trx) => app.get(Assignees).unavailableReason(trx, who));
     void token;
 
     await insert(other);
@@ -281,7 +518,15 @@ describe('asking for leave', () => {
     const token = await asOffice('lv1');
     const sunday = await nextSunday();
     const monday = await plusDays(sunday, 1);
-    const clash = await request(token, { leaveTypeId: await typeId('Sick Leave'), fromDate: monday, toDate: await plusDays(monday, 2) }, OFFICE_IP);
+    const clash = await request(
+      token,
+      {
+        leaveTypeId: await typeId('Sick Leave'),
+        fromDate: monday,
+        toDate: await plusDays(monday, 2),
+      },
+      OFFICE_IP,
+    );
     expect(clash.statusCode).toBe(409);
     expect(errorCode(clash)).toBe('LEAVE_OVERLAP');
   });
@@ -289,7 +534,15 @@ describe('asking for leave', () => {
   it('refuses more days than are available', async () => {
     const token = await asOffice('lv4');
     const start = await plusDays(await nextSunday(2), 1);
-    const res = await request(token, { leaveTypeId: await typeId('Casual Leave'), fromDate: start, toDate: await plusDays(start, 20) }, OFFICE_IP);
+    const res = await request(
+      token,
+      {
+        leaveTypeId: await typeId('Casual Leave'),
+        fromDate: start,
+        toDate: await plusDays(start, 20),
+      },
+      OFFICE_IP,
+    );
     // Only possible if the range stays inside the year; otherwise the year rule answers first.
     expect([422, 400]).toContain(res.statusCode);
     if (res.statusCode === 422) {
@@ -301,20 +554,52 @@ describe('asking for leave', () => {
   it('does not limit unpaid leave by a balance', async () => {
     const token = await asOffice('lv5');
     const start = await plusDays(await nextSunday(2), 1);
-    const res = await request(token, { leaveTypeId: await typeId('Unpaid Leave'), fromDate: start, toDate: await plusDays(start, 4) }, OFFICE_IP);
+    const res = await request(
+      token,
+      {
+        leaveTypeId: await typeId('Unpaid Leave'),
+        fromDate: start,
+        toDate: await plusDays(start, 4),
+      },
+      OFFICE_IP,
+    );
     expect(res.statusCode).toBe(201);
     expect(res.json().days).toBe(5);
   });
 
   it.each([
-    ['dates the wrong way round', async () => ({ fromDate: await day(8), toDate: await day(5) }), 'DATES_REVERSED'],
-    ['a half day over several days', async () => ({ fromDate: await day(8), toDate: await day(9), halfDay: true }), 'HALF_DAY_SINGLE'],
-    ['leave across New Year', async () => ({ fromDate: '2030-12-30', toDate: '2031-01-02' }), 'SPANS_YEARS'],
-    ['leave starting too long ago', async () => ({ fromDate: await day(-60), toDate: await day(-59) }), 'DATE_TOO_OLD'],
-    ['a day that is only a weekly off', async () => ({ fromDate: await nextSunday(5) }), 'NO_WORKING_DAYS'],
+    [
+      'dates the wrong way round',
+      async () => ({ fromDate: await day(8), toDate: await day(5) }),
+      'DATES_REVERSED',
+    ],
+    [
+      'a half day over several days',
+      async () => ({ fromDate: await day(8), toDate: await day(9), halfDay: true }),
+      'HALF_DAY_SINGLE',
+    ],
+    [
+      'leave across New Year',
+      async () => ({ fromDate: '2030-12-30', toDate: '2031-01-02' }),
+      'SPANS_YEARS',
+    ],
+    [
+      'leave starting too long ago',
+      async () => ({ fromDate: await day(-60), toDate: await day(-59) }),
+      'DATE_TOO_OLD',
+    ],
+    [
+      'a day that is only a weekly off',
+      async () => ({ fromDate: await nextSunday(5) }),
+      'NO_WORKING_DAYS',
+    ],
   ])('refuses %s', async (_name, build, code) => {
     const token = await asOffice('lv6');
-    const res = await request(token, { leaveTypeId: await typeId('Casual Leave'), ...(await build()) }, OFFICE_IP);
+    const res = await request(
+      token,
+      { leaveTypeId: await typeId('Casual Leave'), ...(await build()) },
+      OFFICE_IP,
+    );
     expect(res.statusCode, res.body).toBe(400);
     expect(errorCode(res), res.body).toBe(code);
   });
@@ -322,9 +607,23 @@ describe('asking for leave', () => {
   it('refuses a kind of leave that does not exist or is switched off', async () => {
     const token = await asOffice('lv6');
     const body = { fromDate: await day(8) };
-    expect(errorCode(await request(token, { ...body, leaveTypeId: '00000000-0000-4000-8000-000000000000' }, OFFICE_IP))).toBe('LEAVE_TYPE_INVALID');
-    const comp = (await owner.query(`SELECT id FROM leave_types WHERE tenant_id = $1 AND name = 'Comp Off'`, [fx.tenantId])).rows[0].id;
-    expect(errorCode(await request(token, { ...body, leaveTypeId: comp }, OFFICE_IP))).toBe('LEAVE_TYPE_INVALID');
+    expect(
+      errorCode(
+        await request(
+          token,
+          { ...body, leaveTypeId: '00000000-0000-4000-8000-000000000000' },
+          OFFICE_IP,
+        ),
+      ),
+    ).toBe('LEAVE_TYPE_INVALID');
+    const comp = (
+      await owner.query(`SELECT id FROM leave_types WHERE tenant_id = $1 AND name = 'Comp Off'`, [
+        fx.tenantId,
+      ])
+    ).rows[0].id;
+    expect(errorCode(await request(token, { ...body, leaveTypeId: comp }, OFFICE_IP))).toBe(
+      'LEAVE_TYPE_INVALID',
+    );
   });
 });
 
@@ -338,7 +637,11 @@ describe('deciding on leave', () => {
   const makeRequest = async (name: string, offsetFromSunday = 1, type = 'Casual Leave') => {
     const token = await asOffice(name);
     const date = await plusDays(sunday, offsetFromSunday);
-    const res = await request(token, { leaveTypeId: await typeId(type), fromDate: date }, OFFICE_IP);
+    const res = await request(
+      token,
+      { leaveTypeId: await typeId(type), fromDate: date },
+      OFFICE_IP,
+    );
     expect(res.statusCode, res.body).toBe(201);
     return { token, id: res.json().id as string, date };
   };
@@ -350,14 +653,24 @@ describe('deciding on leave', () => {
     const res = await decide(admin, id, { decision: 'approved' });
     expect(res.statusCode, res.body).toBe(200);
     expect(res.json()).toMatchObject({ status: 'approved', decidedBy: 'admin' });
-    expect(await balanceOf(token, 'Casual Leave')).toMatchObject({ remaining: 11, pending: 0, available: 11 });
+    expect(await balanceOf(token, 'Casual Leave')).toMatchObject({
+      remaining: 11,
+      pending: 0,
+      available: 11,
+    });
 
     const told = await notificationsFor('lv7', 'leave_decided');
     expect(told[0].payload).toMatchObject({ decision: 'approved', decidedBy: 'admin' });
 
     // The decision is also sent by email to the person (NOT-4).
     await new Promise((r) => setTimeout(r, 50));
-    const mail = app.get(MailerService).outbox.find((m) => m.to.toLowerCase() === fx.user('lv7').email.toLowerCase() && m.subject === 'Your leave was approved');
+    const mail = app
+      .get(MailerService)
+      .outbox.find(
+        (m) =>
+          m.to.toLowerCase() === fx.user('lv7').email.toLowerCase() &&
+          m.subject === 'Your leave was approved',
+      );
     expect(mail?.text).toContain('approved by admin');
     expect(errorCode(await decide(admin, id, { decision: 'approved' }))).toBe('ALREADY_DECIDED');
     expect(await balanceOf(token, 'Casual Leave')).toMatchObject({ remaining: 11 });
@@ -371,7 +684,11 @@ describe('deciding on leave', () => {
     expect(await balanceOf(token, 'Casual Leave')).toMatchObject({ remaining: 12, pending: 0 });
 
     // A refused request no longer blocks the same days.
-    const again = await request(token, { leaveTypeId: await typeId('Casual Leave'), fromDate: date }, OFFICE_IP);
+    const again = await request(
+      token,
+      { leaveTypeId: await typeId('Casual Leave'), fromDate: date },
+      OFFICE_IP,
+    );
     expect(again.statusCode).toBe(201);
   });
 
@@ -384,13 +701,19 @@ describe('deciding on leave', () => {
 
   it('does not let anyone decide on their own leave', async () => {
     const date = await plusDays(sunday, 4);
-    const own = await request(admin, { leaveTypeId: await typeId('Casual Leave'), fromDate: date }, OFFICE_IP);
+    const own = await request(
+      admin,
+      { leaveTypeId: await typeId('Casual Leave'), fromDate: date },
+      OFFICE_IP,
+    );
     expect(own.statusCode).toBe(201);
     const res = await decide(admin, own.json().id, { decision: 'approved' });
     expect(res.statusCode).toBe(403);
     expect(errorCode(res)).toBe('SELF_APPROVAL');
     // The Super Admins are the ones told about an Admin's leave.
-    expect((await decide(sa, own.json().id, { decision: 'approved' }, '203.0.113.50')).statusCode).toBe(200);
+    expect(
+      (await decide(sa, own.json().id, { decision: 'approved' }, '203.0.113.50')).statusCode,
+    ).toBe(200);
   });
 
   it('checks the balance again when approving, so two requests cannot overspend', async () => {
@@ -403,7 +726,9 @@ describe('deciding on leave', () => {
     const res = await decide(admin, inserted.rows[0].id, { decision: 'approved' });
     expect(res.statusCode).toBe(422);
     expect(errorCode(res)).toBe('INSUFFICIENT_BALANCE');
-    const stillPending = (await owner.query(`SELECT status FROM leave_requests WHERE id = $1`, [inserted.rows[0].id])).rows[0].status;
+    const stillPending = (
+      await owner.query(`SELECT status FROM leave_requests WHERE id = $1`, [inserted.rows[0].id])
+    ).rows[0].status;
     expect(stillPending).toBe('pending');
   });
 });
@@ -414,11 +739,16 @@ describe('withdrawing a request', () => {
   const futureRequest = async (name: string, offset: number) => {
     const token = await asOffice(name);
     const date = await plusDays(await sundayInThisYear(), offset);
-    const res = await request(token, { leaveTypeId: await typeId('Sick Leave'), fromDate: date }, OFFICE_IP);
+    const res = await request(
+      token,
+      { leaveTypeId: await typeId('Sick Leave'), fromDate: date },
+      OFFICE_IP,
+    );
     expect(res.statusCode, res.body).toBe(201);
     return { token, id: res.json().id as string };
   };
-  const cancel = (token: string, id: string) => api.call('POST', `/leave/requests/${id}/cancel`, token, undefined, OFFICE_IP);
+  const cancel = (token: string, id: string) =>
+    api.call('POST', `/leave/requests/${id}/cancel`, token, undefined, OFFICE_IP);
 
   it('cancels a waiting request', async () => {
     const { token, id } = await futureRequest('att1', 1);
@@ -429,7 +759,13 @@ describe('withdrawing a request', () => {
 
   it('gives the days back when approved leave that has not started is cancelled', async () => {
     const { token, id } = await futureRequest('att2', 2);
-    await api.call('POST', `/leave/requests/${id}/decision`, admin, { decision: 'approved' }, OFFICE_IP);
+    await api.call(
+      'POST',
+      `/leave/requests/${id}/decision`,
+      admin,
+      { decision: 'approved' },
+      OFFICE_IP,
+    );
     expect(await balanceOf(token, 'Sick Leave')).toMatchObject({ remaining: 5 });
     expect((await cancel(token, id)).json().status).toBe('cancelled');
     expect(await balanceOf(token, 'Sick Leave')).toMatchObject({ remaining: 6 });
@@ -457,41 +793,70 @@ describe('withdrawing a request', () => {
 // ===================================================================== lists
 
 describe('lists of requests', () => {
-  it('show a person their own, and an Admin their team\'s', async () => {
-    const mine = await api.call('GET', '/leave/requests/mine?limit=100', await asOffice('lv1'), undefined, OFFICE_IP);
+  it("show a person their own, and an Admin their team's", async () => {
+    const mine = await api.call(
+      'GET',
+      '/leave/requests/mine?limit=100',
+      await asOffice('lv1'),
+      undefined,
+      OFFICE_IP,
+    );
     expect(mine.statusCode).toBe(200);
-    expect(mine.json().items.every((r: { user: { name: string } }) => r.user.name === 'lv1')).toBe(true);
+    expect(mine.json().items.every((r: { user: { name: string } }) => r.user.name === 'lv1')).toBe(
+      true,
+    );
 
     // counsellor2 belongs to the other Admin and asks for leave.
     const other = await asOffice('counsellor2');
-    await request(other, { leaveTypeId: await typeId('Unpaid Leave'), fromDate: await plusDays(await nextSunday(60), 1) }, OFFICE_IP);
+    await request(
+      other,
+      {
+        leaveTypeId: await typeId('Unpaid Leave'),
+        fromDate: await plusDays(await nextSunday(60), 1),
+      },
+      OFFICE_IP,
+    );
 
     const team = await api.call('GET', '/leave/requests?limit=100', admin, undefined, OFFICE_IP);
     const names = team.json().items.map((r: { user: { name: string } }) => r.user.name);
     expect(names).toContain('lv1');
     expect(names).not.toContain('counsellor2');
     const everyone = await api.call('GET', '/leave/requests?limit=100', sa);
-    expect(everyone.json().items.map((r: { user: { name: string } }) => r.user.name)).toContain('counsellor2');
+    expect(everyone.json().items.map((r: { user: { name: string } }) => r.user.name)).toContain(
+      'counsellor2',
+    );
 
-    expect((await api.call('GET', '/leave/requests', await asOffice('lv1'), undefined, OFFICE_IP)).statusCode).toBe(403);
+    expect(
+      (await api.call('GET', '/leave/requests', await asOffice('lv1'), undefined, OFFICE_IP))
+        .statusCode,
+    ).toBe(403);
   });
 
   it('filter by status and page through everything once', async () => {
     const approved = await api.call('GET', '/leave/requests?status=approved&limit=100', sa);
     expect(approved.json().items.length).toBeGreaterThan(0);
-    expect(approved.json().items.every((r: { status: string }) => r.status === 'approved')).toBe(true);
+    expect(approved.json().items.every((r: { status: string }) => r.status === 'approved')).toBe(
+      true,
+    );
 
     const seen: string[] = [];
     let cursor: string | null = null;
     let pages = 0;
     do {
-      const res = await api.call('GET', `/leave/requests?limit=3${cursor ? `&cursor=${cursor}` : ''}`, sa);
+      const res = await api.call(
+        'GET',
+        `/leave/requests?limit=3${cursor ? `&cursor=${cursor}` : ''}`,
+        sa,
+      );
       seen.push(...res.json().items.map((r: { id: string }) => r.id));
       cursor = res.json().nextCursor;
       pages++;
     } while (cursor && pages < 40);
     expect(new Set(seen).size).toBe(seen.length);
-    const total = Number((await owner.query(`SELECT count(*) FROM leave_requests WHERE tenant_id = $1`, [fx.tenantId])).rows[0].count);
+    const total = Number(
+      (await owner.query(`SELECT count(*) FROM leave_requests WHERE tenant_id = $1`, [fx.tenantId]))
+        .rows[0].count,
+    );
     expect(seen.length).toBe(total);
   });
 });
@@ -505,43 +870,92 @@ describe('notifications', () => {
     expect(list.statusCode).toBe(200);
     const items = list.json().items;
     expect(items.length).toBeGreaterThan(0);
-    expect(items[0]).toMatchObject({ type: 'approval', readAt: null, payload: { event: 'leave_decided' } });
+    expect(items[0]).toMatchObject({
+      type: 'approval',
+      readAt: null,
+      payload: { event: 'leave_decided' },
+    });
 
-    const before = (await api.call('GET', '/notifications/unread-count', token, undefined, OFFICE_IP)).json().unread;
+    const before = (
+      await api.call('GET', '/notifications/unread-count', token, undefined, OFFICE_IP)
+    ).json().unread;
     expect(before).toBeGreaterThan(0);
 
-    const marked = await api.call('POST', '/notifications/read', token, { ids: [items[0].id] }, OFFICE_IP);
+    const marked = await api.call(
+      'POST',
+      '/notifications/read',
+      token,
+      { ids: [items[0].id] },
+      OFFICE_IP,
+    );
     expect(marked.json().marked).toBe(1);
-    expect((await api.call('GET', '/notifications/unread-count', token, undefined, OFFICE_IP)).json().unread).toBe(before - 1);
-    expect((await api.call('POST', '/notifications/read', token, { ids: [items[0].id] }, OFFICE_IP)).json().marked).toBe(0);
+    expect(
+      (await api.call('GET', '/notifications/unread-count', token, undefined, OFFICE_IP)).json()
+        .unread,
+    ).toBe(before - 1);
+    expect(
+      (
+        await api.call('POST', '/notifications/read', token, { ids: [items[0].id] }, OFFICE_IP)
+      ).json().marked,
+    ).toBe(0);
 
-    const unreadOnly = await api.call('GET', '/notifications?unreadOnly=true', token, undefined, OFFICE_IP);
+    const unreadOnly = await api.call(
+      'GET',
+      '/notifications?unreadOnly=true',
+      token,
+      undefined,
+      OFFICE_IP,
+    );
     expect(unreadOnly.json().items.every((n: { readAt: unknown }) => n.readAt === null)).toBe(true);
 
     await api.call('POST', '/notifications/read', token, { all: true }, OFFICE_IP);
-    expect((await api.call('GET', '/notifications/unread-count', token, undefined, OFFICE_IP)).json().unread).toBe(0);
+    expect(
+      (await api.call('GET', '/notifications/unread-count', token, undefined, OFFICE_IP)).json()
+        .unread,
+    ).toBe(0);
   });
 
   it('cannot be read or marked by someone else', async () => {
     const other = await asOffice('lv8');
     const theirs = await api.call('GET', '/notifications?limit=100', other, undefined, OFFICE_IP);
-    expect(theirs.json().items.every((n: { payload: { userName?: string } }) => n.payload.userName !== 'lv7')).toBe(true);
+    expect(
+      theirs
+        .json()
+        .items.every((n: { payload: { userName?: string } }) => n.payload.userName !== 'lv7'),
+    ).toBe(true);
 
-    const lv7Notification = (await owner.query(
-      `SELECT id::text FROM notifications WHERE tenant_id = $1 AND user_id = $2 LIMIT 1`, [fx.tenantId, fx.user('lv7').id],
-    )).rows[0].id;
-    const attempt = await api.call('POST', '/notifications/read', other, { ids: [lv7Notification] }, OFFICE_IP);
+    const lv7Notification = (
+      await owner.query(
+        `SELECT id::text FROM notifications WHERE tenant_id = $1 AND user_id = $2 LIMIT 1`,
+        [fx.tenantId, fx.user('lv7').id],
+      )
+    ).rows[0].id;
+    const attempt = await api.call(
+      'POST',
+      '/notifications/read',
+      other,
+      { ids: [lv7Notification] },
+      OFFICE_IP,
+    );
     expect(attempt.json().marked).toBe(0);
   });
 
   it('pages and refuses a malformed request', async () => {
     const token = await asOffice('att5');
-    expect(errorCode(await api.call('POST', '/notifications/read', token, {}, OFFICE_IP))).toBe('VALIDATION_FAILED');
-    expect(errorCode(await api.call('POST', '/notifications/read', token, { ids: ['abc'] }, OFFICE_IP))).toBe('VALIDATION_FAILED');
+    expect(errorCode(await api.call('POST', '/notifications/read', token, {}, OFFICE_IP))).toBe(
+      'VALIDATION_FAILED',
+    );
+    expect(
+      errorCode(await api.call('POST', '/notifications/read', token, { ids: ['abc'] }, OFFICE_IP)),
+    ).toBe('VALIDATION_FAILED');
 
     const first = await api.call('GET', '/notifications?limit=1', sa);
     if (first.json().nextCursor) {
-      const second = await api.call('GET', `/notifications?limit=1&cursor=${first.json().nextCursor}`, sa);
+      const second = await api.call(
+        'GET',
+        `/notifications?limit=1&cursor=${first.json().nextCursor}`,
+        sa,
+      );
       expect(second.json().items[0]?.id).not.toBe(first.json().items[0].id);
     }
   });
@@ -550,41 +964,80 @@ describe('notifications', () => {
 // ================================================================== holidays added later
 
 describe('a holiday added or removed inside a leave', () => {
-  const decide = (id: string) => api.call('POST', `/leave/requests/${id}/decision`, admin, { decision: 'approved' }, OFFICE_IP);
-  const days = async (id: string) => (await owner.query(`SELECT days::float8 AS d, status FROM leave_requests WHERE id = $1`, [id])).rows[0] as { d: number; status: string };
+  const decide = (id: string) =>
+    api.call('POST', `/leave/requests/${id}/decision`, admin, { decision: 'approved' }, OFFICE_IP);
+  const days = async (id: string) =>
+    (await owner.query(`SELECT days::float8 AS d, status FROM leave_requests WHERE id = $1`, [id]))
+      .rows[0] as { d: number; status: string };
 
   it('gives the holiday back to the balance of an approved leave, and takes it again if the holiday is removed', async () => {
     const token = await asOffice('in1');
     const monday = await plusDays(await nextSunday(24), 1); // a week no other test uses
-    const made = await request(token, { leaveTypeId: await typeId('Casual Leave'), fromDate: monday, toDate: await plusDays(monday, 2) }, OFFICE_IP);
+    const made = await request(
+      token,
+      {
+        leaveTypeId: await typeId('Casual Leave'),
+        fromDate: monday,
+        toDate: await plusDays(monday, 2),
+      },
+      OFFICE_IP,
+    );
     expect(made.statusCode, made.body).toBe(201);
     const id = made.json().id as string;
     expect((await decide(id)).statusCode).toBe(200);
-    const before = (await balanceOf(token, 'Casual Leave', `?year=${monday.slice(0, 4)}`)).remaining as number;
+    const before = (await balanceOf(token, 'Casual Leave', `?year=${monday.slice(0, 4)}`))
+      .remaining as number;
 
-    const holiday = await api.call('POST', '/holidays', sa, { date: await plusDays(monday, 1), name: 'Added later' });
+    const holiday = await api.call('POST', '/holidays', sa, {
+      date: await plusDays(monday, 1),
+      name: 'Added later',
+    });
     expect(holiday.statusCode, holiday.body).toBe(201);
     expect(await days(id)).toEqual({ d: 2, status: 'approved' });
-    expect((await balanceOf(token, 'Casual Leave', `?year=${monday.slice(0, 4)}`)).remaining).toBe(before + 1);
+    expect((await balanceOf(token, 'Casual Leave', `?year=${monday.slice(0, 4)}`)).remaining).toBe(
+      before + 1,
+    );
 
     expect((await api.call('DELETE', `/holidays/${holiday.json().id}`, sa)).statusCode).toBe(204);
     expect(await days(id)).toEqual({ d: 3, status: 'approved' });
-    expect((await balanceOf(token, 'Casual Leave', `?year=${monday.slice(0, 4)}`)).remaining).toBe(before);
+    expect((await balanceOf(token, 'Casual Leave', `?year=${monday.slice(0, 4)}`)).remaining).toBe(
+      before,
+    );
   });
 
   it('cancels a request whose only working day becomes a holiday, and recounts waiting requests too', async () => {
     const token = await asOffice('in2');
     const tuesday = await plusDays(await nextSunday(17), 2);
-    const one = await request(token, { leaveTypeId: await typeId('Casual Leave'), fromDate: tuesday }, OFFICE_IP);
+    const one = await request(
+      token,
+      { leaveTypeId: await typeId('Casual Leave'), fromDate: tuesday },
+      OFFICE_IP,
+    );
     expect((await decide(one.json().id)).statusCode).toBe(200);
-    const waiting = await request(token, { leaveTypeId: await typeId('Sick Leave'), fromDate: await plusDays(tuesday, 1), toDate: await plusDays(tuesday, 2) }, OFFICE_IP);
+    const waiting = await request(
+      token,
+      {
+        leaveTypeId: await typeId('Sick Leave'),
+        fromDate: await plusDays(tuesday, 1),
+        toDate: await plusDays(tuesday, 2),
+      },
+      OFFICE_IP,
+    );
     expect(waiting.statusCode, waiting.body).toBe(201);
-    const before = (await balanceOf(token, 'Casual Leave', `?year=${tuesday.slice(0, 4)}`)).remaining as number;
+    const before = (await balanceOf(token, 'Casual Leave', `?year=${tuesday.slice(0, 4)}`))
+      .remaining as number;
 
-    const many = await api.call('POST', '/holidays/bulk', sa, { items: [{ date: tuesday, name: 'Festival' }, { date: await plusDays(tuesday, 2), name: 'Festival 2' }] });
+    const many = await api.call('POST', '/holidays/bulk', sa, {
+      items: [
+        { date: tuesday, name: 'Festival' },
+        { date: await plusDays(tuesday, 2), name: 'Festival 2' },
+      ],
+    });
     expect(many.statusCode, many.body).toBe(201);
     expect(await days(one.json().id)).toEqual({ d: 1, status: 'cancelled' });
-    expect((await balanceOf(token, 'Casual Leave', `?year=${tuesday.slice(0, 4)}`)).remaining).toBe(before + 1);
+    expect((await balanceOf(token, 'Casual Leave', `?year=${tuesday.slice(0, 4)}`)).remaining).toBe(
+      before + 1,
+    );
     expect(await days(waiting.json().id)).toEqual({ d: 1, status: 'pending' });
   });
 });

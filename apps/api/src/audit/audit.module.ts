@@ -4,5 +4,9 @@ import { AuditQueryService } from './audit-query.service.js';
 import { AuditService } from './audit.service.js';
 
 @Global()
-@Module({ controllers: [AuditController], providers: [AuditService, AuditQueryService], exports: [AuditService] })
+@Module({
+  controllers: [AuditController],
+  providers: [AuditService, AuditQueryService],
+  exports: [AuditService],
+})
 export class AuditModule {}

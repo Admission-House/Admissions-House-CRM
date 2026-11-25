@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Spinner, cx } from '@/components/ui';
-import { api, ApiError } from '@/lib/api';
+import { api, errorText } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { fromNow } from '@/lib/format';
 import { useRealtime, useRealtimeStatus } from '@/lib/realtime';
@@ -23,51 +23,244 @@ export interface Notification {
 }
 
 const REFUSED_REASON: Record<string, string> = {
-  network: 'wrong network', gps_missing: 'no location', gps_mocked: 'fake location', gps_inaccurate: 'location not exact', gps_far: 'too far from the office', not_configured: 'office not set up',
+  network: 'wrong network',
+  gps_missing: 'no location',
+  gps_mocked: 'fake location',
+  gps_inaccurate: 'location not exact',
+  gps_far: 'too far from the office',
+  not_configured: 'office not set up',
 };
 
 /** One line of text for each kind of notification the API sends. */
-export function describeNotification(n: Notification): { title: string; detail?: string; href?: string } {
+export function describeNotification(n: Notification): {
+  title: string;
+  detail?: string;
+  href?: string;
+} {
   const p = n.payload;
   const lead = typeof p.leadId === 'string' ? `/leads/${p.leadId}` : undefined;
   const name = typeof p.name === 'string' ? p.name : 'a lead';
   switch (p.event) {
-    case 'lead_assigned': return { title: `New lead assigned: ${name}`, detail: typeof p.source === 'string' ? `From ${p.source}` : undefined, href: lead };
-    case 'lead_unassigned': return { title: `Nobody was available for ${name}`, detail: 'It is waiting in the unassigned pool', href: lead };
-    case 'resource_download': return { title: `${name} asked to download: ${String(p.resource ?? 'a resource')}`, detail: typeof p.phone === 'string' ? p.phone : undefined, href: lead };
-    case 'repeat_enquiry': return { title: `${name} enquired again`, href: lead };
-    case 'followup_due': return { title: `Follow-up due: ${name}`, detail: typeof p.note === 'string' ? p.note : undefined, href: lead };
-    case 'missed_call': return { title: `Missed call from ${name}`, href: lead };
+    case 'lead_assigned':
+      return {
+        title: `New lead assigned: ${name}`,
+        detail: typeof p.source === 'string' ? `From ${p.source}` : undefined,
+        href: lead,
+      };
+    case 'lead_unassigned':
+      return {
+        title: `Nobody was available for ${name}`,
+        detail: 'It is waiting in the unassigned pool',
+        href: lead,
+      };
+    case 'resource_download':
+      return {
+        title: `${name} asked to download: ${String(p.resource ?? 'a resource')}`,
+        detail: typeof p.phone === 'string' ? p.phone : undefined,
+        href: lead,
+      };
+    case 'repeat_enquiry':
+      return { title: `${name} enquired again`, href: lead };
+    case 'followup_due':
+      return {
+        title: `Follow-up due: ${name}`,
+        detail: typeof p.note === 'string' ? p.note : undefined,
+        href: lead,
+      };
+    case 'missed_call':
+      return { title: `Missed call from ${name}`, href: lead };
     // Sent to the whole team: it opens nothing, because most of them cannot open someone else's lead.
-    case 'lead_won': return { title: `${String(p.winnerName ?? 'A counsellor')} won an admission`, detail: `Lead ${String(p.leadNo ?? '')} moved to ${String(p.status ?? 'won')}. Well done!` };
-    case 'import_finished': return { title: `Import finished: ${String(p.fileName ?? '')}`, detail: `${String(p.created ?? 0)} new, ${String(p.attached ?? 0)} repeats, ${String(p.failed ?? 0)} failed` };
-    case 'leads_imported': return { title: `${String(p.count ?? 0)} leads were added for you`, detail: typeof p.fileName === 'string' ? p.fileName : undefined, href: '/leads' };
-    case 'leads_assigned': return { title: `${String(p.count ?? 0)} leads were given to you`, detail: typeof p.by === 'string' ? `By ${p.by}` : undefined, href: '/leads' };
-    case 'leave_requested': return { title: `${String(p.userName ?? 'Someone')} asked for leave`, detail: `${String(p.leaveType ?? '')}, ${String(p.fromDate ?? '')}${p.toDate && p.toDate !== p.fromDate ? ` to ${String(p.toDate)}` : ''}${p.half ? ` (half day, ${String(p.half)} half)` : ''}`, href: '/leave' };
-    case 'leave_decided': return { title: `Your leave was ${p.decision === 'approved' ? 'approved' : 'turned down'}`, detail: [typeof p.decidedBy === 'string' ? `By ${p.decidedBy}` : '', typeof p.note === 'string' ? p.note : ''].filter(Boolean).join('. ') || undefined, href: '/leave' };
-    case 'break_over': return { title: `${String(p.userName ?? 'Someone')} took longer than their ${String(p.breakName ?? 'break').toLowerCase()} time`, detail: `${String(p.usedMinutes ?? '')} min taken, ${String(p.allowedMinutes ?? '')} allowed`, href: '/attendance' };
-    case 'break_limit_signout': return { title: `${String(p.userName ?? 'Someone')} was signed out: break time reached the limit`, detail: `${String(p.usedMinutes ?? '')} min taken, limit ${String(p.limitMinutes ?? '')} min`, href: '/attendance' };
-    case 'idle_logout': return { title: `${String(p.userName ?? 'Someone')} was signed out for inactivity`, detail: `No activity for ${String(p.idleMinutes ?? 30)} minutes`, href: '/attendance' };
-    case 'login_ok': return { title: `${String(p.userName ?? 'Someone')} signed in`, detail: [typeof p.role === 'string' ? p.role : '', p.clientType === 'mobile' ? 'Phone' : 'Web'].filter(Boolean).join(' · '), href: '/settings/sessions' };
+    case 'lead_won':
+      return {
+        title: `${String(p.winnerName ?? 'A counsellor')} won an admission`,
+        detail: `Lead ${String(p.leadNo ?? '')} moved to ${String(p.status ?? 'won')}. Well done!`,
+      };
+    case 'import_finished':
+      return {
+        title: `Import finished: ${String(p.fileName ?? '')}`,
+        detail: `${String(p.created ?? 0)} new, ${String(p.attached ?? 0)} repeats, ${String(p.failed ?? 0)} failed`,
+      };
+    case 'leads_imported':
+      return {
+        title: `${String(p.count ?? 0)} leads were added for you`,
+        detail: typeof p.fileName === 'string' ? p.fileName : undefined,
+        href: '/leads',
+      };
+    case 'leads_assigned':
+      return {
+        title: `${String(p.count ?? 0)} leads were given to you`,
+        detail: typeof p.by === 'string' ? `By ${p.by}` : undefined,
+        href: '/leads',
+      };
+    case 'leave_requested':
+      return {
+        title: `${String(p.userName ?? 'Someone')} asked for leave`,
+        detail: `${String(p.leaveType ?? '')}, ${String(p.fromDate ?? '')}${p.toDate && p.toDate !== p.fromDate ? ` to ${String(p.toDate)}` : ''}${p.half ? ` (half day, ${String(p.half)} half)` : ''}`,
+        href: '/leave',
+      };
+    case 'leave_decided':
+      return {
+        title: `Your leave was ${p.decision === 'approved' ? 'approved' : 'turned down'}`,
+        detail:
+          [
+            typeof p.decidedBy === 'string' ? `By ${p.decidedBy}` : '',
+            typeof p.note === 'string' ? p.note : '',
+          ]
+            .filter(Boolean)
+            .join('. ') || undefined,
+        href: '/leave',
+      };
+    case 'break_over':
+      return {
+        title: `${String(p.userName ?? 'Someone')} took longer than their ${String(p.breakName ?? 'break').toLowerCase()} time`,
+        detail: `${String(p.usedMinutes ?? '')} min taken, ${String(p.allowedMinutes ?? '')} allowed`,
+        href: '/attendance',
+      };
+    case 'break_limit_signout':
+      return {
+        title: `${String(p.userName ?? 'Someone')} was signed out: break time reached the limit`,
+        detail: `${String(p.usedMinutes ?? '')} min taken, limit ${String(p.limitMinutes ?? '')} min`,
+        href: '/attendance',
+      };
+    case 'idle_logout':
+      return {
+        title: `${String(p.userName ?? 'Someone')} was signed out for inactivity`,
+        detail: `No activity for ${String(p.idleMinutes ?? 30)} minutes`,
+        href: '/attendance',
+      };
+    case 'login_ok':
+      return {
+        title: `${String(p.userName ?? 'Someone')} signed in`,
+        detail: [
+          typeof p.role === 'string' ? p.role : '',
+          p.clientType === 'mobile' ? 'Phone' : 'Web',
+        ]
+          .filter(Boolean)
+          .join(' · '),
+        href: '/settings/sessions',
+      };
     case 'remote_signin_request': {
-      const km = typeof p.distanceM === 'number' ? (p.distanceM >= 1000 ? `${(p.distanceM / 1000).toFixed(1)} km from the office` : `${p.distanceM} m from the office`) : 'location not shared';
-      return { title: `${String(p.userName ?? 'Someone')} wants to sign in from outside the office`, detail: [typeof p.reason === 'string' ? `"${p.reason}"` : '', km].filter(Boolean).join(' · ') };
+      const km =
+        typeof p.distanceM === 'number'
+          ? p.distanceM >= 1000
+            ? `${(p.distanceM / 1000).toFixed(1)} km from the office`
+            : `${p.distanceM} m from the office`
+          : 'location not shared';
+      return {
+        title: `${String(p.userName ?? 'Someone')} wants to sign in from outside the office`,
+        detail: [typeof p.reason === 'string' ? `"${p.reason}"` : '', km]
+          .filter(Boolean)
+          .join(' · '),
+      };
     }
-    case 'login_refused': return { title: `${String(p.userName ?? 'Someone')} was refused at sign-in`, detail: p.reason === 'device_rooted' ? 'This phone is rooted or jailbroken' : `Not at the office (${REFUSED_REASON[String(p.reason)] ?? String(p.reason ?? 'outside the office')})`, href: '/attendance' };
-    case 'computer_request': return { title: `${String(p.userName ?? 'Someone')} is waiting to sign in from a new computer`, detail: [typeof p.label === 'string' ? p.label : '', typeof p.ip === 'string' ? `from ${p.ip}` : ''].filter(Boolean).join(' · ') + '. Approve it in Settings, Devices.', href: '/settings/devices' };
-    case 'forced_logout': return { title: `${String(p.userName ?? 'Someone')} was signed out by an admin`, href: '/settings/sessions' };
-    case 'attendance_exception': return { title: `Attendance marked by hand for ${String(p.userName ?? 'someone')}`, detail: [typeof p.date === 'string' ? p.date : '', typeof p.reason === 'string' ? p.reason : ''].filter(Boolean).join(': ') || undefined, href: '/attendance' };
-    case 'comm_incoming': return { title: `Incoming ${p.kind === 'voice' ? 'voice' : 'video'} call from ${String(p.fromName ?? 'a colleague')}`, detail: typeof p.leadName === 'string' ? `About ${p.leadName}` : undefined, href: typeof p.sessionId === 'string' ? `/video/${p.sessionId}` : '/communications' };
-    case 'comm_missed': return { title: `Missed ${p.kind === 'voice' ? 'voice' : 'video'} call from ${String(p.fromName ?? 'a colleague')}`, detail: typeof p.leadName === 'string' ? `About ${p.leadName}` : undefined, href: '/communications' };
-    case 'comm_declined': return { title: `${String(p.fromName ?? 'Your colleague')} turned down your call`, href: '/communications' };
-    case 'comm_meeting_invite': return { title: `Meeting invitation: ${String(p.title ?? 'a meeting')}`, detail: [typeof p.fromName === 'string' ? `From ${p.fromName}` : '', typeof p.scheduledFor === 'string' ? new Date(p.scheduledFor).toLocaleString('en-IN') : ''].filter(Boolean).join(', ') || undefined, href: '/communications' };
-    case 'comm_meeting_reminder': return { title: `Meeting soon: ${String(p.title ?? 'a meeting')}`, detail: typeof p.scheduledFor === 'string' ? new Date(p.scheduledFor).toLocaleString('en-IN') : undefined, href: typeof p.sessionId === 'string' ? `/video/${p.sessionId}` : '/communications' };
-    case 'comm_meeting_started': return { title: `${String(p.title ?? 'A meeting')} has started`, detail: typeof p.fromName === 'string' ? `Hosted by ${p.fromName}` : undefined, href: typeof p.sessionId === 'string' ? `/video/${p.sessionId}` : '/communications' };
-    case 'comm_ended': return { title: p.cancelled ? `${String(p.title ?? 'A session')} was cancelled` : `${String(p.title ?? 'A session')} has ended`, detail: typeof p.fromName === 'string' ? `By ${p.fromName}` : undefined, href: '/communications' };
-    case 'comm_recording_ready': return { title: `Recording ready: ${String(p.title ?? (p.kind === 'voice' ? 'voice call' : 'video call'))}`, href: '/communications' };
-    case 'comm_recording_failed': return { title: `Recording failed: ${String(p.title ?? (p.kind === 'voice' ? 'voice call' : 'video call'))}`, detail: typeof p.reason === 'string' ? p.reason : undefined, href: '/communications' };
-    case 'download': return { title: `${String(p.userName ?? 'Someone')} downloaded ${String(p.what ?? 'a file')}`, detail: typeof p.fileName === 'string' ? p.fileName : undefined, href: '/settings/audit' };
-    default: return { title: n.type.replace(/_/g, ' ') };
+    case 'login_refused':
+      return {
+        title: `${String(p.userName ?? 'Someone')} was refused at sign-in`,
+        detail:
+          p.reason === 'device_rooted'
+            ? 'This phone is rooted or jailbroken'
+            : `Not at the office (${REFUSED_REASON[String(p.reason)] ?? String(p.reason ?? 'outside the office')})`,
+        href: '/attendance',
+      };
+    case 'computer_request':
+      return {
+        title: `${String(p.userName ?? 'Someone')} is waiting to sign in from a new computer`,
+        detail:
+          [
+            typeof p.label === 'string' ? p.label : '',
+            typeof p.ip === 'string' ? `from ${p.ip}` : '',
+          ]
+            .filter(Boolean)
+            .join(' · ') + '. Approve it in Settings, Devices.',
+        href: '/settings/devices',
+      };
+    case 'forced_logout':
+      return {
+        title: `${String(p.userName ?? 'Someone')} was signed out by an admin`,
+        href: '/settings/sessions',
+      };
+    case 'attendance_exception':
+      return {
+        title: `Attendance marked by hand for ${String(p.userName ?? 'someone')}`,
+        detail:
+          [typeof p.date === 'string' ? p.date : '', typeof p.reason === 'string' ? p.reason : '']
+            .filter(Boolean)
+            .join(': ') || undefined,
+        href: '/attendance',
+      };
+    case 'comm_incoming':
+      return {
+        title: `Incoming ${p.kind === 'voice' ? 'voice' : 'video'} call from ${String(p.fromName ?? 'a colleague')}`,
+        detail: typeof p.leadName === 'string' ? `About ${p.leadName}` : undefined,
+        href: typeof p.sessionId === 'string' ? `/video/${p.sessionId}` : '/communications',
+      };
+    case 'comm_missed':
+      return {
+        title: `Missed ${p.kind === 'voice' ? 'voice' : 'video'} call from ${String(p.fromName ?? 'a colleague')}`,
+        detail: typeof p.leadName === 'string' ? `About ${p.leadName}` : undefined,
+        href: '/communications',
+      };
+    case 'comm_declined':
+      return {
+        title: `${String(p.fromName ?? 'Your colleague')} turned down your call`,
+        href: '/communications',
+      };
+    case 'comm_meeting_invite':
+      return {
+        title: `Meeting invitation: ${String(p.title ?? 'a meeting')}`,
+        detail:
+          [
+            typeof p.fromName === 'string' ? `From ${p.fromName}` : '',
+            typeof p.scheduledFor === 'string'
+              ? new Date(p.scheduledFor).toLocaleString('en-IN')
+              : '',
+          ]
+            .filter(Boolean)
+            .join(', ') || undefined,
+        href: '/communications',
+      };
+    case 'comm_meeting_reminder':
+      return {
+        title: `Meeting soon: ${String(p.title ?? 'a meeting')}`,
+        detail:
+          typeof p.scheduledFor === 'string'
+            ? new Date(p.scheduledFor).toLocaleString('en-IN')
+            : undefined,
+        href: typeof p.sessionId === 'string' ? `/video/${p.sessionId}` : '/communications',
+      };
+    case 'comm_meeting_started':
+      return {
+        title: `${String(p.title ?? 'A meeting')} has started`,
+        detail: typeof p.fromName === 'string' ? `Hosted by ${p.fromName}` : undefined,
+        href: typeof p.sessionId === 'string' ? `/video/${p.sessionId}` : '/communications',
+      };
+    case 'comm_ended':
+      return {
+        title: p.cancelled
+          ? `${String(p.title ?? 'A session')} was cancelled`
+          : `${String(p.title ?? 'A session')} has ended`,
+        detail: typeof p.fromName === 'string' ? `By ${p.fromName}` : undefined,
+        href: '/communications',
+      };
+    case 'comm_recording_ready':
+      return {
+        title: `Recording ready: ${String(p.title ?? (p.kind === 'voice' ? 'voice call' : 'video call'))}`,
+        href: '/communications',
+      };
+    case 'comm_recording_failed':
+      return {
+        title: `Recording failed: ${String(p.title ?? (p.kind === 'voice' ? 'voice call' : 'video call'))}`,
+        detail: typeof p.reason === 'string' ? p.reason : undefined,
+        href: '/communications',
+      };
+    case 'download':
+      return {
+        title: `${String(p.userName ?? 'Someone')} downloaded ${String(p.what ?? 'a file')}`,
+        detail: typeof p.fileName === 'string' ? p.fileName : undefined,
+        href: '/settings/audit',
+      };
+    default:
+      return { title: n.type.replace(/_/g, ' ') };
   }
 }
 
@@ -85,7 +278,10 @@ function subscribeMute(onChange: () => void): () => void {
 /** Approve or reject a request to sign in from outside the office, right from the notification. */
 export function RemoteSigninActions({ n }: { n: Notification }) {
   const { can } = useAuth();
-  const requestId = n.payload.event === 'remote_signin_request' && typeof n.payload.requestId === 'string' ? n.payload.requestId : null;
+  const requestId =
+    n.payload.event === 'remote_signin_request' && typeof n.payload.requestId === 'string'
+      ? n.payload.requestId
+      : null;
   const expiresAt = typeof n.payload.expiresAt === 'string' ? n.payload.expiresAt : undefined;
   const [busy, setBusy] = useState<'approve' | 'reject' | null>(null);
   const [done, setDone] = useState<string | null>(null);
@@ -93,22 +289,37 @@ export function RemoteSigninActions({ n }: { n: Notification }) {
   if (!requestId || !can('attendance.exception')) return null;
   if (done) return <p className="px-4 pb-3 pl-9 text-xs font-medium text-muted">{done}</p>;
   // Shown only while it can still be answered: a request expires after a few minutes.
-  if (expiresAt && new Date(expiresAt).getTime() < shownAt) return <p className="px-4 pb-3 pl-9 text-xs text-subtle">Expired</p>;
+  if (expiresAt && new Date(expiresAt).getTime() < shownAt)
+    return <p className="px-4 pb-3 pl-9 text-xs text-subtle">Expired</p>;
   async function act(what: 'approve' | 'reject') {
     setBusy(what);
     try {
       await api(`/remote-signins/${requestId}/${what}`, { method: 'POST', body: {} });
       setDone(what === 'approve' ? 'Approved. They are being signed in.' : 'Rejected.');
     } catch (e) {
-      setDone(e instanceof ApiError ? e.message : 'Cannot reach the server. Try again.');
+      setDone(errorText(e));
     } finally {
       setBusy(null);
     }
   }
   return (
     <div className="flex gap-2 px-4 pb-3 pl-9">
-      <button type="button" disabled={!!busy} onClick={() => void act('approve')} className="h-8 rounded-md bg-brand px-3 text-xs font-semibold text-white hover:bg-brand-600 disabled:opacity-60">{busy === 'approve' ? 'Approving…' : 'Approve'}</button>
-      <button type="button" disabled={!!busy} onClick={() => void act('reject')} className="h-8 rounded-md border border-line-strong px-3 text-xs font-semibold text-ink hover:bg-head disabled:opacity-60">{busy === 'reject' ? 'Rejecting…' : 'Reject'}</button>
+      <button
+        type="button"
+        disabled={!!busy}
+        onClick={() => void act('approve')}
+        className="h-8 rounded-md bg-brand px-3 text-xs font-semibold text-white hover:bg-brand-600 disabled:opacity-60"
+      >
+        {busy === 'approve' ? 'Approving…' : 'Approve'}
+      </button>
+      <button
+        type="button"
+        disabled={!!busy}
+        onClick={() => void act('reject')}
+        className="h-8 rounded-md border border-line-strong px-3 text-xs font-semibold text-ink hover:bg-head disabled:opacity-60"
+      >
+        {busy === 'reject' ? 'Rejecting…' : 'Reject'}
+      </button>
     </div>
   );
 }
@@ -138,7 +349,14 @@ export function NotificationBell() {
 
   // A new notification shows at once while the live connection is up; the timer is the fallback when it is not.
   const live = useRealtimeStatus();
-  useRealtime(['notification'], () => { count.reload(); list.reload(); }, 1_000);
+  useRealtime(
+    ['notification'],
+    () => {
+      count.reload();
+      list.reload();
+    },
+    1_000,
+  );
   useEffect(() => {
     const id = setInterval(count.reload, live ? 300_000 : 60_000);
     return () => clearInterval(id);
@@ -155,7 +373,9 @@ export function NotificationBell() {
   async function openOne(n: Notification) {
     const { href } = describeNotification(n);
     if (!n.readAt) {
-      await api('/notifications/read', { method: 'POST', body: { ids: [n.id] } }).catch(() => undefined);
+      await api('/notifications/read', { method: 'POST', body: { ids: [n.id] } }).catch(
+        () => undefined,
+      );
       count.reload();
     }
     setOpen(false);
@@ -164,23 +384,60 @@ export function NotificationBell() {
 
   return (
     <div ref={box} className="relative">
-      <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-label={unread > 0 ? `${unread} unread notifications` : 'Notifications'} className="relative grid h-8 w-8 place-items-center rounded-md text-muted hover:bg-head hover:text-ink">
-        {muted ? <BellOff className="h-[18px] w-[18px]" aria-hidden /> : <Bell className="h-[18px] w-[18px]" aria-hidden />}
-        {unread > 0 && <span className="tabular absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-bad px-1 text-xs font-bold text-white">{unread > 99 ? '99+' : unread}</span>}
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-label={unread > 0 ? `${unread} unread notifications` : 'Notifications'}
+        className="relative grid h-8 w-8 place-items-center rounded-md text-muted hover:bg-head hover:text-ink"
+      >
+        {muted ? (
+          <BellOff className="h-[18px] w-[18px]" aria-hidden />
+        ) : (
+          <Bell className="h-[18px] w-[18px]" aria-hidden />
+        )}
+        {unread > 0 && (
+          <span className="tabular absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-bad px-1 text-xs font-bold text-white">
+            {unread > 99 ? '99+' : unread}
+          </span>
+        )}
       </button>
       {open && (
         <div className="absolute right-0 z-30 mt-2 w-96 max-w-[92vw] overflow-hidden rounded-lg border border-line bg-surface shadow-lg">
           <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
             <p className="text-sm font-semibold">Notifications</p>
             <div className="flex items-center gap-3">
-              <button type="button" onClick={toggleMute} aria-pressed={muted} title={muted ? 'Sound is off. Click to turn it on.' : 'Sound is on. Click to mute.'} className="flex items-center gap-1 text-xs font-medium text-muted hover:text-ink">
-                {muted ? <><BellOff className="h-3.5 w-3.5" aria-hidden /> Unmute</> : <><Volume2 className="h-3.5 w-3.5" aria-hidden /> Mute</>}
+              <button
+                type="button"
+                onClick={toggleMute}
+                aria-pressed={muted}
+                title={muted ? 'Sound is off. Click to turn it on.' : 'Sound is on. Click to mute.'}
+                className="flex items-center gap-1 text-xs font-medium text-muted hover:text-ink"
+              >
+                {muted ? (
+                  <>
+                    <BellOff className="h-3.5 w-3.5" aria-hidden /> Unmute
+                  </>
+                ) : (
+                  <>
+                    <Volume2 className="h-3.5 w-3.5" aria-hidden /> Mute
+                  </>
+                )}
               </button>
-              {unread > 0 && <button onClick={() => void markAllRead()} className="flex items-center gap-1 text-xs font-medium text-brand-600 hover:underline"><CheckCheck className="h-3.5 w-3.5" aria-hidden /> Mark all read</button>}
+              {unread > 0 && (
+                <button
+                  onClick={() => void markAllRead()}
+                  className="flex items-center gap-1 text-xs font-medium text-brand-600 hover:underline"
+                >
+                  <CheckCheck className="h-3.5 w-3.5" aria-hidden /> Mark all read
+                </button>
+              )}
             </div>
           </div>
           <div className="max-h-96 overflow-y-auto">
-            {list.loading && !list.data ? <Spinner /> : (list.data?.items.length ?? 0) === 0 ? (
+            {list.loading && !list.data ? (
+              <Spinner />
+            ) : (list.data?.items.length ?? 0) === 0 ? (
               <p className="px-4 py-10 text-center text-sm text-muted">You are all caught up.</p>
             ) : (
               <ul className="divide-y divide-line">
@@ -188,12 +445,29 @@ export function NotificationBell() {
                   const t = describeNotification(n);
                   return (
                     <li key={n.id}>
-                      <button onClick={() => void openOne(n)} className={cx('flex w-full gap-3 px-4 py-3 text-left hover:bg-head', !n.readAt && 'bg-mint-50', n.payload.event === 'remote_signin_request' && 'pb-2')}>
-                        <span className={cx('mt-1.5 h-2 w-2 shrink-0 rounded-full', n.readAt ? 'bg-transparent' : 'bg-teal-600')} aria-hidden />
+                      <button
+                        onClick={() => void openOne(n)}
+                        className={cx(
+                          'flex w-full gap-3 px-4 py-3 text-left hover:bg-head',
+                          !n.readAt && 'bg-mint-50',
+                          n.payload.event === 'remote_signin_request' && 'pb-2',
+                        )}
+                      >
+                        <span
+                          className={cx(
+                            'mt-1.5 h-2 w-2 shrink-0 rounded-full',
+                            n.readAt ? 'bg-transparent' : 'bg-teal-600',
+                          )}
+                          aria-hidden
+                        />
                         <span className="min-w-0">
                           <span className="block text-sm font-medium text-ink">{t.title}</span>
-                          {t.detail && <span className="block truncate text-xs text-muted">{t.detail}</span>}
-                          <span className="mt-0.5 block text-xs text-subtle">{fromNow(n.createdAt)}</span>
+                          {t.detail && (
+                            <span className="block truncate text-xs text-muted">{t.detail}</span>
+                          )}
+                          <span className="mt-0.5 block text-xs text-subtle">
+                            {fromNow(n.createdAt)}
+                          </span>
                         </span>
                       </button>
                       <RemoteSigninActions n={n} />
@@ -203,7 +477,13 @@ export function NotificationBell() {
               </ul>
             )}
           </div>
-          <Link href="/notifications" onClick={() => setOpen(false)} className="block border-t border-line px-4 py-2.5 text-center text-sm font-medium text-brand-600 hover:bg-head">See all notifications</Link>
+          <Link
+            href="/notifications"
+            onClick={() => setOpen(false)}
+            className="block border-t border-line px-4 py-2.5 text-center text-sm font-medium text-brand-600 hover:bg-head"
+          >
+            See all notifications
+          </Link>
         </div>
       )}
     </div>

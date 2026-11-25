@@ -13,12 +13,17 @@ export class IntakeRetryService implements OnModuleInit {
   constructor(
     private readonly intake: IntakeService,
     @Inject(ENV) private readonly env: Env,
-  
+
     private readonly jobs: JobRegistry,
   ) {}
 
   onModuleInit(): void {
-    this.jobs.register({ name: 'intake-retry', group: 'minute', everySec: this.env.INTAKE_RETRY_INTERVAL_SEC, run: () => this.run() });
+    this.jobs.register({
+      name: 'intake-retry',
+      group: 'minute',
+      everySec: this.env.INTAKE_RETRY_INTERVAL_SEC,
+      run: () => this.run(),
+    });
   }
 
   async run(): Promise<void> {

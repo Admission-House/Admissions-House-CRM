@@ -4,7 +4,15 @@ import { calendarDate } from '../common/dates.js';
 import { pageQuerySchema } from '../common/pagination.js';
 import { changeStatusSchema } from '../leads/leads.dto.js';
 
-export const OUTCOMES = ['requested', 'ringing', 'connected', 'not_picked', 'busy', 'failed', 'missed'] as const;
+export const OUTCOMES = [
+  'requested',
+  'ringing',
+  'connected',
+  'not_picked',
+  'busy',
+  'failed',
+  'missed',
+] as const;
 
 export const placeCallSchema = z.object({
   /** One of the lead's numbers. Leave out to call the main number. */
@@ -20,7 +28,10 @@ export const listCallsSchema = pageQuerySchema.extend({
   from: calendarDate.optional(),
   to: calendarDate.optional(),
   /** Calls whose after-call form has not been filled in. */
-  unwrapped: z.enum(['true', 'false']).transform((v) => v === 'true').optional(),
+  unwrapped: z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true')
+    .optional(),
 });
 export class ListCallsDto extends createZodDto(listCallsSchema) {}
 
@@ -38,9 +49,25 @@ export const logCallSchema = z
     phone: z.string().trim().max(20).optional(),
   })
   .superRefine((v, ctx) => {
-    const allowed = v.direction === 'incoming' ? ['connected', 'missed'] : ['connected', 'not_picked', 'busy', 'failed'];
-    if (!allowed.includes(v.outcome)) ctx.addIssue({ code: 'custom', path: ['outcome'], message: v.direction === 'incoming' ? 'A call from the student was either answered or missed' : 'Choose what happened on the call' });
-    if (v.outcome !== 'connected' && v.minutes !== undefined && v.minutes > 0) ctx.addIssue({ code: 'custom', path: ['minutes'], message: 'Talk time is only for a connected call' });
+    const allowed =
+      v.direction === 'incoming'
+        ? ['connected', 'missed']
+        : ['connected', 'not_picked', 'busy', 'failed'];
+    if (!allowed.includes(v.outcome))
+      ctx.addIssue({
+        code: 'custom',
+        path: ['outcome'],
+        message:
+          v.direction === 'incoming'
+            ? 'A call from the student was either answered or missed'
+            : 'Choose what happened on the call',
+      });
+    if (v.outcome !== 'connected' && v.minutes !== undefined && v.minutes > 0)
+      ctx.addIssue({
+        code: 'custom',
+        path: ['minutes'],
+        message: 'Talk time is only for a connected call',
+      });
   });
 export class LogCallDto extends createZodDto(logCallSchema) {}
 

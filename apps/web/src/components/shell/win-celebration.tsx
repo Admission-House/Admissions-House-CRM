@@ -46,7 +46,13 @@ export function WinCelebration() {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const current = useMemo(
-    () => (wins.data?.items ?? []).find((n) => n.payload.event === 'lead_won' && !gone.has(n.id) && now - new Date(n.createdAt).getTime() < FRESH_MS) ?? null,
+    () =>
+      (wins.data?.items ?? []).find(
+        (n) =>
+          n.payload.event === 'lead_won' &&
+          !gone.has(n.id) &&
+          now - new Date(n.createdAt).getTime() < FRESH_MS,
+      ) ?? null,
     [wins.data, gone, now],
   );
 
@@ -59,7 +65,9 @@ export function WinCelebration() {
     if (!current) return;
     writeSeen([...readSeen().filter((id) => id !== current.id), current.id]);
     timer.current = setTimeout(() => setGone((g) => new Set(g).add(current.id)), SHOW_MS);
-    return () => { if (timer.current) clearTimeout(timer.current); };
+    return () => {
+      if (timer.current) clearTimeout(timer.current);
+    };
   }, [current]);
 
   if (!current || !me) return null;
@@ -71,21 +79,39 @@ export function WinCelebration() {
   async function close() {
     if (!current) return;
     setGone((g) => new Set(g).add(current.id));
-    await api('/notifications/read', { method: 'POST', body: { ids: [current.id] } }).catch(() => undefined);
+    await api('/notifications/read', { method: 'POST', body: { ids: [current.id] } }).catch(
+      () => undefined,
+    );
   }
 
   return (
-    <div role="status" aria-live="polite" className="fixed bottom-4 right-4 z-40 w-[22rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-warn/40 bg-surface shadow-2xl">
+    <div
+      role="status"
+      aria-live="polite"
+      className="fixed bottom-4 right-4 z-40 w-[22rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-warn/40 bg-surface shadow-2xl"
+    >
       <div className="h-1 bg-gradient-to-r from-warn via-teal to-brand" aria-hidden />
       <div className="flex gap-3 p-4">
-        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-warn/15 text-warn"><Trophy className="h-6 w-6" aria-hidden /></span>
+        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-warn/15 text-warn">
+          <Trophy className="h-6 w-6" aria-hidden />
+        </span>
         <div className="min-w-0 flex-1">
-          <p className="font-semibold text-ink">{mine ? 'You won an admission!' : `${winner} won an admission`}</p>
+          <p className="font-semibold text-ink">
+            {mine ? 'You won an admission!' : `${winner} won an admission`}
+          </p>
           <p className="mt-0.5 text-sm text-muted">
-            Lead {String(p.leadNo ?? '')} moved to {typeof p.status === 'string' ? p.status : 'won'}. {mine ? 'Great work, keep it going.' : `Well done, ${first}!`}
+            Lead {String(p.leadNo ?? '')} moved to {typeof p.status === 'string' ? p.status : 'won'}
+            . {mine ? 'Great work, keep it going.' : `Well done, ${first}!`}
           </p>
         </div>
-        <button type="button" onClick={() => void close()} aria-label="Close" className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-subtle hover:bg-head hover:text-ink"><X className="h-4 w-4" /></button>
+        <button
+          type="button"
+          onClick={() => void close()}
+          aria-label="Close"
+          className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-subtle hover:bg-head hover:text-ink"
+        >
+          <X className="h-4 w-4" />
+        </button>
       </div>
     </div>
   );

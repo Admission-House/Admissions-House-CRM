@@ -11,7 +11,13 @@ const codeOf = (fn: () => unknown): string | undefined => {
 };
 
 const filler = (n: number) => Buffer.alloc(n, 0x20);
-export const jpeg = () => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]), Buffer.from('JFIF'), filler(60), Buffer.from([0xff, 0xd9])]);
+export const jpeg = () =>
+  Buffer.concat([
+    Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]),
+    Buffer.from('JFIF'),
+    filler(60),
+    Buffer.from([0xff, 0xd9]),
+  ]);
 export const png = () => {
   const header = Buffer.alloc(8 + 4 + 4 + 13);
   Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(header, 0);
@@ -19,13 +25,29 @@ export const png = () => {
   header.write('IHDR', 12, 'latin1');
   return Buffer.concat([header, filler(40)]);
 };
-export const pdf = (body = '1 0 obj << /Type /Catalog >> endobj') => Buffer.from(`%PDF-1.4\n${body}\ntrailer << >>\n%%EOF\n`);
+export const pdf = (body = '1 0 obj << /Type /Catalog >> endobj') =>
+  Buffer.from(`%PDF-1.4\n${body}\ntrailer << >>\n%%EOF\n`);
 
 describe('sniffFile', () => {
   it('recognises a JPEG, a PNG and a PDF by their first bytes', () => {
-    expect(sniffFile(jpeg())).toMatchObject({ type: 'jpeg', mime: 'image/jpeg', ext: 'jpg', isImage: true });
-    expect(sniffFile(png())).toMatchObject({ type: 'png', mime: 'image/png', ext: 'png', isImage: true });
-    expect(sniffFile(pdf())).toMatchObject({ type: 'pdf', mime: 'application/pdf', ext: 'pdf', isImage: false });
+    expect(sniffFile(jpeg())).toMatchObject({
+      type: 'jpeg',
+      mime: 'image/jpeg',
+      ext: 'jpg',
+      isImage: true,
+    });
+    expect(sniffFile(png())).toMatchObject({
+      type: 'png',
+      mime: 'image/png',
+      ext: 'png',
+      isImage: true,
+    });
+    expect(sniffFile(pdf())).toMatchObject({
+      type: 'pdf',
+      mime: 'application/pdf',
+      ext: 'pdf',
+      isImage: false,
+    });
   });
 
   it.each([
@@ -35,7 +57,10 @@ describe('sniffFile', () => {
     ['an HTML page', Buffer.from('<html><script>alert(1)</script></html>' + ' '.repeat(20))],
     ['a GIF', Buffer.concat([Buffer.from('GIF89a'), filler(40)])],
     ['a zip archive', Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), filler(40)])],
-    ['an SVG picture', Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>1</script></svg>')],
+    [
+      'an SVG picture',
+      Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>1</script></svg>'),
+    ],
     ['something too short', Buffer.from([0xff, 0xd8, 0xff])],
     ['nothing', Buffer.alloc(0)],
   ])('refuses %s', (_n, data) => {
@@ -51,7 +76,9 @@ describe('sniffFile', () => {
     const broken = png();
     broken.write('XXXX', 12, 'latin1');
     expect(sniffFile(broken)).toBeNull();
-    expect(sniffFile(Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0x01]), filler(40)]))).toBeNull();
+    expect(
+      sniffFile(Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0x01]), filler(40)])),
+    ).toBeNull();
   });
 });
 
@@ -113,23 +140,50 @@ describe('assertDocumentRules', () => {
   const doc: FileKind = { type: 'pdf', mime: 'application/pdf', ext: 'pdf', isImage: false };
 
   it('wants an admission document to belong to a shortlisted institute, and nothing else to', () => {
-    expect(codeOf(() => assertDocumentRules({ docType: 'admission', hasShortlist: false, kind: doc }))).toBe('SHORTLIST_REQUIRED');
-    expect(codeOf(() => assertDocumentRules({ docType: 'admission', hasShortlist: true, kind: doc }))).toBeUndefined();
-    for (const docType of ['aadhaar', 'tenth', 'twelfth', 'graduation', 'photo', 'signature'] as const) {
-      expect(codeOf(() => assertDocumentRules({ docType, hasShortlist: true, kind: image }))).toBe('SHORTLIST_NOT_ALLOWED');
+    expect(
+      codeOf(() => assertDocumentRules({ docType: 'admission', hasShortlist: false, kind: doc })),
+    ).toBe('SHORTLIST_REQUIRED');
+    expect(
+      codeOf(() => assertDocumentRules({ docType: 'admission', hasShortlist: true, kind: doc })),
+    ).toBeUndefined();
+    for (const docType of [
+      'aadhaar',
+      'tenth',
+      'twelfth',
+      'graduation',
+      'photo',
+      'signature',
+    ] as const) {
+      expect(codeOf(() => assertDocumentRules({ docType, hasShortlist: true, kind: image }))).toBe(
+        'SHORTLIST_NOT_ALLOWED',
+      );
     }
   });
 
   it('lets "other" go either way', () => {
-    expect(codeOf(() => assertDocumentRules({ docType: 'other', hasShortlist: true, kind: doc }))).toBeUndefined();
-    expect(codeOf(() => assertDocumentRules({ docType: 'other', hasShortlist: false, kind: doc }))).toBeUndefined();
+    expect(
+      codeOf(() => assertDocumentRules({ docType: 'other', hasShortlist: true, kind: doc })),
+    ).toBeUndefined();
+    expect(
+      codeOf(() => assertDocumentRules({ docType: 'other', hasShortlist: false, kind: doc })),
+    ).toBeUndefined();
   });
 
   it('wants a photo and a signature to be pictures, and lets certificates be either', () => {
-    expect(codeOf(() => assertDocumentRules({ docType: 'photo', hasShortlist: false, kind: doc }))).toBe('IMAGE_REQUIRED');
-    expect(codeOf(() => assertDocumentRules({ docType: 'signature', hasShortlist: false, kind: doc }))).toBe('IMAGE_REQUIRED');
-    expect(codeOf(() => assertDocumentRules({ docType: 'photo', hasShortlist: false, kind: image }))).toBeUndefined();
-    expect(codeOf(() => assertDocumentRules({ docType: 'tenth', hasShortlist: false, kind: doc }))).toBeUndefined();
-    expect(codeOf(() => assertDocumentRules({ docType: 'tenth', hasShortlist: false, kind: image }))).toBeUndefined();
+    expect(
+      codeOf(() => assertDocumentRules({ docType: 'photo', hasShortlist: false, kind: doc })),
+    ).toBe('IMAGE_REQUIRED');
+    expect(
+      codeOf(() => assertDocumentRules({ docType: 'signature', hasShortlist: false, kind: doc })),
+    ).toBe('IMAGE_REQUIRED');
+    expect(
+      codeOf(() => assertDocumentRules({ docType: 'photo', hasShortlist: false, kind: image })),
+    ).toBeUndefined();
+    expect(
+      codeOf(() => assertDocumentRules({ docType: 'tenth', hasShortlist: false, kind: doc })),
+    ).toBeUndefined();
+    expect(
+      codeOf(() => assertDocumentRules({ docType: 'tenth', hasShortlist: false, kind: image })),
+    ).toBeUndefined();
   });
 });

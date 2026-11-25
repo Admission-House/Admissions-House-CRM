@@ -47,30 +47,55 @@ describe('evaluateOffice', () => {
   });
 
   it('accepts a position just inside the radius and refuses one just outside', () => {
-    expect(evaluateOffice({ ...ready, location: { ...northOf(190), accuracy: 10 } })).toEqual({ ok: true });
-    expect(evaluateOffice({ ...ready, location: { ...northOf(215), accuracy: 10 } })).toEqual({ ok: false, reason: 'gps_far' });
+    expect(evaluateOffice({ ...ready, location: { ...northOf(190), accuracy: 10 } })).toEqual({
+      ok: true,
+    });
+    expect(evaluateOffice({ ...ready, location: { ...northOf(215), accuracy: 10 } })).toEqual({
+      ok: false,
+      reason: 'gps_far',
+    });
   });
 
   it('needs both checks: the right network alone is not enough', () => {
-    expect(evaluateOffice({ ...ready, location: undefined })).toEqual({ ok: false, reason: 'gps_missing' });
-    expect(evaluateOffice({ ...ready, location: { ...northOf(5000), accuracy: 10 } })).toEqual({ ok: false, reason: 'gps_far' });
+    expect(evaluateOffice({ ...ready, location: undefined })).toEqual({
+      ok: false,
+      reason: 'gps_missing',
+    });
+    expect(evaluateOffice({ ...ready, location: { ...northOf(5000), accuracy: 10 } })).toEqual({
+      ok: false,
+      reason: 'gps_far',
+    });
   });
 
   it('needs both checks: a good position alone is not enough', () => {
-    expect(evaluateOffice({ ...ready, networkMatches: false })).toEqual({ ok: false, reason: 'network' });
+    expect(evaluateOffice({ ...ready, networkMatches: false })).toEqual({
+      ok: false,
+      reason: 'network',
+    });
   });
 
   it('refuses a vague reading even when its centre is inside the radius', () => {
-    expect(evaluateOffice({ ...ready, location: { ...OFFICE, accuracy: 400 } })).toEqual({ ok: false, reason: 'gps_inaccurate' });
+    expect(evaluateOffice({ ...ready, location: { ...OFFICE, accuracy: 400 } })).toEqual({
+      ok: false,
+      reason: 'gps_inaccurate',
+    });
   });
 
   it('refuses a nonsense accuracy value', () => {
-    expect(evaluateOffice({ ...ready, location: { ...OFFICE, accuracy: -1 } })).toEqual({ ok: false, reason: 'gps_inaccurate' });
-    expect(evaluateOffice({ ...ready, location: { ...OFFICE, accuracy: Number.NaN } })).toEqual({ ok: false, reason: 'gps_inaccurate' });
+    expect(evaluateOffice({ ...ready, location: { ...OFFICE, accuracy: -1 } })).toEqual({
+      ok: false,
+      reason: 'gps_inaccurate',
+    });
+    expect(evaluateOffice({ ...ready, location: { ...OFFICE, accuracy: Number.NaN } })).toEqual({
+      ok: false,
+      reason: 'gps_inaccurate',
+    });
   });
 
   it('refuses a position the device says is mocked', () => {
-    expect(evaluateOffice({ ...ready, location: { ...OFFICE, accuracy: 5, mocked: true } })).toEqual({ ok: false, reason: 'gps_mocked' });
+    expect(
+      evaluateOffice({ ...ready, location: { ...OFFICE, accuracy: 5, mocked: true } }),
+    ).toEqual({ ok: false, reason: 'gps_mocked' });
   });
 
   describe('an office that is not set up refuses everyone (fails closed)', () => {
@@ -79,7 +104,10 @@ describe('evaluateOffice', () => {
       expect(evaluateOffice({ ...ready, branch })).toEqual({ ok: false, reason: 'not_configured' });
     });
     it('no allowed network', () => {
-      expect(evaluateOffice({ ...ready, hasNetworks: false })).toEqual({ ok: false, reason: 'not_configured' });
+      expect(evaluateOffice({ ...ready, hasNetworks: false })).toEqual({
+        ok: false,
+        reason: 'not_configured',
+      });
     });
   });
 });

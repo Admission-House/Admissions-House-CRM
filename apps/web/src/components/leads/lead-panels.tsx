@@ -1,12 +1,35 @@
 'use client';
 
-import { Check, CircleDot, FileText, MessageSquare, PhoneCall, RefreshCw, Repeat, UserCheck, CalendarClock, Clock } from 'lucide-react';
+import {
+  Check,
+  CircleDot,
+  FileText,
+  MessageSquare,
+  PhoneCall,
+  RefreshCw,
+  Repeat,
+  UserCheck,
+  CalendarClock,
+  Clock,
+} from 'lucide-react';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Badge, Button, Card, Empty, Field, Input, Notice, Select, Spinner, Textarea, cx } from '@/components/ui';
+import {
+  Badge,
+  Button,
+  Card,
+  Empty,
+  Field,
+  Input,
+  Notice,
+  Select,
+  Spinner,
+  Textarea,
+  cx,
+} from '@/components/ui';
 import { Modal } from '@/components/ui/modal';
 import { DateTimePicker } from '@/components/ui/date-time-picker';
-import { api, ApiError } from '@/lib/api';
+import { api, ApiError, errorText } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { fmtDateTime, fromNow } from '@/lib/format';
 import type { Page, StatusOption, UserOption } from '@/lib/types';
@@ -38,12 +61,9 @@ export interface LeadDetail {
   extraPhones: { phone: string; label: string }[];
 }
 
-const errorText = (e: unknown) => (e instanceof ApiError ? e.message : 'Cannot reach the server. Try again.');
-
 /** datetime-local gives "2026-11-03T15:30" in the viewer's zone; the API wants a full timestamp with offset. */
 
 // ---------------------------------------------------------------- status
-
 
 export function StatusPanel({ lead, onChanged }: { lead: LeadDetail; onChanged: () => void }) {
   const { can } = useAuth();
@@ -62,7 +82,10 @@ export function StatusPanel({ lead, onChanged }: { lead: LeadDetail; onChanged: 
   const [goNext, setGoNext] = useState(false);
 
   // The company's own list to choose from, plus the status the lead already has (so it still shows, even if it is no longer offered).
-  const options = statuses.data?.filter((s) => s.isActive !== false && (s.selectable !== false || s.id === lead.status.id)) ?? [];
+  const options =
+    statuses.data?.filter(
+      (s) => s.isActive !== false && (s.selectable !== false || s.id === lead.status.id),
+    ) ?? [];
   // Every disposition is complete (company rule, 24 Nov): the status is chosen each time (it does not start on the current
   // one), a reason is chosen when the status has reasons, a comment is always written, and an open status always gets the
   // next follow-up date and time. A closed status has no date: the lead is finished.
@@ -77,12 +100,20 @@ export function StatusPanel({ lead, onChanged }: { lead: LeadDetail; onChanged: 
     const thenNext = goNext;
     setGoNext(false);
     // Say what is missing, here, in words. The browser's own "fill this in" bubble is easy to miss, and then Save looks as if it does nothing.
-    const missing = !statusId ? 'Choose the lead status.'
-      : hasReasons && !substatusId ? 'Choose a reason in "Lead sub-status" for this status.'
-      : !remark.trim() ? 'Write what was discussed in "Comments".'
-      : needsDate && !due ? 'Choose the next follow-up date and time.'
-      : null;
-    if (missing) { setSaved(null); setError(missing); return; }
+    const missing = !statusId
+      ? 'Choose the lead status.'
+      : hasReasons && !substatusId
+        ? 'Choose a reason in "Lead sub-status" for this status.'
+        : !remark.trim()
+          ? 'Write what was discussed in "Comments".'
+          : needsDate && !due
+            ? 'Choose the next follow-up date and time.'
+            : null;
+    if (missing) {
+      setSaved(null);
+      setError(missing);
+      return;
+    }
     setBusy(true);
     setError(null);
     setSaved(null);
@@ -93,7 +124,9 @@ export function StatusPanel({ lead, onChanged }: { lead: LeadDetail; onChanged: 
           statusId,
           ...(substatusId && { substatusId }),
           ...(remark.trim() && { remark: remark.trim() }),
-          ...(due && chosen?.isOpen && can('followup.manage') && { followUp: { dueAt: localToIso(due) } }),
+          ...(due &&
+            chosen?.isOpen &&
+            can('followup.manage') && { followUp: { dueAt: localToIso(due) } }),
         },
       });
       if (thenNext) {
@@ -128,34 +161,104 @@ export function StatusPanel({ lead, onChanged }: { lead: LeadDetail; onChanged: 
       <form onSubmit={save} noValidate className="mt-4 space-y-4">
         {error && <Notice tone="bad">{error}</Notice>}
         {saved && <Notice tone="ok">{saved}</Notice>}
-        <Field label="Lead status" htmlFor="st" required hint={`Now: ${lead.status.name}${lead.substatus ? ` · ${lead.substatus.name}` : ''}`}>
-          <Select id="st" value={statusId} onChange={(e) => { setStatusId(e.target.value); setSubstatusId(''); }}>
+        <Field
+          label="Lead status"
+          htmlFor="st"
+          required
+          hint={`Now: ${lead.status.name}${lead.substatus ? ` · ${lead.substatus.name}` : ''}`}
+        >
+          <Select
+            id="st"
+            value={statusId}
+            onChange={(e) => {
+              setStatusId(e.target.value);
+              setSubstatusId('');
+            }}
+          >
             <option value="">Select status</option>
-            {options.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            {options.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
           </Select>
         </Field>
         <Field label="Lead sub-status" htmlFor="sub" required={hasReasons}>
-          <Select id="sub" value={substatusId} onChange={(e) => setSubstatusId(e.target.value)} required={hasReasons} disabled={!(chosen?.substatuses && chosen.substatuses.length > 0)}>
-            <option value="">{!chosen ? 'Choose a status first' : !hasReasons ? 'No reasons for this status' : 'Select a reason'}</option>
-            {(chosen?.substatuses ?? []).map((s) => <option key={s.id} value={s.id}>{s.name}{s.requiresComment ? ' (comments required)' : ''}</option>)}
+          <Select
+            id="sub"
+            value={substatusId}
+            onChange={(e) => setSubstatusId(e.target.value)}
+            required={hasReasons}
+            disabled={!(chosen?.substatuses && chosen.substatuses.length > 0)}
+          >
+            <option value="">
+              {!chosen
+                ? 'Choose a status first'
+                : !hasReasons
+                  ? 'No reasons for this status'
+                  : 'Select a reason'}
+            </option>
+            {(chosen?.substatuses ?? []).map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+                {s.requiresComment ? ' (comments required)' : ''}
+              </option>
+            ))}
           </Select>
         </Field>
-        <button type="button" onClick={() => setMap(true)} className="-mt-2 text-xs font-medium text-info hover:underline">View all dependencies</button>
+        <button
+          type="button"
+          onClick={() => setMap(true)}
+          className="-mt-2 text-xs font-medium text-info hover:underline"
+        >
+          View all dependencies
+        </button>
         {can('followup.manage') && chosen?.isOpen && (
           <Field label="Next follow-up" htmlFor="due" required>
-            <DateTimePicker id="due" min={minFollowUp()} value={due} onChange={setDue} required={needsDate} />
+            <DateTimePicker
+              id="due"
+              min={minFollowUp()}
+              value={due}
+              onChange={setDue}
+              required={needsDate}
+            />
           </Field>
         )}
         <Field label="Comments" htmlFor="rm" required>
-          <Textarea id="rm" value={remark} onChange={(e) => setRemark(e.target.value)} maxLength={1000} required placeholder="What was discussed?" />
+          <Textarea
+            id="rm"
+            value={remark}
+            onChange={(e) => setRemark(e.target.value)}
+            maxLength={1000}
+            required
+            placeholder="What was discussed?"
+          />
         </Field>
         {fromList ? (
           <div className="grid grid-cols-2 gap-2">
-            <Button type="submit" variant="secondary" loading={busy && !goNext} disabled={busy} onClick={() => setGoNext(false)}>Save</Button>
-            <Button type="submit" loading={busy && goNext} disabled={busy} onClick={() => setGoNext(true)} title="Save, then open the next lead of the list you came from">Save &amp; next</Button>
+            <Button
+              type="submit"
+              variant="secondary"
+              loading={busy && !goNext}
+              disabled={busy}
+              onClick={() => setGoNext(false)}
+            >
+              Save
+            </Button>
+            <Button
+              type="submit"
+              loading={busy && goNext}
+              disabled={busy}
+              onClick={() => setGoNext(true)}
+              title="Save, then open the next lead of the list you came from"
+            >
+              Save &amp; next
+            </Button>
           </div>
         ) : (
-          <Button type="submit" loading={busy} className="w-full">Save</Button>
+          <Button type="submit" loading={busy} className="w-full">
+            Save
+          </Button>
         )}
       </form>
       {map && <DependencyMap statuses={options} onClose={() => setMap(false)} />}
@@ -167,14 +270,25 @@ export function StatusPanel({ lead, onChanged }: { lead: LeadDetail; onChanged: 
 function DependencyMap({ statuses, onClose }: { statuses: StatusOption[]; onClose: () => void }) {
   return (
     <Modal title="Statuses and their reasons" onClose={onClose}>
-      <p className="mb-3 text-xs text-muted">A status marked * needs one of its reasons to be chosen. A reason marked (comments required) needs a comment.</p>
+      <p className="mb-3 text-xs text-muted">
+        A status marked * needs one of its reasons to be chosen. A reason marked (comments required)
+        needs a comment.
+      </p>
       <ul className="max-h-[60vh] space-y-3 overflow-y-auto">
         {statuses.map((s) => (
           <li key={s.id} className="rounded-md border border-line px-3 py-2">
-            <p className="text-sm font-medium text-ink">{s.name}{s.requiresSubstatus ? ' *' : ''}</p>
+            <p className="text-sm font-medium text-ink">
+              {s.name}
+              {s.requiresSubstatus ? ' *' : ''}
+            </p>
             {s.substatuses && s.substatuses.length > 0 ? (
               <ul className="mt-1 space-y-0.5 text-xs text-muted">
-                {s.substatuses.map((x) => <li key={x.id}>{x.name}{x.requiresComment ? ' (comments required)' : ''}</li>)}
+                {s.substatuses.map((x) => (
+                  <li key={x.id}>
+                    {x.name}
+                    {x.requiresComment ? ' (comments required)' : ''}
+                  </li>
+                ))}
               </ul>
             ) : (
               <p className="mt-1 text-xs text-subtle">No reasons to choose from.</p>
@@ -190,7 +304,10 @@ function DependencyMap({ statuses, onClose }: { statuses: StatusOption[]; onClos
 
 export function AssignPanel({ lead, onChanged }: { lead: LeadDetail; onChanged: () => void }) {
   const { can } = useAuth();
-  const people = useApi<Page<UserOption>>(can('lead.assign') && can('user.read') ? '/users' : null, { limit: 100, status: 'active' });
+  const people = useApi<Page<UserOption>>(
+    can('lead.assign') && can('user.read') ? '/users' : null,
+    { limit: 100, status: 'active' },
+  );
   const [userId, setUserId] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -204,7 +321,13 @@ export function AssignPanel({ lead, onChanged }: { lead: LeadDetail; onChanged: 
     setError(null);
     setUnavailable(false);
     try {
-      await api(`/leads/${lead.id}/assign`, { method: 'POST', body: { userId: userId === 'none' ? null : userId, ...(anyway && { allowUnavailable: true }) } });
+      await api(`/leads/${lead.id}/assign`, {
+        method: 'POST',
+        body: {
+          userId: userId === 'none' ? null : userId,
+          ...(anyway && { allowUnavailable: true }),
+        },
+      });
       setUserId('');
       onChanged();
     } catch (e) {
@@ -218,22 +341,47 @@ export function AssignPanel({ lead, onChanged }: { lead: LeadDetail; onChanged: 
   return (
     <Card className="p-5">
       <h2 className="text-sm font-semibold text-ink">Assigned to</h2>
-      <p className="mt-1 text-sm text-muted">{lead.assignedTo ? `${lead.assignedTo.name}${lead.assignedAt ? `, ${fromNow(lead.assignedAt)}` : ''}` : 'Nobody yet'}</p>
+      <p className="mt-1 text-sm text-muted">
+        {lead.assignedTo
+          ? `${lead.assignedTo.name}${lead.assignedAt ? `, ${fromNow(lead.assignedAt)}` : ''}`
+          : 'Nobody yet'}
+      </p>
       {error && (
         <div className="mt-3">
           <Notice tone="bad">
             {error}
-            {unavailable && <> <button type="button" className="font-semibold underline" onClick={() => void assign(true)}>Assign anyway</button></>}
+            {unavailable && (
+              <>
+                {' '}
+                <button
+                  type="button"
+                  className="font-semibold underline"
+                  onClick={() => void assign(true)}
+                >
+                  Assign anyway
+                </button>
+              </>
+            )}
           </Notice>
         </div>
       )}
       <div className="mt-3 flex gap-2">
-        <Select aria-label="Hand over to" value={userId} onChange={(e) => setUserId(e.target.value)}>
+        <Select
+          aria-label="Hand over to"
+          value={userId}
+          onChange={(e) => setUserId(e.target.value)}
+        >
           <option value="">Choose a person</option>
           <option value="none">Move to the unassigned pool</option>
-          {people.data?.items.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+          {people.data?.items.map((u) => (
+            <option key={u.id} value={u.id}>
+              {u.name}
+            </option>
+          ))}
         </Select>
-        <Button variant="secondary" onClick={() => void assign()} disabled={!userId} loading={busy}>Assign</Button>
+        <Button variant="secondary" onClick={() => void assign()} disabled={!userId} loading={busy}>
+          Assign
+        </Button>
       </div>
     </Card>
   );
@@ -259,11 +407,17 @@ export function FollowUpsPanel({ lead, onChanged }: { lead: LeadDetail; onChange
 
   async function add(e: React.FormEvent) {
     e.preventDefault();
-    if (!due) { setError('Choose when to follow up.'); return; }
+    if (!due) {
+      setError('Choose when to follow up.');
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
-      await api(`/leads/${lead.id}/followups`, { method: 'POST', body: { dueAt: localToIso(due), ...(note.trim() && { note: note.trim() }) } });
+      await api(`/leads/${lead.id}/followups`, {
+        method: 'POST',
+        body: { dueAt: localToIso(due), ...(note.trim() && { note: note.trim() }) },
+      });
       setDue('');
       setNote('');
       list.reload();
@@ -288,29 +442,69 @@ export function FollowUpsPanel({ lead, onChanged }: { lead: LeadDetail; onChange
   const items = list.data ?? [];
   return (
     <Card>
-      <div className="border-b border-line px-4 py-3"><h2 className="text-sm font-semibold text-ink">Follow-ups</h2></div>
+      <div className="border-b border-line px-4 py-3">
+        <h2 className="text-sm font-semibold text-ink">Follow-ups</h2>
+      </div>
       {can('followup.manage') && lead.status.isOpen && (
-        <form onSubmit={add} className="grid gap-3 border-b border-line p-5 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)_auto]">
-          <DateTimePicker min={minFollowUp()} value={due} onChange={setDue} required placeholder="When to follow up" />
-          <Input aria-label="Note" placeholder="What to do (optional)" value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} />
-          <Button type="submit" loading={busy}>Add</Button>
+        <form
+          onSubmit={add}
+          className="grid gap-3 border-b border-line p-5 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)_auto]"
+        >
+          <DateTimePicker
+            min={minFollowUp()}
+            value={due}
+            onChange={setDue}
+            required
+            placeholder="When to follow up"
+          />
+          <Input
+            aria-label="Note"
+            placeholder="What to do (optional)"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            maxLength={500}
+          />
+          <Button type="submit" loading={busy}>
+            Add
+          </Button>
         </form>
       )}
-      {error && <div className="p-5 pb-0"><Notice tone="bad">{error}</Notice></div>}
-      {list.loading && !list.data ? <Spinner /> : items.length === 0 ? <Empty title="No follow-ups yet" /> : (
+      {error && (
+        <div className="p-5 pb-0">
+          <Notice tone="bad">{error}</Notice>
+        </div>
+      )}
+      {list.loading && !list.data ? (
+        <Spinner />
+      ) : items.length === 0 ? (
+        <Empty title="No follow-ups yet" />
+      ) : (
         <ul className="divide-y divide-line">
           {items.map((f) => {
             const late = !f.doneAt && new Date(f.dueAt) < new Date();
             return (
               <li key={f.id} className="flex items-start justify-between gap-3 px-5 py-3.5">
                 <div className="min-w-0">
-                  <p className={cx('text-sm font-medium', late ? 'text-bad' : 'text-ink')}>{fmtDateTime(f.dueAt)} <span className="font-normal text-muted">· {fromNow(f.dueAt)}</span></p>
+                  <p className={cx('text-sm font-medium', late ? 'text-bad' : 'text-ink')}>
+                    {fmtDateTime(f.dueAt)}{' '}
+                    <span className="font-normal text-muted">· {fromNow(f.dueAt)}</span>
+                  </p>
                   {f.note && <p className="mt-0.5 text-sm text-muted">{f.note}</p>}
                   <p className="mt-0.5 text-xs text-subtle">{f.owner.name}</p>
                 </div>
-                {f.doneAt ? <Badge tone="ok">Done</Badge> : can('followup.manage') ? (
-                  <Button variant="secondary" className="h-8 px-3 text-xs" onClick={() => void done(f.id)}><Check className="h-3.5 w-3.5" aria-hidden /> Mark done</Button>
-                ) : <Badge tone={late ? 'bad' : 'info'}>{late ? 'Overdue' : 'Open'}</Badge>}
+                {f.doneAt ? (
+                  <Badge tone="ok">Done</Badge>
+                ) : can('followup.manage') ? (
+                  <Button
+                    variant="secondary"
+                    className="h-8 px-3 text-xs"
+                    onClick={() => void done(f.id)}
+                  >
+                    <Check className="h-3.5 w-3.5" aria-hidden /> Mark done
+                  </Button>
+                ) : (
+                  <Badge tone={late ? 'bad' : 'info'}>{late ? 'Overdue' : 'Open'}</Badge>
+                )}
               </li>
             );
           })}
@@ -334,8 +528,15 @@ interface Activity {
 }
 
 const ICON: Record<string, typeof CircleDot> = {
-  note: MessageSquare, status_change: RefreshCw, assignment: UserCheck, call: PhoneCall, document: FileText, shortlist: Check,
-  enquiry: Repeat, field_change: CircleDot, followup: CalendarClock,
+  note: MessageSquare,
+  status_change: RefreshCw,
+  assignment: UserCheck,
+  call: PhoneCall,
+  document: FileText,
+  shortlist: Check,
+  enquiry: Repeat,
+  field_change: CircleDot,
+  followup: CalendarClock,
 };
 
 /** Names for the student-profile details that the history records, so nobody reads "profile.preferred_stream_id". */
@@ -422,7 +623,9 @@ export function Timeline({ lead }: { lead: LeadDetail }) {
     if (!cursor) return;
     setMore(true);
     try {
-      const p = await api<Page<Activity>>(`/leads/${lead.id}/activities`, { query: { limit: 30, cursor } });
+      const p = await api<Page<Activity>>(`/leads/${lead.id}/activities`, {
+        query: { limit: 30, cursor },
+      });
       setPages((prev) => [...prev, ...p.items]);
       setNext(p.nextCursor);
     } finally {
@@ -432,33 +635,64 @@ export function Timeline({ lead }: { lead: LeadDetail }) {
 
   return (
     <Card>
-      <div className="border-b border-line px-4 py-3"><h2 className="text-sm font-semibold text-ink">History</h2></div>
+      <div className="border-b border-line px-4 py-3">
+        <h2 className="text-sm font-semibold text-ink">History</h2>
+      </div>
       {can('lead.update') && (
         <form onSubmit={addNote} className="space-y-3 border-b border-line p-5">
           {error && <Notice tone="bad">{error}</Notice>}
-          <Textarea aria-label="Add a note" placeholder="Add a note…" value={note} onChange={(e) => setNote(e.target.value)} maxLength={2000} required />
-          <div className="flex justify-end"><Button type="submit" loading={busy} disabled={!note.trim()}>Add note</Button></div>
+          <Textarea
+            aria-label="Add a note"
+            placeholder="Add a note…"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            maxLength={2000}
+            required
+          />
+          <div className="flex justify-end">
+            <Button type="submit" loading={busy} disabled={!note.trim()}>
+              Add note
+            </Button>
+          </div>
         </form>
       )}
-      {first.loading && !first.data ? <Spinner /> : items.length === 0 ? <Empty title="Nothing here yet" /> : (
+      {first.loading && !first.data ? (
+        <Spinner />
+      ) : items.length === 0 ? (
+        <Empty title="Nothing here yet" />
+      ) : (
         <ol className="relative space-y-5 p-5">
           <span className="absolute bottom-6 left-[2.15rem] top-6 w-px bg-line" aria-hidden />
           {items.map((a) => {
             const Icon = ICON[a.type] ?? Clock;
             return (
               <li key={a.id} className="relative flex gap-4">
-                <span className="relative z-10 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-mint text-brand ring-4 ring-surface"><Icon className="h-4 w-4" aria-hidden /></span>
+                <span className="relative z-10 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-mint text-brand ring-4 ring-surface">
+                  <Icon className="h-4 w-4" aria-hidden />
+                </span>
                 <div className="min-w-0 pt-0.5">
                   <p className="text-sm text-ink">{describe(a)}</p>
-                  {a.type === 'status_change' && a.remark && <p className="mt-1 rounded-lg bg-canvas px-3 py-2 text-sm text-muted">{a.remark}</p>}
-                  <p className="mt-1 text-xs text-subtle">{a.user?.name ?? 'System'} · {fmtDateTime(a.createdAt)}</p>
+                  {a.type === 'status_change' && a.remark && (
+                    <p className="mt-1 rounded-lg bg-canvas px-3 py-2 text-sm text-muted">
+                      {a.remark}
+                    </p>
+                  )}
+                  <p className="mt-1 text-xs text-subtle">
+                    {a.user?.name ?? 'System'} · {fmtDateTime(a.createdAt)}
+                  </p>
                 </div>
               </li>
             );
           })}
         </ol>
       )}
-      {cursor && <div className="flex justify-center border-t border-line p-4"><Button variant="secondary" loading={more} onClick={() => void showMore()}>Show older</Button></div>}
+      {cursor && (
+        <div className="flex justify-center border-t border-line p-4">
+          <Button variant="secondary" loading={more} onClick={() => void showMore()}>
+            Show older
+          </Button>
+        </div>
+      )}
     </Card>
   );
 }

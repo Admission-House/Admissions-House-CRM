@@ -15,12 +15,26 @@ export function ActivityHeartbeat() {
   useEffect(() => {
     let lastInput = 0;
     let lastSent = Date.now();
-    const seen = () => { lastInput = Date.now(); };
-    const events = ['pointerdown', 'pointermove', 'keydown', 'wheel', 'scroll', 'touchstart'] as const;
+    const seen = () => {
+      lastInput = Date.now();
+    };
+    const events = [
+      'pointerdown',
+      'pointermove',
+      'keydown',
+      'wheel',
+      'scroll',
+      'touchstart',
+    ] as const;
     for (const e of events) window.addEventListener(e, seen, { passive: true, capture: true });
     const timer = setInterval(() => {
       const now = Date.now();
-      if (document.visibilityState !== 'visible' || lastInput <= lastSent || now - lastSent < EVERY_MS) return;
+      if (
+        document.visibilityState !== 'visible' ||
+        lastInput <= lastSent ||
+        now - lastSent < EVERY_MS
+      )
+        return;
       lastSent = now;
       void api('/auth/activity', { method: 'POST' }).catch(() => undefined);
     }, 15_000);

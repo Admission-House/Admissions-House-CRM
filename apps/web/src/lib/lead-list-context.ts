@@ -28,7 +28,9 @@ export function readListContext(): LeadListContext | null {
     const raw = localStorage.getItem(KEY);
     if (!raw) return null;
     const c = JSON.parse(raw) as LeadListContext;
-    return typeof c?.url === 'string' && Array.isArray(c.ids) && Array.isArray(c.cursors) ? c : null;
+    return typeof c?.url === 'string' && Array.isArray(c.ids) && Array.isArray(c.cursors)
+      ? c
+      : null;
   } catch {
     return null;
   }
@@ -57,10 +59,20 @@ export function inListContext(leadId: string): boolean {
 const noSubscribe = () => () => undefined;
 
 /** Where "Back to leads" goes from this lead (the plain leads page on the server and in a new browser). */
-export const useBackToList = (leadId: string): string => useSyncExternalStore(noSubscribe, () => backToListUrl(leadId), () => '/leads');
+export const useBackToList = (leadId: string): string =>
+  useSyncExternalStore(
+    noSubscribe,
+    () => backToListUrl(leadId),
+    () => '/leads',
+  );
 
 /** Whether this lead came from the remembered list, so "Save & next" and "Save, back to the list" apply. */
-export const useInListContext = (leadId: string): boolean => useSyncExternalStore(noSubscribe, () => inListContext(leadId), () => false);
+export const useInListContext = (leadId: string): boolean =>
+  useSyncExternalStore(
+    noSubscribe,
+    () => inListContext(leadId),
+    () => false,
+  );
 
 /**
  * The lead after this one in the remembered list, fetching the next page of the list when this was the last one shown.
@@ -73,8 +85,15 @@ export async function nextLeadId(leadId: string): Promise<string | null> {
   if (at < 0) return null;
   if (at + 1 < c.ids.length) return c.ids[at + 1]!;
   if (!c.nextCursor) return null;
-  const page = await api<Page<LeadListItem>>('/leads', { query: { ...c.query, cursor: c.nextCursor } });
+  const page = await api<Page<LeadListItem>>('/leads', {
+    query: { ...c.query, cursor: c.nextCursor },
+  });
   const fresh = page.items.map((l) => l.id).filter((id) => !c.ids.includes(id));
-  saveListContext({ ...c, cursors: [...c.cursors, c.nextCursor], ids: [...c.ids, ...fresh], nextCursor: page.nextCursor });
+  saveListContext({
+    ...c,
+    cursors: [...c.cursors, c.nextCursor],
+    ids: [...c.ids, ...fresh],
+    nextCursor: page.nextCursor,
+  });
   return fresh[0] ?? null;
 }

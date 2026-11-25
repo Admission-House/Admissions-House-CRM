@@ -21,13 +21,32 @@ export interface FollowUpView {
   doneAt: Date | null;
   createdAt: Date;
   owner: { id: string; name: string };
-  lead: { id: string; leadNo: string; name: string; phone: string; status: string; isOpen: boolean };
+  lead: {
+    id: string;
+    leadNo: string;
+    name: string;
+    phone: string;
+    status: string;
+    isOpen: boolean;
+  };
 }
 
 interface Row {
-  id: string; lead_id: string; user_id: string; user_name: string; due_at: Date; remind_before_min: number; note: string | null;
-  done_at: Date | null; created_at: Date; sort_text: string; lead_no: string; lead_name: string; primary_phone: string;
-  status_name: string; is_open: boolean;
+  id: string;
+  lead_id: string;
+  user_id: string;
+  user_name: string;
+  due_at: Date;
+  remind_before_min: number;
+  note: string | null;
+  done_at: Date | null;
+  created_at: Date;
+  sort_text: string;
+  lead_no: string;
+  lead_name: string;
+  primary_phone: string;
+  status_name: string;
+  is_open: boolean;
 }
 
 const cursorShape = z.object({ t: z.string(), i: z.string() });
@@ -56,7 +75,10 @@ export class FollowUpsService {
   forLead(auth: AuthContext, leadId: string) {
     return this.db.withTenant(auth.tenantId, async (trx) => {
       await this.access.get(trx, auth, leadId, false);
-      const { rows } = await sql<Row>`${SELECT} WHERE f.lead_id = ${leadId} ORDER BY f.done_at NULLS FIRST, f.due_at`.execute(trx);
+      const { rows } =
+        await sql<Row>`${SELECT} WHERE f.lead_id = ${leadId} ORDER BY f.done_at NULLS FIRST, f.due_at`.execute(
+          trx,
+        );
       return rows.map(toView);
     });
   }
@@ -64,15 +86,31 @@ export class FollowUpsService {
   create(auth: AuthContext, leadId: string, dto: CreateFollowUpDto) {
     return this.db.withTenant(auth.tenantId, async (trx) => {
       const lead = await this.access.get(trx, auth, leadId, true);
-      if (!lead.is_open) throw AppError.conflict('LEAD_CLOSED', 'This lead is closed, so it cannot have a follow-up');
+      if (!lead.is_open)
+        throw AppError.conflict(
+          'LEAD_CLOSED',
+          'This lead is closed, so it cannot have a follow-up',
+        );
       assertFollowUpTime(dto.dueAt);
 
       // The follow-up is the job of whoever owns the lead; for a lead nobody owns, of whoever sets it.
       const id = await this.writer.create(trx, {
-        tenantId: auth.tenantId, leadId, userId: lead.assigned_to ?? auth.userId, dueAt: dto.dueAt,
-        remindBeforeMin: dto.remindBeforeMin, note: dto.note,
+        tenantId: auth.tenantId,
+        leadId,
+        userId: lead.assigned_to ?? auth.userId,
+        dueAt: dto.dueAt,
+        remindBeforeMin: dto.remindBeforeMin,
+        note: dto.note,
       });
-      await this.leadWriter.activity(trx, { tenantId: auth.tenantId, leadId, userId: auth.userId, type: 'followup', field: 'due_at', newValue: dto.dueAt.toISOString(), remark: dto.note ?? 'Follow-up set' });
+      await this.leadWriter.activity(trx, {
+        tenantId: auth.tenantId,
+        leadId,
+        userId: auth.userId,
+        type: 'followup',
+        field: 'due_at',
+        newValue: dto.dueAt.toISOString(),
+        remark: dto.note ?? 'Follow-up set',
+      });
       return this.one(trx, id);
     });
   }
@@ -94,7 +132,16 @@ export class FollowUpsService {
       await trx.updateTable('followups').set(changes).where('id', '=', id).execute();
       await this.writer.refreshNext(trx, f.lead_id);
       if (movedTime) {
-        await this.leadWriter.activity(trx, { tenantId: auth.tenantId, leadId: f.lead_id, userId: auth.userId, type: 'followup', field: 'due_at', oldValue: f.due_at.toISOString(), newValue: dto.dueAt!.toISOString(), remark: dto.note ?? 'Follow-up rescheduled' });
+        await this.leadWriter.activity(trx, {
+          tenantId: auth.tenantId,
+          leadId: f.lead_id,
+          userId: auth.userId,
+          type: 'followup',
+          field: 'due_at',
+          oldValue: f.due_at.toISOString(),
+          newValue: dto.dueAt!.toISOString(),
+          remark: dto.note ?? 'Follow-up rescheduled',
+        });
       }
       return this.one(trx, id);
     });
@@ -104,9 +151,19 @@ export class FollowUpsService {
     return this.db.withTenant(auth.tenantId, async (trx) => {
       const f = await this.lockFollowUp(trx, auth, id);
       if (f.done_at) throw AppError.conflict('FOLLOWUP_CLOSED', 'This follow-up is already done');
-      await sql`UPDATE followups SET done_at = now(), note = COALESCE(${note ?? null}, note) WHERE id = ${id}`.execute(trx);
+      await sql`UPDATE followups SET done_at = now(), note = COALESCE(${note ?? null}, note) WHERE id = ${id}`.execute(
+        trx,
+      );
       await this.writer.refreshNext(trx, f.lead_id);
-      await this.leadWriter.activity(trx, { tenantId: auth.tenantId, leadId: f.lead_id, userId: auth.userId, type: 'followup', field: 'done', oldValue: f.due_at.toISOString(), remark: note ?? 'Follow-up done' });
+      await this.leadWriter.activity(trx, {
+        tenantId: auth.tenantId,
+        leadId: f.lead_id,
+        userId: auth.userId,
+        type: 'followup',
+        field: 'done',
+        oldValue: f.due_at.toISOString(),
+        remark: note ?? 'Follow-up done',
+      });
       return this.one(trx, id);
     });
   }
@@ -116,7 +173,15 @@ export class FollowUpsService {
       const f = await this.lockFollowUp(trx, auth, id);
       await trx.deleteFrom('followups').where('id', '=', id).execute();
       await this.writer.refreshNext(trx, f.lead_id);
-      await this.leadWriter.activity(trx, { tenantId: auth.tenantId, leadId: f.lead_id, userId: auth.userId, type: 'followup', field: 'cancelled', oldValue: f.due_at.toISOString(), remark: 'Follow-up cancelled' });
+      await this.leadWriter.activity(trx, {
+        tenantId: auth.tenantId,
+        leadId: f.lead_id,
+        userId: auth.userId,
+        type: 'followup',
+        field: 'cancelled',
+        oldValue: f.due_at.toISOString(),
+        remark: 'Follow-up cancelled',
+      });
     });
   }
 
@@ -132,9 +197,11 @@ export class FollowUpsService {
       const conditions = [this.scope(auth, query.userId), this.bucket(query.bucket)];
       const finished = query.bucket === 'done';
       if (after) {
-        conditions.push(finished
-          ? sql<SqlBool>`(f.done_at, f.id) < (${after.t}::timestamptz, ${after.i}::uuid)`
-          : sql<SqlBool>`(f.due_at, f.id) > (${after.t}::timestamptz, ${after.i}::uuid)`);
+        conditions.push(
+          finished
+            ? sql<SqlBool>`(f.done_at, f.id) < (${after.t}::timestamptz, ${after.i}::uuid)`
+            : sql<SqlBool>`(f.due_at, f.id) > (${after.t}::timestamptz, ${after.i}::uuid)`,
+        );
       }
       const { rows } = await sql<Row>`
         ${SELECT}
@@ -157,7 +224,11 @@ export class FollowUpsService {
         JOIN leads l ON l.id = f.lead_id AND l.deleted_at IS NULL
         CROSS JOIN tenants t
         WHERE ${this.scope(auth, userId)}`.execute(trx);
-      return { overdue: Number(rows[0]!.overdue), today: Number(rows[0]!.today), upcoming: Number(rows[0]!.upcoming) };
+      return {
+        overdue: Number(rows[0]!.overdue),
+        today: Number(rows[0]!.today),
+        upcoming: Number(rows[0]!.upcoming),
+      };
     });
   }
 
@@ -203,8 +274,20 @@ export class FollowUpsService {
 
 function toView(r: Row): FollowUpView {
   return {
-    id: r.id, dueAt: r.due_at, remindBeforeMin: r.remind_before_min, note: r.note, doneAt: r.done_at, createdAt: r.created_at,
+    id: r.id,
+    dueAt: r.due_at,
+    remindBeforeMin: r.remind_before_min,
+    note: r.note,
+    doneAt: r.done_at,
+    createdAt: r.created_at,
     owner: { id: r.user_id, name: r.user_name },
-    lead: { id: r.lead_id, leadNo: r.lead_no, name: r.lead_name, phone: r.primary_phone, status: r.status_name, isOpen: r.is_open },
+    lead: {
+      id: r.lead_id,
+      leadNo: r.lead_no,
+      name: r.lead_name,
+      phone: r.primary_phone,
+      status: r.status_name,
+      isOpen: r.is_open,
+    },
   };
 }

@@ -32,7 +32,12 @@ function fakeClamd(answer: (data: Buffer) => string | null): Promise<number> {
     }).listen(0, '127.0.0.1', () => resolve((server!.address() as { port: number }).port));
   });
 }
-const scanner = (port?: number) => new VirusScanner({ CLAMAV_HOST: port ? '127.0.0.1' : undefined, CLAMAV_PORT: port ?? 3310, CLAMAV_TIMEOUT_MS: 2000 });
+const scanner = (port?: number) =>
+  new VirusScanner({
+    CLAMAV_HOST: port ? '127.0.0.1' : undefined,
+    CLAMAV_PORT: port ?? 3310,
+    CLAMAV_TIMEOUT_MS: 2000,
+  });
 
 describe('virus scanner', () => {
   it('does nothing when it is not configured', async () => {
@@ -41,19 +46,28 @@ describe('virus scanner', () => {
 
   it('sends the whole file in chunks and accepts a clean answer', async () => {
     let seen = 0;
-    const port = await fakeClamd((d) => { seen = d.length; return 'stream: OK'; });
+    const port = await fakeClamd((d) => {
+      seen = d.length;
+      return 'stream: OK';
+    });
     await scanner(port).assertClean(Buffer.alloc(200_000, 1));
     expect(seen).toBe(200_000);
   });
 
   it('refuses a file clamd flags', async () => {
     const port = await fakeClamd(() => 'stream: Eicar-Signature FOUND');
-    await expect(scanner(port).assertClean(Buffer.from('x'))).rejects.toMatchObject({ code: 'VIRUS_FOUND' });
+    await expect(scanner(port).assertClean(Buffer.from('x'))).rejects.toMatchObject({
+      code: 'VIRUS_FOUND',
+    });
   });
 
   it('refuses the upload when the scanner cannot be reached or gives no answer', async () => {
-    await expect(scanner(1).assertClean(Buffer.from('x'))).rejects.toMatchObject({ code: 'SCAN_UNAVAILABLE' });
+    await expect(scanner(1).assertClean(Buffer.from('x'))).rejects.toMatchObject({
+      code: 'SCAN_UNAVAILABLE',
+    });
     const port = await fakeClamd(() => null);
-    await expect(scanner(port).assertClean(Buffer.from('x'))).rejects.toMatchObject({ code: 'SCAN_UNAVAILABLE' });
+    await expect(scanner(port).assertClean(Buffer.from('x'))).rejects.toMatchObject({
+      code: 'SCAN_UNAVAILABLE',
+    });
   });
 });

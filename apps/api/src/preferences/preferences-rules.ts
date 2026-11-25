@@ -44,12 +44,22 @@ export type AvatarType = 'image/jpeg' | 'image/png' | 'image/webp';
 /** What the first bytes of each kind of picture look like. The word the browser sends is never trusted on its own. */
 function typeOfBytes(b: Buffer): AvatarType | null {
   if (b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'image/jpeg';
-  if (b.length > 8 && b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'image/png';
-  if (b.length > 12 && b.subarray(0, 4).toString('latin1') === 'RIFF' && b.subarray(8, 12).toString('latin1') === 'WEBP') return 'image/webp';
+  if (
+    b.length > 8 &&
+    b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+  )
+    return 'image/png';
+  if (
+    b.length > 12 &&
+    b.subarray(0, 4).toString('latin1') === 'RIFF' &&
+    b.subarray(8, 12).toString('latin1') === 'WEBP'
+  )
+    return 'image/webp';
   return null;
 }
 
-export type AvatarCheck = { ok: true; bytes: Buffer; type: AvatarType } | { ok: false; reason: string };
+export type AvatarCheck =
+  { ok: true; bytes: Buffer; type: AvatarType } | { ok: false; reason: string };
 
 /**
  * A picture as the browser sends it ("data:image/jpeg;base64,..."). Only JPEG, PNG and WebP, small, and the bytes
@@ -61,7 +71,8 @@ export function checkAvatar(dataUrl: string): AvatarCheck {
   const claimed = m[1] as AvatarType;
   const bytes = Buffer.from(m[2]!, 'base64');
   if (bytes.length === 0) return { ok: false, reason: 'The picture is empty.' };
-  if (bytes.length > AVATAR_MAX_BYTES) return { ok: false, reason: 'The picture is too large. Choose a smaller one.' };
+  if (bytes.length > AVATAR_MAX_BYTES)
+    return { ok: false, reason: 'The picture is too large. Choose a smaller one.' };
   const real = typeOfBytes(bytes);
   if (!real || real !== claimed) return { ok: false, reason: 'This file is not a valid picture.' };
   return { ok: true, bytes, type: real };

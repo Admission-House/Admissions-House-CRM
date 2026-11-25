@@ -25,12 +25,28 @@ afterAll(async () => {
 });
 
 const idOf = (name: string) => fx.user(name).id;
-const codeFor = (secret: string, steps = 0) => hotp(base32Decode(secret), stepOf(Date.now()) + steps);
+const codeFor = (secret: string, steps = 0) =>
+  hotp(base32Decode(secret), stepOf(Date.now()) + steps);
 const errorCode = (res: { json: () => { error?: { code?: string } } }) => res.json().error?.code;
-const setPolicy = (token: string, requireTwoStep: string) => api.call('PUT', '/company/security', token, { requireTwoStep });
-const policyInDb = async () => (await owner.query(`SELECT settings->>'require_two_step' AS p FROM tenants WHERE id = $1`, [fx.tenantId])).rows[0].p as string | null;
-const allowReuse = (name: string) => owner.query(`UPDATE user_mfa SET last_step = NULL WHERE user_id = $1`, [idOf(name)]);
-const auditCount = async () => Number((await owner.query(`SELECT count(*) AS n FROM audit_logs WHERE tenant_id = $1 AND action = 'company.security_change'`, [fx.tenantId])).rows[0].n);
+const setPolicy = (token: string, requireTwoStep: string) =>
+  api.call('PUT', '/company/security', token, { requireTwoStep });
+const policyInDb = async () =>
+  (
+    await owner.query(`SELECT settings->>'require_two_step' AS p FROM tenants WHERE id = $1`, [
+      fx.tenantId,
+    ])
+  ).rows[0].p as string | null;
+const allowReuse = (name: string) =>
+  owner.query(`UPDATE user_mfa SET last_step = NULL WHERE user_id = $1`, [idOf(name)]);
+const auditCount = async () =>
+  Number(
+    (
+      await owner.query(
+        `SELECT count(*) AS n FROM audit_logs WHERE tenant_id = $1 AND action = 'company.security_change'`,
+        [fx.tenantId],
+      )
+    ).rows[0].n,
+  );
 
 /** What the person does when the CRM asks them to set it up: password, scan, first code. */
 async function setUp(token: string) {
@@ -53,25 +69,41 @@ async function makeRule(policy: string, actor = 'super') {
 
 afterEach(async () => {
   // Every test starts with nobody required, and without anyone's two-step on.
-  await owner.query(`UPDATE tenants SET settings = settings - 'require_two_step' WHERE id = $1`, [fx.tenantId]);
+  await owner.query(`UPDATE tenants SET settings = settings - 'require_two_step' WHERE id = $1`, [
+    fx.tenantId,
+  ]);
   await owner.query(`DELETE FROM user_recovery_codes WHERE tenant_id = $1`, [fx.tenantId]);
   await owner.query(`DELETE FROM user_mfa WHERE tenant_id = $1`, [fx.tenantId]);
-  await owner.query(`UPDATE users SET locked_until = NULL, failed_logins = 0 WHERE tenant_id = $1`, [fx.tenantId]);
+  await owner.query(
+    `UPDATE users SET locked_until = NULL, failed_logins = 0 WHERE tenant_id = $1`,
+    [fx.tenantId],
+  );
 });
 
 describe('the company setting', () => {
   it('starts as "nobody", is read and changed by someone who manages settings, and is audited', async () => {
     const { token } = await makeRule('admins');
     expect(await policyInDb()).toBe('admins');
-    expect((await api.call('GET', '/company/security', token)).json()).toEqual({ requireTwoStep: 'admins' });
+    expect((await api.call('GET', '/company/security', token)).json()).toEqual({
+      requireTwoStep: 'admins',
+    });
 
-    const audit = (await owner.query(`SELECT before, after FROM audit_logs WHERE tenant_id = $1 AND action = 'company.security_change' ORDER BY id DESC LIMIT 1`, [fx.tenantId])).rows[0];
+    const audit = (
+      await owner.query(
+        `SELECT before, after FROM audit_logs WHERE tenant_id = $1 AND action = 'company.security_change' ORDER BY id DESC LIMIT 1`,
+        [fx.tenantId],
+      )
+    ).rows[0];
     expect(audit.before).toEqual({ requireTwoStep: 'none' });
     expect(audit.after).toEqual({ requireTwoStep: 'admins' });
 
     // Before anything is set it reads as "nobody".
-    await owner.query(`UPDATE tenants SET settings = settings - 'require_two_step' WHERE id = $1`, [fx.tenantId]);
-    expect((await api.call('GET', '/company/security', token)).json()).toEqual({ requireTwoStep: 'none' });
+    await owner.query(`UPDATE tenants SET settings = settings - 'require_two_step' WHERE id = $1`, [
+      fx.tenantId,
+    ]);
+    expect((await api.call('GET', '/company/security', token)).json()).toEqual({
+      requireTwoStep: 'none',
+    });
   });
 
   it('refuses a value that is not one of the three, and a person who may not manage settings', async () => {
@@ -145,7 +177,9 @@ describe('a person the company requires to use it', () => {
     expect(errorCode(await api.login(api.credentials('idle')))).toBe('MFA_REQUIRED');
     const signedIn = await api.login({ ...api.credentials('idle'), mfaCode: codeFor(secret) });
     expect(signedIn.statusCode, signedIn.body).toBe(200);
-    expect((await api.call('GET', '/leads', signedIn.json().accessToken as string)).statusCode).toBe(200);
+    expect(
+      (await api.call('GET', '/leads', signedIn.json().accessToken as string)).statusCode,
+    ).toBe(200);
   });
 
   it('covers Admins only when the setting says "Super Admins and Admins", and never counsellors', async () => {
@@ -176,13 +210,19 @@ describe('a person the company requires to use it', () => {
     const { token, secret } = await makeRule('super_admin');
     await allowReuse('super');
 
-    const refused = await api.call('POST', '/auth/mfa/disable', token, { password: PASSWORD, code: codeFor(secret) });
+    const refused = await api.call('POST', '/auth/mfa/disable', token, {
+      password: PASSWORD,
+      code: codeFor(secret),
+    });
     expect(refused.statusCode).toBe(409);
     expect(errorCode(refused)).toBe('MFA_REQUIRED_BY_POLICY');
     expect((await api.call('GET', '/auth/mfa', token)).json().enabled).toBe(true);
 
     expect((await setPolicy(token, 'none')).statusCode).toBe(200);
-    const off = await api.call('POST', '/auth/mfa/disable', token, { password: PASSWORD, code: codeFor(secret, 1) });
+    const off = await api.call('POST', '/auth/mfa/disable', token, {
+      password: PASSWORD,
+      code: codeFor(secret, 1),
+    });
     expect(off.statusCode, off.body).toBe(200);
   });
 
@@ -192,7 +232,9 @@ describe('a person the company requires to use it', () => {
     await setUp(lost);
     expect((await api.call('GET', '/leads', lost)).statusCode).toBe(200);
 
-    expect((await api.call('POST', `/users/${idOf('refresh')}/mfa/reset`, token)).json()).toEqual({ reset: true });
+    expect((await api.call('POST', `/users/${idOf('refresh')}/mfa/reset`, token)).json()).toEqual({
+      reset: true,
+    });
     // Signed in already, but now held until they set it up again.
     expect(errorCode(await api.call('GET', '/leads', lost))).toBe('MFA_SETUP_REQUIRED');
     await setUp(lost);

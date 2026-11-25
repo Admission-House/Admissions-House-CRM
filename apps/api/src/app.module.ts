@@ -43,7 +43,10 @@ import { UsersModule } from './users/users.module.js';
 import { PreferencesModule } from './preferences/preferences.module.js';
 
 /** Provider callbacks carry the company's webhook key (and customers' numbers) in the address; neither belongs in a log. */
-export const safeUrl = (url: string): string => url.replace(/(\/telephony\/hooks\/[^/?]+\/)[^/?]+/, '$1[redacted]').replace(/(\/telephony\/hooks\/[^?]*)\?.*/, '$1');
+export const safeUrl = (url: string): string =>
+  url
+    .replace(/(\/telephony\/hooks\/[^/?]+\/)[^/?]+/, '$1[redacted]')
+    .replace(/(\/telephony\/hooks\/[^?]*)\?.*/, '$1');
 
 @Module({
   imports: [
@@ -55,11 +58,21 @@ export const safeUrl = (url: string): string => url.replace(/(\/telephony\/hooks
           level: env.LOG_LEVEL,
           // The request body is never logged, and credentials are removed from headers.
           redact: {
-            paths: ['req.headers.authorization', 'req.headers.cookie', 'req.headers["x-api-key"]', 'req.headers["x-webhook-key"]', 'res.headers["set-cookie"]'],
+            paths: [
+              'req.headers.authorization',
+              'req.headers.cookie',
+              'req.headers["x-api-key"]',
+              'req.headers["x-webhook-key"]',
+              'res.headers["set-cookie"]',
+            ],
             censor: '[redacted]',
           },
           serializers: {
-            req: (req: { id: string; method: string; url: string }) => ({ id: req.id, method: req.method, url: safeUrl(req.url) }),
+            req: (req: { id: string; method: string; url: string }) => ({
+              id: req.id,
+              method: req.method,
+              url: safeUrl(req.url),
+            }),
           },
           autoLogging: { ignore: (req) => (req.url ?? '').includes('/health/') },
           customLogLevel: (_req, res, err) =>
@@ -110,7 +123,11 @@ export const safeUrl = (url: string): string => url.replace(/(\/telephony\/hooks
   ],
   providers: [
     { provide: APP_PIPE, useClass: ZodValidationPipe },
-    { provide: APP_FILTER, useFactory: (host: HttpAdapterHost) => new AllExceptionsFilter(host), inject: [HttpAdapterHost] },
+    {
+      provide: APP_FILTER,
+      useFactory: (host: HttpAdapterHost) => new AllExceptionsFilter(host),
+      inject: [HttpAdapterHost],
+    },
   ],
 })
 export class AppModule {}

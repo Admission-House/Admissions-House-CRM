@@ -25,16 +25,25 @@ export class SecretBox {
     const cipher = createCipheriv('aes-256-gcm', this.key, iv);
     cipher.setAAD(Buffer.from(context));
     const data = Buffer.concat([cipher.update(plain, 'utf8'), cipher.final()]);
-    return [VERSION, iv.toString('base64url'), cipher.getAuthTag().toString('base64url'), data.toString('base64url')].join('.');
+    return [
+      VERSION,
+      iv.toString('base64url'),
+      cipher.getAuthTag().toString('base64url'),
+      data.toString('base64url'),
+    ].join('.');
   }
 
   /** Throws if the text was altered, belongs to another context, or was sealed with another key. */
   open(sealed: string, context: string): string {
     const [version, iv, tag, data, ...extra] = sealed.split('.');
-    if (version !== VERSION || !iv || !tag || data === undefined || extra.length > 0) throw new Error('not a sealed value');
+    if (version !== VERSION || !iv || !tag || data === undefined || extra.length > 0)
+      throw new Error('not a sealed value');
     const decipher = createDecipheriv('aes-256-gcm', this.key, Buffer.from(iv, 'base64url'));
     decipher.setAAD(Buffer.from(context));
     decipher.setAuthTag(Buffer.from(tag, 'base64url'));
-    return Buffer.concat([decipher.update(Buffer.from(data, 'base64url')), decipher.final()]).toString('utf8');
+    return Buffer.concat([
+      decipher.update(Buffer.from(data, 'base64url')),
+      decipher.final(),
+    ]).toString('utf8');
   }
 }

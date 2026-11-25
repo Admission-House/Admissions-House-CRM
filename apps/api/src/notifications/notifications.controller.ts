@@ -8,13 +8,22 @@ import { pageQuerySchema } from '../common/pagination.js';
 import { NotificationsService } from './notifications.service.js';
 
 class ListNotificationsDto extends createZodDto(
-  pageQuerySchema.extend({ unreadOnly: z.enum(['true', 'false']).default('false').transform((v) => v === 'true') }),
+  pageQuerySchema.extend({
+    unreadOnly: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((v) => v === 'true'),
+  }),
 ) {}
 
 class MarkReadDto extends createZodDto(
   z
     .object({
-      ids: z.array(z.string().regex(/^\d{1,18}$/)).min(1).max(200).optional(),
+      ids: z
+        .array(z.string().regex(/^\d{1,18}$/))
+        .min(1)
+        .max(200)
+        .optional(),
       all: z.boolean().optional(),
     })
     .refine((v) => (v.ids ? !v.all : v.all === true), 'Give either a list of ids or all: true'),

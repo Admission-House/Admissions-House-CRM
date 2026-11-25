@@ -4,7 +4,11 @@ import { AuditService } from '../audit/audit.service.js';
 import type { AuthContext } from '../auth/auth-context.js';
 import { AppError } from '../common/app-error.js';
 import { DatabaseService, Trx } from '../database/database.service.js';
-import type { CreateBreakTypeDto, UpdateBreakTypeDto, UpdateSettingsDto } from './attendance.dto.js';
+import type {
+  CreateBreakTypeDto,
+  UpdateBreakTypeDto,
+  UpdateSettingsDto,
+} from './attendance.dto.js';
 import { AttendanceRepository, SettingsRow } from './attendance.repository.js';
 
 export interface SettingsView {
@@ -49,7 +53,9 @@ export class AttendanceSettingsService {
       const today = await this.repo.localToday(trx);
       const effectiveFrom = dto.effectiveFrom ?? today;
       if (effectiveFrom < today) {
-        throw AppError.badRequest('DATE_IN_PAST', 'New settings cannot start in the past', [{ field: 'effectiveFrom', message: 'Choose today or a later day' }]);
+        throw AppError.badRequest('DATE_IN_PAST', 'New settings cannot start in the past', [
+          { field: 'effectiveFrom', message: 'Choose today or a later day' },
+        ]);
       }
       const before = await this.snapshot(trx);
 
@@ -63,12 +69,20 @@ export class AttendanceSettingsService {
         ON CONFLICT (tenant_id, effective_from) DO UPDATE SET
           shift_start = EXCLUDED.shift_start, shift_end = EXCLUDED.shift_end, grace_minutes = EXCLUDED.grace_minutes,
           half_day_below_hours = EXCLUDED.half_day_below_hours, idle_timeout_min = EXCLUDED.idle_timeout_min,
-          weekly_off_days = EXCLUDED.weekly_off_days, break_hard_limit_minutes = EXCLUDED.break_hard_limit_minutes, created_by = EXCLUDED.created_by`.execute(trx);
+          weekly_off_days = EXCLUDED.weekly_off_days, break_hard_limit_minutes = EXCLUDED.break_hard_limit_minutes, created_by = EXCLUDED.created_by`.execute(
+        trx,
+      );
 
       const after = await this.snapshot(trx);
       await this.audit.write(trx, {
-        tenantId: auth.tenantId, actorId: auth.userId, action: 'attendance.settings', entity: 'attendance_settings',
-        before: before.current, after: { ...dto, effectiveFrom }, ip: auth.ip, requestId: auth.requestId,
+        tenantId: auth.tenantId,
+        actorId: auth.userId,
+        action: 'attendance.settings',
+        entity: 'attendance_settings',
+        before: before.current,
+        after: { ...dto, effectiveFrom },
+        ip: auth.ip,
+        requestId: auth.requestId,
       });
       return after;
     });
@@ -78,7 +92,10 @@ export class AttendanceSettingsService {
 
   listBreakTypes(auth: AuthContext, includeInactive: boolean): Promise<BreakTypeView[]> {
     return this.db.withTenant(auth.tenantId, async (trx) => {
-      let qb = trx.selectFrom('break_types').select(['id', 'name', 'allowed_minutes', 'is_active']).orderBy('name');
+      let qb = trx
+        .selectFrom('break_types')
+        .select(['id', 'name', 'allowed_minutes', 'is_active'])
+        .orderBy('name');
       if (!includeInactive) qb = qb.where('is_active', '=', true);
       return (await qb.execute()).map(toBreakType);
     });
@@ -93,8 +110,14 @@ export class AttendanceSettingsService {
         .returning(['id', 'name', 'allowed_minutes', 'is_active'])
         .executeTakeFirstOrThrow();
       await this.audit.write(trx, {
-        tenantId: auth.tenantId, actorId: auth.userId, action: 'break_type.create', entity: 'break_type', entityId: row.id,
-        after: dto, ip: auth.ip, requestId: auth.requestId,
+        tenantId: auth.tenantId,
+        actorId: auth.userId,
+        action: 'break_type.create',
+        entity: 'break_type',
+        entityId: row.id,
+        after: dto,
+        ip: auth.ip,
+        requestId: auth.requestId,
       });
       return toBreakType(row);
     });
@@ -102,9 +125,14 @@ export class AttendanceSettingsService {
 
   updateBreakType(auth: AuthContext, id: string, dto: UpdateBreakTypeDto): Promise<BreakTypeView> {
     return this.db.withTenant(auth.tenantId, async (trx) => {
-      const before = await trx.selectFrom('break_types').select(['id', 'name', 'allowed_minutes', 'is_active']).where('id', '=', id).executeTakeFirst();
+      const before = await trx
+        .selectFrom('break_types')
+        .select(['id', 'name', 'allowed_minutes', 'is_active'])
+        .where('id', '=', id)
+        .executeTakeFirst();
       if (!before) throw AppError.notFound('Break type');
-      if (dto.name && dto.name.toLowerCase() !== before.name.toLowerCase()) await this.assertNameFree(trx, dto.name);
+      if (dto.name && dto.name.toLowerCase() !== before.name.toLowerCase())
+        await this.assertNameFree(trx, dto.name);
 
       const after = await trx
         .updateTable('break_types')
@@ -117,8 +145,15 @@ export class AttendanceSettingsService {
         .returning(['id', 'name', 'allowed_minutes', 'is_active'])
         .executeTakeFirstOrThrow();
       await this.audit.write(trx, {
-        tenantId: auth.tenantId, actorId: auth.userId, action: 'break_type.update', entity: 'break_type', entityId: id,
-        before: toBreakType(before), after: toBreakType(after), ip: auth.ip, requestId: auth.requestId,
+        tenantId: auth.tenantId,
+        actorId: auth.userId,
+        action: 'break_type.update',
+        entity: 'break_type',
+        entityId: id,
+        before: toBreakType(before),
+        after: toBreakType(after),
+        ip: auth.ip,
+        requestId: auth.requestId,
       });
       return toBreakType(after);
     });
@@ -139,13 +174,24 @@ export class AttendanceSettingsService {
       current,
       upcoming: views.filter((v) => v.effectiveFrom > today).reverse(),
       history: views.filter((v) => v.effectiveFrom <= today && v.id !== current?.id),
-      breakTypes: (await trx.selectFrom('break_types').select(['id', 'name', 'allowed_minutes', 'is_active']).orderBy('name').execute()).map(toBreakType),
+      breakTypes: (
+        await trx
+          .selectFrom('break_types')
+          .select(['id', 'name', 'allowed_minutes', 'is_active'])
+          .orderBy('name')
+          .execute()
+      ).map(toBreakType),
     };
   }
 
   private async assertNameFree(trx: Trx, name: string): Promise<void> {
-    const taken = await trx.selectFrom('break_types').select('id').where(sql`lower(name)`, '=', name.toLowerCase()).executeTakeFirst();
-    if (taken) throw AppError.conflict('BREAK_TYPE_EXISTS', 'A break with this name already exists');
+    const taken = await trx
+      .selectFrom('break_types')
+      .select('id')
+      .where(sql`lower(name)`, '=', name.toLowerCase())
+      .executeTakeFirst();
+    if (taken)
+      throw AppError.conflict('BREAK_TYPE_EXISTS', 'A break with this name already exists');
   }
 }
 
@@ -163,6 +209,11 @@ function toSettings(r: SettingsRow): SettingsView {
   };
 }
 
-function toBreakType(r: { id: string; name: string; allowed_minutes: number; is_active: boolean }): BreakTypeView {
+function toBreakType(r: {
+  id: string;
+  name: string;
+  allowed_minutes: number;
+  is_active: boolean;
+}): BreakTypeView {
   return { id: r.id, name: r.name, allowedMinutes: r.allowed_minutes, isActive: r.is_active };
 }

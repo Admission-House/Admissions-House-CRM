@@ -19,12 +19,21 @@ import { TelephonyWebhookService } from './telephony-webhook.service.js';
 
 @Module({
   imports: [LeadsModule, IntakeModule],
-  controllers: [TelephonyWebhookController, TelephonySettingsController, CallsController, DialerController],
+  controllers: [
+    TelephonyWebhookController,
+    TelephonySettingsController,
+    CallsController,
+    DialerController,
+  ],
   providers: [
     GenericProvider,
     ExotelProvider,
     // To add a provider: write its adapter and list it here.
-    { provide: TELEPHONY_PROVIDERS, useFactory: (generic: GenericProvider, exotel: ExotelProvider) => [generic, exotel], inject: [GenericProvider, ExotelProvider] },
+    {
+      provide: TELEPHONY_PROVIDERS,
+      useFactory: (generic: GenericProvider, exotel: ExotelProvider) => [generic, exotel],
+      inject: [GenericProvider, ExotelProvider],
+    },
     ProviderRegistry,
     TelephonyKeyGuard,
     TelephonySettingsService,

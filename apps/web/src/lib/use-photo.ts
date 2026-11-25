@@ -19,13 +19,18 @@ function load(userId: string, version: number): Promise<string | null> {
 }
 
 /** The address of a person's photo, or null while loading, when they have none, or when it cannot be fetched. */
-export function usePhoto(userId: string | undefined, version: number | null | undefined): string | null {
+export function usePhoto(
+  userId: string | undefined,
+  version: number | null | undefined,
+): string | null {
   const [shown, setShown] = useState<{ key: string; src: string | null } | null>(null);
   const key = userId && version ? `${userId}:${version}` : null;
   useEffect(() => {
     if (!userId || !version) return;
     let live = true;
-    void load(userId, version).then((src) => live && setShown({ key: `${userId}:${version}`, src }));
+    void load(userId, version).then(
+      (src) => live && setShown({ key: `${userId}:${version}`, src }),
+    );
     return () => {
       live = false;
     };
@@ -43,8 +48,10 @@ const LIMIT = 60 * 1024;
  * means a large phone photo is never uploaded, and the server only has to accept a few kilobytes.
  */
 export async function shrinkPicture(file: File): Promise<string> {
-  if (!/^image\/(jpeg|png|webp)$/.test(file.type)) throw new Error('Choose a JPEG, PNG or WebP picture.');
-  if (file.size > MAX_CHOSEN_BYTES) throw new Error('This picture is larger than 5 MB. Choose a smaller one.');
+  if (!/^image\/(jpeg|png|webp)$/.test(file.type))
+    throw new Error('Choose a JPEG, PNG or WebP picture.');
+  if (file.size > MAX_CHOSEN_BYTES)
+    throw new Error('This picture is larger than 5 MB. Choose a smaller one.');
   const bitmap = await createImageBitmap(file).catch(() => {
     throw new Error('This picture cannot be opened. Try another one.');
   });
@@ -55,7 +62,17 @@ export async function shrinkPicture(file: File): Promise<string> {
   const side = Math.min(bitmap.width, bitmap.height);
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, SIDE, SIDE);
-  ctx.drawImage(bitmap, (bitmap.width - side) / 2, (bitmap.height - side) / 2, side, side, 0, 0, SIDE, SIDE);
+  ctx.drawImage(
+    bitmap,
+    (bitmap.width - side) / 2,
+    (bitmap.height - side) / 2,
+    side,
+    side,
+    0,
+    0,
+    SIDE,
+    SIDE,
+  );
   bitmap.close();
   for (const quality of [0.85, 0.7, 0.55, 0.4]) {
     const url = canvas.toDataURL('image/jpeg', quality);

@@ -11,7 +11,14 @@ import type { Trx } from '../database/database.service.js';
 export class FollowUpWriter {
   async create(
     trx: Trx,
-    f: { tenantId: string; leadId: string; userId: string; dueAt: Date; remindBeforeMin?: number; note?: string | null },
+    f: {
+      tenantId: string;
+      leadId: string;
+      userId: string;
+      dueAt: Date;
+      remindBeforeMin?: number;
+      note?: string | null;
+    },
   ): Promise<string> {
     const row = await trx
       .insertInto('followups')
@@ -39,7 +46,10 @@ export class FollowUpWriter {
 
   /** Finishes every open follow-up of the lead, for example when the lead is closed. */
   async closeAll(trx: Trx, leadId: string): Promise<number> {
-    const result = await sql`UPDATE followups SET done_at = now() WHERE lead_id = ${leadId} AND done_at IS NULL`.execute(trx);
+    const result =
+      await sql`UPDATE followups SET done_at = now() WHERE lead_id = ${leadId} AND done_at IS NULL`.execute(
+        trx,
+      );
     await this.refreshNext(trx, leadId);
     return Number(result.numAffectedRows ?? 0);
   }
@@ -47,8 +57,12 @@ export class FollowUpWriter {
   /** closeAll for many leads at once (a bulk status change), in two statements. */
   async closeAllMany(trx: Trx, leadIds: string[]): Promise<void> {
     if (leadIds.length === 0) return;
-    await sql`UPDATE followups SET done_at = now() WHERE lead_id = ANY(${leadIds}::uuid[]) AND done_at IS NULL`.execute(trx);
-    await sql`UPDATE leads SET next_followup_at = NULL WHERE id = ANY(${leadIds}::uuid[]) AND next_followup_at IS NOT NULL`.execute(trx);
+    await sql`UPDATE followups SET done_at = now() WHERE lead_id = ANY(${leadIds}::uuid[]) AND done_at IS NULL`.execute(
+      trx,
+    );
+    await sql`UPDATE leads SET next_followup_at = NULL WHERE id = ANY(${leadIds}::uuid[]) AND next_followup_at IS NOT NULL`.execute(
+      trx,
+    );
   }
 
   /**
@@ -67,7 +81,9 @@ export class FollowUpWriter {
   /** Whether the lead has an open follow-up that has not yet come due. */
   async hasUpcoming(trx: Trx, leadId: string): Promise<boolean> {
     const { rows } = await sql<{ n: string }>`
-      SELECT count(*) AS n FROM followups WHERE lead_id = ${leadId} AND done_at IS NULL AND due_at > now()`.execute(trx);
+      SELECT count(*) AS n FROM followups WHERE lead_id = ${leadId} AND done_at IS NULL AND due_at > now()`.execute(
+      trx,
+    );
     return Number(rows[0]!.n) > 0;
   }
 }

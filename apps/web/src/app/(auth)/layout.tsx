@@ -8,7 +8,9 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       <main className="min-h-dvh">
         <BrandStrip />
         <section className="flex min-h-[calc(100dvh-8rem)] items-center justify-center px-6 py-12 sm:px-12 lg:min-h-dvh">
-          <div className="glass w-full max-w-[500px] rounded-3xl px-7 py-10 sm:px-10 sm:py-12">{children}</div>
+          <div className="glass w-full max-w-[500px] rounded-3xl px-7 py-10 sm:px-10 sm:py-12">
+            {children}
+          </div>
         </section>
       </main>
     </div>

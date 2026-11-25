@@ -20,14 +20,23 @@ function Form() {
     e.preventDefault();
     setError(null);
     if (!email.trim()) return setEmailError('Enter your email address.');
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return setEmailError('Enter a valid email address, for example name@company.com.');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()))
+      return setEmailError('Enter a valid email address, for example name@company.com.');
     setEmailError(undefined);
     setBusy(true);
     try {
-      const res = await api<{ message: string }>('/auth/forgot-password', { method: 'POST', anonymous: true, body: { tenant: company, email: email.trim() } });
+      const res = await api<{ message: string }>('/auth/forgot-password', {
+        method: 'POST',
+        anonymous: true,
+        body: { tenant: company, email: email.trim() },
+      });
       setMessage(res.message);
     } catch (err) {
-      setError(err instanceof ApiError && err.code !== 'VALIDATION_FAILED' ? err.message : 'We could not send the link. Please check the email address and try again.');
+      setError(
+        err instanceof ApiError && err.code !== 'VALIDATION_FAILED'
+          ? err.message
+          : 'We could not send the link. Please check the email address and try again.',
+      );
     } finally {
       setBusy(false);
     }
@@ -35,20 +44,48 @@ function Form() {
 
   return (
     <div>
-      <AuthHeading title="Reset your password" subtitle="Enter your email and we will send you a link to choose a new password." />
+      <AuthHeading
+        title="Reset your password"
+        subtitle="Enter your email and we will send you a link to choose a new password."
+      />
       {message ? (
         <div className="mt-8 space-y-5">
           <Notice tone="ok">{message}</Notice>
-          <Link href={loginPathFor(company)} className="inline-block text-[15px] font-semibold text-brand-600 hover:underline">Back to sign in</Link>
+          <Link
+            href={loginPathFor(company)}
+            className="inline-block text-[15px] font-semibold text-brand-600 hover:underline"
+          >
+            Back to sign in
+          </Link>
         </div>
       ) : (
         <form onSubmit={submit} className="mt-8 space-y-6" noValidate>
           {error && <Notice tone="bad">{error}</Notice>}
           <AuthField label="Email" htmlFor="email" error={emailError}>
-            <AuthInput id="email" type="email" value={email} aria-invalid={!!emailError} onChange={(e) => { setEmail(e.target.value); setEmailError(undefined); }} placeholder="Enter email" autoFocus />
+            <AuthInput
+              id="email"
+              type="email"
+              value={email}
+              aria-invalid={!!emailError}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                setEmailError(undefined);
+              }}
+              placeholder="Enter email"
+              autoFocus
+            />
           </AuthField>
-          <AuthButton type="submit" loading={busy}>Send reset link</AuthButton>
-          <p className="text-center text-[15px]"><Link href={loginPathFor(company)} className="font-semibold text-brand-600 hover:underline">Back to sign in</Link></p>
+          <AuthButton type="submit" loading={busy}>
+            Send reset link
+          </AuthButton>
+          <p className="text-center text-[15px]">
+            <Link
+              href={loginPathFor(company)}
+              className="font-semibold text-brand-600 hover:underline"
+            >
+              Back to sign in
+            </Link>
+          </p>
         </form>
       )}
     </div>

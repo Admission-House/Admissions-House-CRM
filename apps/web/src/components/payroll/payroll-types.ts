@@ -1,5 +1,3 @@
-import { ApiError } from '@/lib/api';
-
 export interface Person {
   id: string;
   name: string;
@@ -81,13 +79,26 @@ export interface PayslipLine {
 export interface PayslipDetail extends PayslipSummary {
   month: string;
   run: { id: string; status: 'draft' | 'approved' };
-  facts: { basisDays: number; workingDays: number; paidLeaveDays: number; unpaidLeaveDays: number; halfDays: number; breakOverMinutes: number; dailyRate: number };
+  facts: {
+    basisDays: number;
+    workingDays: number;
+    paidLeaveDays: number;
+    unpaidLeaveDays: number;
+    halfDays: number;
+    breakOverMinutes: number;
+    dailyRate: number;
+  };
   lines: PayslipLine[];
 }
 
-export const rupees = (n: number): string => `₹${n.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
-export const monthName = (m: string): string => new Date(`${m.slice(0, 7)}-01T00:00:00`).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
-export const errorText = (e: unknown): string => (e instanceof ApiError ? e.message : 'Cannot reach the server. Try again.');
+export const rupees = (n: number): string =>
+  `₹${n.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+export const monthName = (m: string): string =>
+  new Date(`${m.slice(0, 7)}-01T00:00:00`).toLocaleDateString('en-IN', {
+    month: 'long',
+    year: 'numeric',
+  });
+export { errorText } from '@/lib/api';
 
 /** The month before this one on the company's calendar, as YYYY-MM: the one payroll is run for. */
 export function lastMonth(): string {

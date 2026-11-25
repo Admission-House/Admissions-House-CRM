@@ -1,8 +1,24 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { AuthContext } from '../auth/auth-context.js';
 import { CurrentAuth, RequirePermissions } from '../auth/decorators.js';
-import { AddNetworkDto, ConfirmDetectionDto, CreateBranchDto, DetectDto, UpdateBranchDto } from './branches.dto.js';
+import {
+  AddNetworkDto,
+  ConfirmDetectionDto,
+  CreateBranchDto,
+  DetectDto,
+  UpdateBranchDto,
+} from './branches.dto.js';
 import { BranchesService } from './branches.service.js';
 
 @ApiTags('branches')
@@ -31,13 +47,21 @@ export class BranchesController {
 
   @RequirePermissions('branch.manage')
   @Patch(':id')
-  update(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: UpdateBranchDto) {
+  update(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: UpdateBranchDto,
+  ) {
     return this.branches.update(auth, id, body);
   }
 
   @RequirePermissions('branch.manage')
   @Post(':id/networks')
-  addNetwork(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: AddNetworkDto) {
+  addNetwork(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: AddNetworkDto,
+  ) {
     return this.branches.addNetwork(auth, id, body);
   }
 
@@ -55,7 +79,11 @@ export class BranchesController {
   @RequirePermissions('branch.manage')
   @Post(':id/detect')
   @HttpCode(200)
-  detect(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: DetectDto) {
+  detect(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: DetectDto,
+  ) {
     return this.branches.detect(auth, id, body);
   }
 
@@ -63,7 +91,11 @@ export class BranchesController {
   @RequirePermissions('branch.manage')
   @Post(':id/detect/confirm')
   @HttpCode(200)
-  confirm(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: ConfirmDetectionDto) {
+  confirm(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: ConfirmDetectionDto,
+  ) {
     return this.branches.confirm(auth, id, body);
   }
 }

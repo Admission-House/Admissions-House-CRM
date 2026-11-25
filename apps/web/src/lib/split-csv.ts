@@ -17,7 +17,8 @@ function records(text: string): string[] {
   let quoted = false;
   for (let i = 0; i < text.length; i++) {
     const c = text.charCodeAt(i);
-    if (c === 34) quoted = !quoted; // a doubled quote inside a cell flips twice and so changes nothing
+    if (c === 34)
+      quoted = !quoted; // a doubled quote inside a cell flips twice and so changes nothing
     else if (!quoted && (c === 10 || c === 13)) {
       out.push(text.slice(start, i));
       if (c === 13 && text.charCodeAt(i + 1) === 10) i++;
@@ -49,7 +50,8 @@ export function splitCsv(text: string, maxRows = PART_ROWS, maxBytes = PART_BYTE
     bytes = header.length;
   };
   for (const line of body) {
-    if (current.length >= maxRows || (current.length > 0 && bytes + line.length + 1 > maxBytes)) close();
+    if (current.length >= maxRows || (current.length > 0 && bytes + line.length + 1 > maxBytes))
+      close();
     current.push(line);
     bytes += line.length + 1;
   }

@@ -1,4 +1,14 @@
-import { Controller, Get, HttpCode, Inject, Param, ParseUUIDPipe, Post, Req, Res } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  HttpCode,
+  Inject,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Req,
+  Res,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { ZodValidationException } from 'nestjs-zod';
@@ -23,7 +33,10 @@ const importFields = z
     userId: z.uuid().optional(),
     mapping: mappingField_,
   })
-  .refine((v) => (v.assign === 'user') === !!v.userId, { path: ['userId'], message: 'Give userId when assigning to one person, and only then' });
+  .refine((v) => (v.assign === 'user') === !!v.userId, {
+    path: ['userId'],
+    message: 'Give userId when assigning to one person, and only then',
+  });
 
 @ApiTags('lead import')
 @ApiBearerAuth()
@@ -53,13 +66,22 @@ export class ImportsController {
   @ApiConsumes('multipart/form-data')
   @Heavy()
   @Post()
-  async create(@CurrentAuth() auth: AuthContext, @Req() req: FastifyRequest, @Res({ passthrough: true }) reply: FastifyReply) {
+  async create(
+    @CurrentAuth() auth: AuthContext,
+    @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
     const { fields, file } = await this.read(req);
     const parsed = importFields.safeParse(fields);
     if (!parsed.success) throw new ZodValidationException(parsed.error);
     const { sourceId, assign, userId, mapping } = parsed.data;
     reply.status(202);
-    return this.imports.create(auth, { ...file, mapping, sourceId, assign: assign === 'user' ? { mode: 'user', userId: userId! } : { mode: assign } });
+    return this.imports.create(auth, {
+      ...file,
+      mapping,
+      sourceId,
+      assign: assign === 'user' ? { mode: 'user', userId: userId! } : { mode: assign },
+    });
   }
 
   @RequirePermissions('lead.import')
@@ -86,16 +108,34 @@ export class ImportsController {
   @RequirePermissions('lead.import')
   @Heavy()
   @Get(':id/problems.csv')
-  async problems(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Res({ passthrough: true }) reply: FastifyReply) {
+  async problems(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
     const report = await this.imports.errorReport(auth, id);
-    await this.downloads.record(auth, 'import_problems', 'the rows skipped in a lead import', report.fileName);
-    reply.header('content-type', 'text/csv; charset=utf-8').header('content-disposition', `attachment; filename="${encodeURIComponent(report.fileName)}"`).header('cache-control', 'private, no-store');
+    await this.downloads.record(
+      auth,
+      'import_problems',
+      'the rows skipped in a lead import',
+      report.fileName,
+    );
+    reply
+      .header('content-type', 'text/csv; charset=utf-8')
+      .header(
+        'content-disposition',
+        `attachment; filename="${encodeURIComponent(report.fileName)}"`,
+      )
+      .header('cache-control', 'private, no-store');
     return report.csv;
   }
 
   private async read(req: FastifyRequest) {
     const { fields, file } = await readForm(req, this.env.MAX_IMPORT_BYTES);
-    if (!file) throw AppError.badRequest('NO_FILE', 'No file was sent', [{ field: 'file', message: 'Attach the file' }]);
+    if (!file)
+      throw AppError.badRequest('NO_FILE', 'No file was sent', [
+        { field: 'file', message: 'Attach the file' },
+      ]);
     return { fields, file };
   }
 }

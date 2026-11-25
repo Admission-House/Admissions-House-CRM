@@ -6,7 +6,14 @@ import { normalizePhone } from '../common/phone.js';
  * What the CRM understands about a call, whatever the provider calls things. Each provider adapter
  * turns its own webhook into these events; everything after that is provider-independent.
  */
-export const CALL_EVENTS = ['ringing', 'answered', 'ended', 'missed', 'failed', 'recording'] as const;
+export const CALL_EVENTS = [
+  'ringing',
+  'answered',
+  'ended',
+  'missed',
+  'failed',
+  'recording',
+] as const;
 
 const phoneText = z
   .string()
@@ -40,5 +47,8 @@ export class ProviderPayloadError extends Error {}
 
 /** The same event delivered twice has the same key, so the second delivery is recognised. */
 export function eventKey(e: CallEvent): string {
-  return createHash('sha256').update(`${e.providerCallId}|${e.event}|${e.at.toISOString()}`).digest('hex').slice(0, 40);
+  return createHash('sha256')
+    .update(`${e.providerCallId}|${e.event}|${e.at.toISOString()}`)
+    .digest('hex')
+    .slice(0, 40);
 }

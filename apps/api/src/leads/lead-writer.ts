@@ -53,9 +53,22 @@ export interface NewActivity {
 @Injectable()
 export class LeadWriter {
   /** The company's rules for new leads. Without a saved choice: add repeat enquiries to the lead, assign automatically. */
-  async policy(trx: Trx): Promise<{ duplicateAction: 'reject' | 'attach'; autoAssign: boolean; downloadForms: string[] }> {
-    const row = await trx.selectFrom('lead_policies').select(['duplicate_action', 'auto_assign', 'download_forms']).executeTakeFirst();
-    return { duplicateAction: (row?.duplicate_action as 'reject' | 'attach' | undefined) ?? 'attach', autoAssign: row?.auto_assign ?? true, downloadForms: row?.download_forms ?? DEFAULT_DOWNLOAD_FORMS };
+  async policy(
+    trx: Trx,
+  ): Promise<{
+    duplicateAction: 'reject' | 'attach';
+    autoAssign: boolean;
+    downloadForms: string[];
+  }> {
+    const row = await trx
+      .selectFrom('lead_policies')
+      .select(['duplicate_action', 'auto_assign', 'download_forms'])
+      .executeTakeFirst();
+    return {
+      duplicateAction: (row?.duplicate_action as 'reject' | 'attach' | undefined) ?? 'attach',
+      autoAssign: row?.auto_assign ?? true,
+      downloadForms: row?.download_forms ?? DEFAULT_DOWNLOAD_FORMS,
+    };
   }
 
   /** The status new leads start in: the first active one in the "fresh" queue. */
@@ -67,7 +80,10 @@ export class LeadWriter {
       .where('is_active', '=', true)
       .orderBy('sort_order')
       .executeTakeFirst();
-    if (!status) throw new Error('this company has no active status in the "fresh" queue; leads cannot be filed');
+    if (!status)
+      throw new Error(
+        'this company has no active status in the "fresh" queue; leads cannot be filed',
+      );
     return status.id;
   }
 

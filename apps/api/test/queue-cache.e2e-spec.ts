@@ -28,14 +28,19 @@ afterAll(async () => {
   await owner?.end();
 });
 
-const total = async (token: string) => (await api.call('GET', '/leads/queues', token)).json().total as number;
+const total = async (token: string) =>
+  (await api.call('GET', '/leads/queues', token)).json().total as number;
 
 describe('queue counts', () => {
   it('are reused for a few seconds for a Super Admin, but always fresh for a counsellor', async () => {
     const saBefore = await total(t.sa!);
     const lcBefore = await total(t.lc!);
 
-    const made = await api.call('POST', '/leads', t.lc!, { name: 'Cache Lead', phone: phone(), sourceId: fx.sourceId('Website') });
+    const made = await api.call('POST', '/leads', t.lc!, {
+      name: 'Cache Lead',
+      phone: phone(),
+      sourceId: fx.sourceId('Website'),
+    });
     expect(made.statusCode).toBe(201);
 
     expect(await total(t.lc!)).toBe(lcBefore + 1); // own scope: never cached

@@ -24,7 +24,9 @@ export const updateOwnAccountSchema = z
     email: z.string().trim().toLowerCase().email().max(254).optional(),
     currentPassword: z.string().min(1).max(128).optional(),
   })
-  .refine((v) => v.name !== undefined || v.phone !== undefined || v.email !== undefined, { message: 'Nothing to change' });
+  .refine((v) => v.name !== undefined || v.phone !== undefined || v.email !== undefined, {
+    message: 'Nothing to change',
+  });
 export class UpdateOwnAccountDto extends createZodDto(updateOwnAccountSchema) {}
 
 export const createUserSchema = z.object({

@@ -94,7 +94,10 @@ export class LeaveService {
 
   listTypes(auth: AuthContext, includeInactive: boolean): Promise<LeaveTypeView[]> {
     return this.db.withTenant(auth.tenantId, async (trx) => {
-      let qb = trx.selectFrom('leave_types').select(['id', 'name', 'is_paid', 'yearly_quota', 'is_active']).orderBy('name');
+      let qb = trx
+        .selectFrom('leave_types')
+        .select(['id', 'name', 'is_paid', 'yearly_quota', 'is_active'])
+        .orderBy('name');
       if (!includeInactive) qb = qb.where('is_active', '=', true);
       return (await qb.execute()).map(toType);
     });
@@ -105,7 +108,12 @@ export class LeaveService {
       await this.assertTypeNameFree(trx, dto.name);
       const row = await trx
         .insertInto('leave_types')
-        .values({ tenant_id: auth.tenantId, name: dto.name, is_paid: dto.isPaid, yearly_quota: dto.yearlyQuota })
+        .values({
+          tenant_id: auth.tenantId,
+          name: dto.name,
+          is_paid: dto.isPaid,
+          yearly_quota: dto.yearlyQuota,
+        })
         .returning(['id', 'name', 'is_paid', 'yearly_quota', 'is_active'])
         .executeTakeFirstOrThrow();
       await this.record(trx, auth, 'leave_type.create', 'leave_type', row.id, undefined, dto);
@@ -115,9 +123,14 @@ export class LeaveService {
 
   updateType(auth: AuthContext, id: string, dto: UpdateLeaveTypeDto): Promise<LeaveTypeView> {
     return this.db.withTenant(auth.tenantId, async (trx) => {
-      const before = await trx.selectFrom('leave_types').select(['id', 'name', 'is_paid', 'yearly_quota', 'is_active']).where('id', '=', id).executeTakeFirst();
+      const before = await trx
+        .selectFrom('leave_types')
+        .select(['id', 'name', 'is_paid', 'yearly_quota', 'is_active'])
+        .where('id', '=', id)
+        .executeTakeFirst();
       if (!before) throw AppError.notFound('Leave type');
-      if (dto.name && dto.name.toLowerCase() !== before.name.toLowerCase()) await this.assertTypeNameFree(trx, dto.name);
+      if (dto.name && dto.name.toLowerCase() !== before.name.toLowerCase())
+        await this.assertTypeNameFree(trx, dto.name);
       const after = await trx
         .updateTable('leave_types')
         .set({
@@ -129,7 +142,15 @@ export class LeaveService {
         .where('id', '=', id)
         .returning(['id', 'name', 'is_paid', 'yearly_quota', 'is_active'])
         .executeTakeFirstOrThrow();
-      await this.record(trx, auth, 'leave_type.update', 'leave_type', id, toType(before), toType(after));
+      await this.record(
+        trx,
+        auth,
+        'leave_type.update',
+        'leave_type',
+        id,
+        toType(before),
+        toType(after),
+      );
       return toType(after);
     });
   }
@@ -150,7 +171,14 @@ export class LeaveService {
   }
 
   private async balanceRows(trx: Trx, userId: string, year: number) {
-    const { rows } = await sql<{ id: string; name: string; is_paid: boolean; quota: number; balance: number; pending: number }>`
+    const { rows } = await sql<{
+      id: string;
+      name: string;
+      is_paid: boolean;
+      quota: number;
+      balance: number;
+      pending: number;
+    }>`
       SELECT lt.id, lt.name, lt.is_paid, lt.yearly_quota::float8 AS quota,
              COALESCE(b.balance, lt.yearly_quota)::float8 AS balance,
              COALESCE((SELECT sum(r.days) FROM leave_requests r
@@ -178,18 +206,34 @@ export class LeaveService {
     return view;
   }
 
-  private createInner(auth: AuthContext, dto: CreateLeaveRequestDto, mails: Mail[]): Promise<LeaveRequestView> {
+  private createInner(
+    auth: AuthContext,
+    dto: CreateLeaveRequestDto,
+    mails: Mail[],
+  ): Promise<LeaveRequestView> {
     return this.db.withTenant(auth.tenantId, async (trx) => {
-      const type = await trx.selectFrom('leave_types').select(['id', 'name', 'is_paid', 'is_active']).where('id', '=', dto.leaveTypeId).executeTakeFirst();
+      const type = await trx
+        .selectFrom('leave_types')
+        .select(['id', 'name', 'is_paid', 'is_active'])
+        .where('id', '=', dto.leaveTypeId)
+        .executeTakeFirst();
       if (!type || !type.is_active) {
-        throw AppError.badRequest('LEAVE_TYPE_INVALID', 'Choose a kind of leave that is in use', [{ field: 'leaveTypeId', message: 'Choose a kind of leave that is in use' }]);
+        throw AppError.badRequest('LEAVE_TYPE_INVALID', 'Choose a kind of leave that is in use', [
+          { field: 'leaveTypeId', message: 'Choose a kind of leave that is in use' },
+        ]);
       }
 
       assertSingleYear(dto.fromDate, dto.toDate);
       const today = await this.attendance.localToday(trx);
-      const { rows: age } = await sql<{ days: number }>`SELECT (${today}::date - ${dto.fromDate}::date) AS days`.execute(trx);
+      const { rows: age } = await sql<{
+        days: number;
+      }>`SELECT (${today}::date - ${dto.fromDate}::date) AS days`.execute(trx);
       if (age[0]!.days > MAX_BACKDATE_DAYS) {
-        throw AppError.badRequest('DATE_TOO_OLD', `Leave can start up to ${MAX_BACKDATE_DAYS} days in the past`, [{ field: 'fromDate', message: 'Choose a more recent day' }]);
+        throw AppError.badRequest(
+          'DATE_TOO_OLD',
+          `Leave can start up to ${MAX_BACKDATE_DAYS} days in the past`,
+          [{ field: 'fromDate', message: 'Choose a more recent day' }],
+        );
       }
 
       const days = countLeaveDays({
@@ -200,15 +244,24 @@ export class LeaveService {
         halfDay: dto.halfDay,
       });
       if (days === 0) {
-        throw AppError.badRequest('NO_WORKING_DAYS', 'Those days are all weekly offs or holidays, so no leave is needed');
+        throw AppError.badRequest(
+          'NO_WORKING_DAYS',
+          'Those days are all weekly offs or holidays, so no leave is needed',
+        );
       }
 
       const year = Number(dto.fromDate.slice(0, 4));
       if (type.is_paid) {
         await this.ensureBalances(trx, auth.tenantId, auth.userId, year);
-        const row = (await this.balanceRows(trx, auth.userId, year)).find((x) => x.leaveType.id === type.id);
+        const row = (await this.balanceRows(trx, auth.userId, year)).find(
+          (x) => x.leaveType.id === type.id,
+        );
         if (row && (row.available ?? 0) < days) {
-          throw new AppError('INSUFFICIENT_BALANCE', `You have ${row.available} day(s) of ${type.name} available, and this needs ${days}`, 422);
+          throw new AppError(
+            'INSUFFICIENT_BALANCE',
+            `You have ${row.available} day(s) of ${type.name} available, and this needs ${days}`,
+            422,
+          );
         }
       }
 
@@ -219,8 +272,14 @@ export class LeaveService {
           await trx
             .insertInto('leave_requests')
             .values({
-              tenant_id: auth.tenantId, user_id: auth.userId, leave_type_id: type.id,
-              from_date: dto.fromDate, to_date: dto.toDate, days, half: dto.half ?? null, reason: dto.reason ?? null,
+              tenant_id: auth.tenantId,
+              user_id: auth.userId,
+              leave_type_id: type.id,
+              from_date: dto.fromDate,
+              to_date: dto.toDate,
+              days,
+              half: dto.half ?? null,
+              reason: dto.reason ?? null,
             })
             .returning('id')
             .executeTakeFirstOrThrow()
@@ -238,8 +297,12 @@ export class LeaveService {
           subject: `Leave request from ${auth.name}`,
           text: `Hello ${a.name},
 
-${auth.name} has asked for ${type.name} from ${dto.fromDate} to ${dto.toDate} (${dto.half ? `half day, ${dto.half} half` : `${days} day${days === 1 ? '' : 's'}`}).${dto.reason ? `
-Reason: ${dto.reason}` : ''}
+${auth.name} has asked for ${type.name} from ${dto.fromDate} to ${dto.toDate} (${dto.half ? `half day, ${dto.half} half` : `${days} day${days === 1 ? '' : 's'}`}).${
+            dto.reason
+              ? `
+Reason: ${dto.reason}`
+              : ''
+          }
 
 Open the request to approve or reject it:
 ${this.leaveLink()}
@@ -250,9 +313,24 @@ ${this.leaveLink()}
         tenantId: auth.tenantId,
         userIds: approvers,
         type: 'approval',
-        payload: { event: 'leave_requested', requestId: id, userId: auth.userId, userName: auth.name, leaveType: type.name, fromDate: dto.fromDate, toDate: dto.toDate, days, half: dto.half ?? null },
+        payload: {
+          event: 'leave_requested',
+          requestId: id,
+          userId: auth.userId,
+          userName: auth.name,
+          leaveType: type.name,
+          fromDate: dto.fromDate,
+          toDate: dto.toDate,
+          days,
+          half: dto.half ?? null,
+        },
       });
-      await this.record(trx, auth, 'leave.request', 'leave_request', id, undefined, { type: type.name, from: dto.fromDate, to: dto.toDate, days });
+      await this.record(trx, auth, 'leave.request', 'leave_request', id, undefined, {
+        type: type.name,
+        from: dto.fromDate,
+        to: dto.toDate,
+        days,
+      });
       return this.one(trx, id);
     });
   }
@@ -273,18 +351,30 @@ ${this.leaveLink()}
     return view;
   }
 
-  private decideInner(auth: AuthContext, id: string, dto: DecisionDto, mails: Mail[]): Promise<LeaveRequestView> {
+  private decideInner(
+    auth: AuthContext,
+    id: string,
+    dto: DecisionDto,
+    mails: Mail[],
+  ): Promise<LeaveRequestView> {
     return this.db.withTenant(auth.tenantId, async (trx) => {
       const request = await this.lockForUpdate(trx, id, scopeCondition(auth, 'lr.user_id'));
-      if (request.user_id === auth.userId) throw new AppError('SELF_APPROVAL', 'Another person must decide on your leave', 403);
-      if (request.status !== 'pending') throw AppError.conflict('ALREADY_DECIDED', `This request is already ${request.status}`);
+      if (request.user_id === auth.userId)
+        throw new AppError('SELF_APPROVAL', 'Another person must decide on your leave', 403);
+      if (request.status !== 'pending')
+        throw AppError.conflict('ALREADY_DECIDED', `This request is already ${request.status}`);
 
       if (dto.decision === 'approved' && request.is_paid) {
         await this.spendBalance(trx, auth.tenantId, request, -1);
       }
       await trx
         .updateTable('leave_requests')
-        .set({ status: dto.decision, decided_by: auth.userId, decided_at: sql`now()`, decision_note: dto.note ?? null })
+        .set({
+          status: dto.decision,
+          decided_by: auth.userId,
+          decided_at: sql`now()`,
+          decision_note: dto.note ?? null,
+        })
         .where('id', '=', id)
         .execute();
 
@@ -294,8 +384,12 @@ ${this.leaveLink()}
           subject: `Your leave was ${dto.decision}`,
           text: `Hello ${u.name},
 
-Your leave from ${request.from_date} to ${request.to_date} was ${dto.decision} by ${auth.name}.${dto.note ? `
-Note: ${dto.note}` : ''}
+Your leave from ${request.from_date} to ${request.to_date} was ${dto.decision} by ${auth.name}.${
+            dto.note
+              ? `
+Note: ${dto.note}`
+              : ''
+          }
 
 Details:
 ${this.leaveLink()}
@@ -306,9 +400,25 @@ ${this.leaveLink()}
         tenantId: auth.tenantId,
         userIds: [request.user_id],
         type: 'approval',
-        payload: { event: 'leave_decided', requestId: id, decision: dto.decision, decidedBy: auth.name, note: dto.note ?? null, fromDate: request.from_date, toDate: request.to_date },
+        payload: {
+          event: 'leave_decided',
+          requestId: id,
+          decision: dto.decision,
+          decidedBy: auth.name,
+          note: dto.note ?? null,
+          fromDate: request.from_date,
+          toDate: request.to_date,
+        },
       });
-      await this.record(trx, auth, `leave.${dto.decision}`, 'leave_request', id, { status: 'pending' }, { status: dto.decision, note: dto.note ?? null });
+      await this.record(
+        trx,
+        auth,
+        `leave.${dto.decision}`,
+        'leave_request',
+        id,
+        { status: 'pending' },
+        { status: dto.decision, note: dto.note ?? null },
+      );
       return this.one(trx, id);
     });
   }
@@ -317,24 +427,51 @@ ${this.leaveLink()}
   cancel(auth: AuthContext, id: string): Promise<LeaveRequestView> {
     return this.db.withTenant(auth.tenantId, async (trx) => {
       // Only the person's own request can be cancelled, whatever their data scope.
-      const request = await this.lockForUpdate(trx, id, sql<SqlBool>`lr.user_id = ${auth.userId}::uuid`);
+      const request = await this.lockForUpdate(
+        trx,
+        id,
+        sql<SqlBool>`lr.user_id = ${auth.userId}::uuid`,
+      );
       if (request.status !== 'pending' && request.status !== 'approved') {
-        throw AppError.conflict('NOT_CANCELLABLE', `A ${request.status} request cannot be cancelled`);
+        throw AppError.conflict(
+          'NOT_CANCELLABLE',
+          `A ${request.status} request cannot be cancelled`,
+        );
       }
       if (request.status === 'approved') {
         const today = await this.attendance.localToday(trx);
-        if (request.from_date <= today) throw AppError.conflict('LEAVE_STARTED', 'This leave has already started, so it cannot be cancelled');
+        if (request.from_date <= today)
+          throw AppError.conflict(
+            'LEAVE_STARTED',
+            'This leave has already started, so it cannot be cancelled',
+          );
         if (request.is_paid) await this.spendBalance(trx, auth.tenantId, request, +1);
       }
-      await trx.updateTable('leave_requests').set({ status: 'cancelled' }).where('id', '=', id).execute();
-      await this.record(trx, auth, 'leave.cancel', 'leave_request', id, { status: request.status }, { status: 'cancelled' });
+      await trx
+        .updateTable('leave_requests')
+        .set({ status: 'cancelled' })
+        .where('id', '=', id)
+        .execute();
+      await this.record(
+        trx,
+        auth,
+        'leave.cancel',
+        'leave_request',
+        id,
+        { status: request.status },
+        { status: 'cancelled' },
+      );
       return this.one(trx, id);
     });
   }
 
   // ---------------------------------------------------------------- helpers
 
-  private list(auth: AuthContext, query: ListLeaveRequestsDto, forApproval: boolean): Promise<Page<LeaveRequestView>> {
+  private list(
+    auth: AuthContext,
+    query: ListLeaveRequestsDto,
+    forApproval: boolean,
+  ): Promise<Page<LeaveRequestView>> {
     return this.db.withTenant(auth.tenantId, async (trx) => {
       const after = decodeCursor(query.cursor, cursorShape);
       const conditions = [sql<SqlBool>`true`];
@@ -348,7 +485,8 @@ ${this.leaveLink()}
       if (query.status) conditions.push(sql<SqlBool>`lr.status = ${query.status}`);
       if (query.from) conditions.push(sql<SqlBool>`lr.to_date >= ${query.from}::date`);
       if (query.to) conditions.push(sql<SqlBool>`lr.from_date <= ${query.to}::date`);
-      if (after) conditions.push(sql<SqlBool>`(lr.from_date, lr.id) < (${after.d}::date, ${after.i}::uuid)`);
+      if (after)
+        conditions.push(sql<SqlBool>`(lr.from_date, lr.id) < (${after.d}::date, ${after.i}::uuid)`);
 
       const { rows } = await sql<RequestRow>`
         ${REQUEST_SELECT}
@@ -368,7 +506,14 @@ ${this.leaveLink()}
   /** The request, locked against a second decision at the same moment. Not matching `visible` is a 404. */
   private async lockForUpdate(trx: Trx, id: string, visible: ReturnType<typeof scopeCondition>) {
     const { rows } = await sql<{
-      id: string; user_id: string; status: string; days: number; from_date: string; to_date: string; leave_type_id: string; is_paid: boolean;
+      id: string;
+      user_id: string;
+      status: string;
+      days: number;
+      from_date: string;
+      to_date: string;
+      leave_type_id: string;
+      is_paid: boolean;
     }>`
       SELECT lr.id, lr.user_id, lr.status, lr.days::float8 AS days, lr.from_date::text AS from_date, lr.to_date::text AS to_date,
              lr.leave_type_id, lt.is_paid
@@ -380,7 +525,12 @@ ${this.leaveLink()}
   }
 
   /** Takes days from (direction -1) or gives days back to (+1) the balance of the request's year. */
-  private async spendBalance(trx: Trx, tenantId: string, request: { user_id: string; leave_type_id: string; from_date: string; days: number }, direction: 1 | -1) {
+  private async spendBalance(
+    trx: Trx,
+    tenantId: string,
+    request: { user_id: string; leave_type_id: string; from_date: string; days: number },
+    direction: 1 | -1,
+  ) {
     const year = Number(request.from_date.slice(0, 4));
     await this.ensureBalances(trx, tenantId, request.user_id, year);
     const { rows } = await sql<{ balance: number }>`
@@ -389,15 +539,26 @@ ${this.leaveLink()}
       FOR UPDATE`.execute(trx);
     const current = rows[0]?.balance ?? 0;
     if (direction === -1 && current < request.days) {
-      throw new AppError('INSUFFICIENT_BALANCE', `Only ${current} day(s) are left, and this request needs ${request.days}`, 422);
+      throw new AppError(
+        'INSUFFICIENT_BALANCE',
+        `Only ${current} day(s) are left, and this request needs ${request.days}`,
+        422,
+      );
     }
     await sql`
       UPDATE leave_balances SET balance = balance + ${direction * request.days}
-      WHERE user_id = ${request.user_id} AND leave_type_id = ${request.leave_type_id} AND year = ${year}`.execute(trx);
+      WHERE user_id = ${request.user_id} AND leave_type_id = ${request.leave_type_id} AND year = ${year}`.execute(
+      trx,
+    );
   }
 
   /** Makes sure a person has a balance row for every kind of leave in use for the year. */
-  private async ensureBalances(trx: Trx, tenantId: string, userId: string, year: number): Promise<void> {
+  private async ensureBalances(
+    trx: Trx,
+    tenantId: string,
+    userId: string,
+    year: number,
+  ): Promise<void> {
     await sql`
       INSERT INTO leave_balances (tenant_id, user_id, leave_type_id, year, balance)
       SELECT ${tenantId}, ${userId}, lt.id, ${year}, lt.yearly_quota FROM leave_types lt WHERE lt.is_active
@@ -422,7 +583,9 @@ ${this.leaveLink()}
 
   private async holidaysBetween(trx: Trx, from: string, to: string): Promise<Set<string>> {
     const { rows } = await sql<{ d: string }>`
-      SELECT holiday_date::text AS d FROM holidays WHERE holiday_date BETWEEN ${from}::date AND ${to}::date`.execute(trx);
+      SELECT holiday_date::text AS d FROM holidays WHERE holiday_date BETWEEN ${from}::date AND ${to}::date`.execute(
+      trx,
+    );
     return new Set(rows.map((r) => r.d));
   }
 
@@ -440,12 +603,35 @@ ${this.leaveLink()}
   }
 
   private async assertTypeNameFree(trx: Trx, name: string): Promise<void> {
-    const taken = await trx.selectFrom('leave_types').select('id').where(sql`lower(name)`, '=', name.toLowerCase()).executeTakeFirst();
-    if (taken) throw AppError.conflict('LEAVE_TYPE_EXISTS', 'A kind of leave with this name already exists');
+    const taken = await trx
+      .selectFrom('leave_types')
+      .select('id')
+      .where(sql`lower(name)`, '=', name.toLowerCase())
+      .executeTakeFirst();
+    if (taken)
+      throw AppError.conflict('LEAVE_TYPE_EXISTS', 'A kind of leave with this name already exists');
   }
 
-  private record(trx: Trx, auth: AuthContext, action: string, entity: string, id: string, before: unknown, after: unknown) {
-    return this.audit.write(trx, { tenantId: auth.tenantId, actorId: auth.userId, action, entity, entityId: id, before, after, ip: auth.ip, requestId: auth.requestId });
+  private record(
+    trx: Trx,
+    auth: AuthContext,
+    action: string,
+    entity: string,
+    id: string,
+    before: unknown,
+    after: unknown,
+  ) {
+    return this.audit.write(trx, {
+      tenantId: auth.tenantId,
+      actorId: auth.userId,
+      action,
+      entity,
+      entityId: id,
+      before,
+      after,
+      ip: auth.ip,
+      requestId: auth.requestId,
+    });
   }
 }
 
@@ -458,10 +644,23 @@ const REQUEST_SELECT = sql`
   JOIN leave_types lt ON lt.id = lr.leave_type_id
   LEFT JOIN users d ON d.id = lr.decided_by`;
 
-const overlap = () => AppError.conflict('LEAVE_OVERLAP', 'You already have leave that overlaps these days');
+const overlap = () =>
+  AppError.conflict('LEAVE_OVERLAP', 'You already have leave that overlaps these days');
 
-function toType(r: { id: string; name: string; is_paid: boolean; yearly_quota: string | number; is_active: boolean }): LeaveTypeView {
-  return { id: r.id, name: r.name, isPaid: r.is_paid, yearlyQuota: Number(r.yearly_quota), isActive: r.is_active };
+function toType(r: {
+  id: string;
+  name: string;
+  is_paid: boolean;
+  yearly_quota: string | number;
+  is_active: boolean;
+}): LeaveTypeView {
+  return {
+    id: r.id,
+    name: r.name,
+    isPaid: r.is_paid,
+    yearlyQuota: Number(r.yearly_quota),
+    isActive: r.is_active,
+  };
 }
 
 function toRequest(r: RequestRow): LeaveRequestView {

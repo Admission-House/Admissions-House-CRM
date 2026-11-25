@@ -38,7 +38,13 @@ export class PayrollFactsService {
         ORDER BY 1`.execute(trx);
 
     // Minutes are whole minutes. A break that is still open cannot be measured, and the check-out closes every break.
-    const attendance = await sql<{ user_id: string; day: string; late_minutes: number; worked_minutes: number | null; over_minutes: number }>`
+    const attendance = await sql<{
+      user_id: string;
+      day: string;
+      late_minutes: number;
+      worked_minutes: number | null;
+      over_minutes: number;
+    }>`
         SELECT a.user_id, a.work_date::text AS day, a.late_minutes,
                CASE WHEN a.check_out_at IS NULL THEN NULL
                     ELSE greatest(0, floor(extract(epoch FROM a.check_out_at - a.check_in_at) / 60) - a.away_minutes - coalesce(b.taken, 0))::int END AS worked_minutes,
@@ -50,7 +56,9 @@ export class PayrollFactsService {
           FROM (SELECT t.allowed_minutes AS allowed, sum(floor(extract(epoch FROM l.ended_at - l.started_at) / 60)) AS minutes
                 FROM break_logs l JOIN break_types t ON t.id = l.break_type_id
                 WHERE l.attendance_id = a.id AND l.ended_at IS NOT NULL GROUP BY t.id, t.allowed_minutes) per_kind) b ON true
-        WHERE a.user_id = ANY(${ids}::uuid[]) AND a.work_date BETWEEN ${first}::date AND ${last}::date`.execute(trx);
+        WHERE a.user_id = ANY(${ids}::uuid[]) AND a.work_date BETWEEN ${first}::date AND ${last}::date`.execute(
+      trx,
+    );
 
     // A request's days are spread over its working dates (a half day is one date at 0.5), then cut to this month.
     const leave = await sql<{ user_id: string; day: string; share: number; is_paid: boolean }>`
@@ -67,9 +75,16 @@ export class PayrollFactsService {
           SELECT r.id, count(*)::int AS n FROM req r JOIN cal c ON c.day BETWEEN r.from_date AND r.to_date AND c.is_working GROUP BY r.id)
         SELECT r.user_id, c.day::text AS day, least(1, r.days / e.n)::float8 AS share, r.is_paid
         FROM req r JOIN eligible e ON e.id = r.id
-        JOIN cal c ON c.day BETWEEN r.from_date AND r.to_date AND c.is_working AND c.day BETWEEN ${first}::date AND ${last}::date`.execute(trx);
+        JOIN cal c ON c.day BETWEEN r.from_date AND r.to_date AND c.is_working AND c.day BETWEEN ${first}::date AND ${last}::date`.execute(
+      trx,
+    );
 
-    const joined = await sql<{ id: string; joined_on: string | null }>`SELECT id, joined_on::text AS joined_on FROM users WHERE id = ANY(${ids}::uuid[])`.execute(trx);
+    const joined = await sql<{
+      id: string;
+      joined_on: string | null;
+    }>`SELECT id, joined_on::text AS joined_on FROM users WHERE id = ANY(${ids}::uuid[])`.execute(
+      trx,
+    );
 
     const attendanceBy = new Map(attendance.rows.map((a) => [`${a.user_id}|${a.day}`, a]));
     const leaveBy = new Map(leave.rows.map((l) => [`${l.user_id}|${l.day}`, l]));
@@ -87,7 +102,14 @@ export class PayrollFactsService {
             date: c.day,
             isWorking: c.is_working,
             ...(joinedDay && c.day < joinedDay && { beforeJoining: true }),
-            ...(a && { attendance: { lateMinutes: a.late_minutes, workedMinutes: a.worked_minutes, halfDayBelowMinutes: c.half_minutes, breakOverMinutes: a.over_minutes } }),
+            ...(a && {
+              attendance: {
+                lateMinutes: a.late_minutes,
+                workedMinutes: a.worked_minutes,
+                halfDayBelowMinutes: c.half_minutes,
+                breakOverMinutes: a.over_minutes,
+              },
+            }),
             ...(l && { leave: { share: l.share, paid: l.is_paid } }),
           };
         }),

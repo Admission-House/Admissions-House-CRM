@@ -6,9 +6,15 @@ import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Badge, Button, Field, Input, Notice, Select, Spinner } from '@/components/ui';
 import { Modal } from '@/components/ui/modal';
-import { api, ApiError } from '@/lib/api';
+import { api, errorText } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { joinMessage, OUTCOME_TEXT, whatsappLink, PHASE_TEXT, type SessionView } from '@/lib/communications';
+import {
+  joinMessage,
+  OUTCOME_TEXT,
+  whatsappLink,
+  PHASE_TEXT,
+  type SessionView,
+} from '@/lib/communications';
 import { fmtDateTime } from '@/lib/format';
 import { useApi } from '@/lib/use-api';
 
@@ -20,7 +26,17 @@ interface Usage {
 }
 
 /** Start a voice or video call with a lead, send the lead the link, and join, copy or end the sessions. */
-export function VideoModal({ leadId, leadName, phone, onClose }: { leadId: string; leadName: string; phone: string; onClose: () => void }) {
+export function VideoModal({
+  leadId,
+  leadName,
+  phone,
+  onClose,
+}: {
+  leadId: string;
+  leadName: string;
+  phone: string;
+  onClose: () => void;
+}) {
   const router = useRouter();
   const sessions = useApi<SessionView[]>(`/leads/${leadId}/communications`);
   const usage = useApi<Usage>('/communications/usage');
@@ -37,14 +53,17 @@ export function VideoModal({ leadId, leadName, phone, onClose }: { leadId: strin
     try {
       const body: Record<string, unknown> = { maxMinutes: Number(minutes), kind };
       if (when) body.scheduledFor = new Date(when).toISOString();
-      const made = await api<SessionView>(`/leads/${leadId}/communications`, { method: 'POST', body });
+      const made = await api<SessionView>(`/leads/${leadId}/communications`, {
+        method: 'POST',
+        body,
+      });
       sessions.reload();
       usage.reload();
       setWhen('');
       setCopied(null);
       if (!when) router.push(`/video/${made.id}`);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Cannot reach the server.');
+      setError(errorText(e, 'Cannot reach the server.'));
     } finally {
       setBusy(false);
     }
@@ -57,7 +76,7 @@ export function VideoModal({ leadId, leadName, phone, onClose }: { leadId: strin
       sessions.reload();
       usage.reload();
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Cannot reach the server.');
+      setError(errorText(e, 'Cannot reach the server.'));
     }
   }
 
@@ -74,19 +93,41 @@ export function VideoModal({ leadId, leadName, phone, onClose }: { leadId: strin
 
   const { me } = useAuth();
   const share = (s: SessionView) =>
-    whatsappLink(phone, joinMessage({ guest: leadName, host: me?.user.name ?? '', company: me?.company.name ?? '', kind: s.kind, link: s.guestUrl ?? '' }));
+    whatsappLink(
+      phone,
+      joinMessage({
+        guest: leadName,
+        host: me?.user.name ?? '',
+        company: me?.company.name ?? '',
+        kind: s.kind,
+        link: s.guestUrl ?? '',
+      }),
+    );
 
   const u = usage.data;
-  const nearLimit = u?.limitStandardMinutes ? u.usedStandardMinutes >= u.limitStandardMinutes * 0.8 : false;
+  const nearLimit = u?.limitStandardMinutes
+    ? u.usedStandardMinutes >= u.limitStandardMinutes * 0.8
+    : false;
 
   // Drawn on the page itself: inside the lead header the frosted glass would make "fixed" relative to the header.
   return createPortal(
     <Modal title="Voice and video counselling" onClose={onClose} width="max-w-xl">
       <div className="space-y-5">
         <div role="radiogroup" aria-label="Kind of call" className="grid grid-cols-2 gap-2">
-          {([['video', 'Video call', Video], ['voice', 'Voice call', Mic]] as const).map(([key, text, Icon]) => (
-            <button key={key} type="button" role="radio" aria-checked={kind === key} onClick={() => setKind(key)}
-              className={`flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium transition ${kind === key ? 'border-brand bg-mint text-brand' : 'border-line-strong bg-surface text-ink hover:bg-head'}`}>
+          {(
+            [
+              ['video', 'Video call', Video],
+              ['voice', 'Voice call', Mic],
+            ] as const
+          ).map(([key, text, Icon]) => (
+            <button
+              key={key}
+              type="button"
+              role="radio"
+              aria-checked={kind === key}
+              onClick={() => setKind(key)}
+              className={`flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium transition ${kind === key ? 'border-brand bg-mint text-brand' : 'border-line-strong bg-surface text-ink hover:bg-head'}`}
+            >
               <Icon className="h-4 w-4" aria-hidden /> {text}
             </button>
           ))}
@@ -94,15 +135,29 @@ export function VideoModal({ leadId, leadName, phone, onClose }: { leadId: strin
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Length" htmlFor="vm" hint="The call ends by itself after this.">
             <Select id="vm" value={minutes} onChange={(e) => setMinutes(e.target.value)}>
-              {[15, 30, 45, 60, 90].map((m) => <option key={m} value={m}>{m} minutes</option>)}
+              {[15, 30, 45, 60, 90].map((m) => (
+                <option key={m} value={m}>
+                  {m} minutes
+                </option>
+              ))}
             </Select>
           </Field>
           <Field label="Planned time (optional)" htmlFor="vw" hint="Leave empty to start now.">
-            <Input id="vw" type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} />
+            <Input
+              id="vw"
+              type="datetime-local"
+              value={when}
+              onChange={(e) => setWhen(e.target.value)}
+            />
           </Field>
         </div>
         <Button onClick={() => void create()} loading={busy}>
-          {kind === 'voice' ? <Mic className="h-4 w-4" aria-hidden /> : <Video className="h-4 w-4" aria-hidden />} {when ? 'Plan session and get link' : 'Start now'}
+          {kind === 'voice' ? (
+            <Mic className="h-4 w-4" aria-hidden />
+          ) : (
+            <Video className="h-4 w-4" aria-hidden />
+          )}{' '}
+          {when ? 'Plan session and get link' : 'Start now'}
         </Button>
         {error && <Notice tone="bad">{error}</Notice>}
         {u && (
@@ -122,21 +177,56 @@ export function VideoModal({ leadId, leadName, phone, onClose }: { leadId: strin
               <li key={s.id} className="flex flex-wrap items-center gap-2 px-3 py-2.5 text-sm">
                 <div className="min-w-0 flex-1">
                   <p className="flex items-center gap-2">
-                    <Badge tone={s.status === 'open' ? 'brand' : s.outcome === 'completed' ? 'ok' : 'neutral'}>{s.status === 'ended' && s.outcome ? OUTCOME_TEXT[s.outcome] : PHASE_TEXT[s.phase]}</Badge>
-                    <span className="text-muted">{s.kind === 'voice' ? 'Voice' : 'Video'} · {s.maxMinutes} min</span>
+                    <Badge
+                      tone={
+                        s.status === 'open' ? 'brand' : s.outcome === 'completed' ? 'ok' : 'neutral'
+                      }
+                    >
+                      {s.status === 'ended' && s.outcome
+                        ? OUTCOME_TEXT[s.outcome]
+                        : PHASE_TEXT[s.phase]}
+                    </Badge>
+                    <span className="text-muted">
+                      {s.kind === 'voice' ? 'Voice' : 'Video'} · {s.maxMinutes} min
+                    </span>
                   </p>
-                  <p className="mt-0.5 text-xs text-muted">{s.scheduledFor ? `For ${fmtDateTime(s.scheduledFor)}` : `Made ${fmtDateTime(s.createdAt)}`} · by {s.createdBy}</p>
+                  <p className="mt-0.5 text-xs text-muted">
+                    {s.scheduledFor
+                      ? `For ${fmtDateTime(s.scheduledFor)}`
+                      : `Made ${fmtDateTime(s.createdAt)}`}{' '}
+                    · by {s.createdBy}
+                  </p>
                 </div>
                 {s.status === 'open' && (
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <Button size="sm" onClick={() => router.push(`/video/${s.id}`)}>Join</Button>
+                    <Button size="sm" onClick={() => router.push(`/video/${s.id}`)}>
+                      Join
+                    </Button>
                     {s.guestUrl && (
                       <>
-                        <Button size="sm" variant="secondary" onClick={() => void copy(s)}>{copied === s.id ? <Check className="h-3.5 w-3.5 text-ok" aria-hidden /> : <Copy className="h-3.5 w-3.5" aria-hidden />} Link</Button>
-                        <a href={share(s)} target="_blank" rel="noopener noreferrer" className="inline-flex h-7 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-2.5 text-xs font-medium text-ink hover:bg-head"><MessageCircle className="h-3.5 w-3.5 text-ok" aria-hidden /> WhatsApp</a>
+                        <Button size="sm" variant="secondary" onClick={() => void copy(s)}>
+                          {copied === s.id ? (
+                            <Check className="h-3.5 w-3.5 text-ok" aria-hidden />
+                          ) : (
+                            <Copy className="h-3.5 w-3.5" aria-hidden />
+                          )}{' '}
+                          Link
+                        </Button>
+                        <a
+                          href={share(s)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex h-7 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-2.5 text-xs font-medium text-ink hover:bg-head"
+                        >
+                          <MessageCircle className="h-3.5 w-3.5 text-ok" aria-hidden /> WhatsApp
+                        </a>
                       </>
                     )}
-                    {s.canManage && <Button size="sm" variant="ghost" onClick={() => void end(s.id)}>End</Button>}
+                    {s.canManage && (
+                      <Button size="sm" variant="ghost" onClick={() => void end(s.id)}>
+                        End
+                      </Button>
+                    )}
                   </div>
                 )}
               </li>

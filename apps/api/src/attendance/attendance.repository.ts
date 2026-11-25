@@ -22,7 +22,9 @@ export interface SettingsRow {
 export class AttendanceRepository {
   /** Today's date in the company's time zone, as YYYY-MM-DD. */
   async localToday(trx: Trx): Promise<string> {
-    const { rows } = await sql<{ d: string }>`SELECT (now() AT TIME ZONE timezone)::date::text AS d FROM tenants`.execute(trx);
+    const { rows } = await sql<{
+      d: string;
+    }>`SELECT (now() AT TIME ZONE timezone)::date::text AS d FROM tenants`.execute(trx);
     return rows[0]!.d;
   }
 

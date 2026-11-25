@@ -1,4 +1,15 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Put, Res, StreamableFile } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Put,
+  Res,
+  StreamableFile,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { FastifyReply } from 'fastify';
 import { createZodDto } from 'nestjs-zod';
@@ -11,7 +22,15 @@ import { PreferencesService } from './preferences.service.js';
 const updateSchema = z
   .object({
     startPage: z.enum(START_PAGE_KEYS).nullable().optional(),
-    notify: z.object(Object.fromEntries(NOTIFY_KINDS.map((k) => [k, z.boolean().optional()])) as Record<(typeof NOTIFY_KINDS)[number], z.ZodOptional<z.ZodBoolean>>).strict().optional(),
+    notify: z
+      .object(
+        Object.fromEntries(NOTIFY_KINDS.map((k) => [k, z.boolean().optional()])) as Record<
+          (typeof NOTIFY_KINDS)[number],
+          z.ZodOptional<z.ZodBoolean>
+        >,
+      )
+      .strict()
+      .optional(),
   })
   .strict();
 // A data URL of a 64 KB picture is about 88,000 characters; anything longer is refused before it is decoded.

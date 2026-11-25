@@ -10,7 +10,14 @@ import { UsersService } from './users.service.js';
 
 class SelfDto extends createZodDto(selfProfileSchema) {}
 class StaffDto extends createZodDto(staffProfileSchema) {}
-class RevealDto extends createZodDto(z.object({ reveal: z.enum(['true', 'false']).transform((v) => v === 'true').optional() })) {}
+class RevealDto extends createZodDto(
+  z.object({
+    reveal: z
+      .enum(['true', 'false'])
+      .transform((v) => v === 'true')
+      .optional(),
+  }),
+) {}
 
 @ApiTags('profile')
 @ApiBearerAuth()
@@ -27,7 +34,6 @@ export class ProfileController {
     return this.users.updateOwnAccount(auth, body);
   }
 
-
   /** The signed-in person's own profile. `?reveal=true` shows the full bank account number. */
   @Get('me/profile')
   mine(@CurrentAuth() auth: AuthContext, @Query() q: RevealDto) {
@@ -41,12 +47,20 @@ export class ProfileController {
   }
 
   @Get('users/:id/profile')
-  get(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Query() q: RevealDto) {
+  get(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query() q: RevealDto,
+  ) {
     return this.profiles.get(auth, id, !!q.reveal);
   }
 
   @Put('users/:id/profile')
-  update(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: StaffDto) {
+  update(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: StaffDto,
+  ) {
     return this.profiles.update(auth, id, body);
   }
 }

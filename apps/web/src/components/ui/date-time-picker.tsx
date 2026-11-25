@@ -3,7 +3,16 @@
 import { CalendarClock, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { cx } from '@/components/ui';
-import { dayKey, fromLocalValue, monthGrid, quickChoices, TIME_SLOTS, timeLabel, toLocalValue, valueLabel } from '@/lib/date-picker';
+import {
+  dayKey,
+  fromLocalValue,
+  monthGrid,
+  quickChoices,
+  TIME_SLOTS,
+  timeLabel,
+  toLocalValue,
+  valueLabel,
+} from '@/lib/date-picker';
 import { useDismiss } from '@/lib/use-dismiss';
 
 const WEEKDAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
@@ -13,7 +22,14 @@ const WEEKDAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
  * plus an exact time box. The value is the same text <input type="datetime-local"> gives ("2026-11-25T11:00"), so it
  * replaces that box without changing anything else. Days and times before `min` cannot be chosen.
  */
-export function DateTimePicker({ id, value, onChange, min, required, placeholder = 'Choose date and time' }: {
+export function DateTimePicker({
+  id,
+  value,
+  onChange,
+  min,
+  required,
+  placeholder = 'Choose date and time',
+}: {
   id?: string;
   value: string;
   onChange: (value: string) => void;
@@ -63,9 +79,19 @@ export function DateTimePicker({ id, value, onChange, min, required, placeholder
   };
 
   const grid = monthGrid(shown.y, shown.m);
-  const monthName = new Date(shown.y, shown.m, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
-  const move = (step: number) => setShown(({ y, m }) => ({ y: m + step < 0 ? y - 1 : m + step > 11 ? y + 1 : y, m: (m + step + 12) % 12 }));
-  const canGoBack = !minDate || shown.y > minDate.getFullYear() || (shown.y === minDate.getFullYear() && shown.m > minDate.getMonth());
+  const monthName = new Date(shown.y, shown.m, 1).toLocaleDateString('en-IN', {
+    month: 'long',
+    year: 'numeric',
+  });
+  const move = (step: number) =>
+    setShown(({ y, m }) => ({
+      y: m + step < 0 ? y - 1 : m + step > 11 ? y + 1 : y,
+      m: (m + step + 12) % 12,
+    }));
+  const canGoBack =
+    !minDate ||
+    shown.y > minDate.getFullYear() ||
+    (shown.y === minDate.getFullYear() && shown.m > minDate.getMonth());
   const dayForTimes = day || today;
 
   return (
@@ -77,34 +103,87 @@ export function DateTimePicker({ id, value, onChange, min, required, placeholder
         aria-haspopup="dialog"
         data-required={required || undefined}
         aria-expanded={open}
-        className={cx('flex h-9 w-full items-center gap-2 rounded-md border border-line-strong bg-surface px-3 text-left text-sm outline-none focus-visible:border-brand', !value && 'text-subtle')}
+        className={cx(
+          'flex h-9 w-full items-center gap-2 rounded-md border border-line-strong bg-surface px-3 text-left text-sm outline-none focus-visible:border-brand',
+          !value && 'text-subtle',
+        )}
       >
         <CalendarClock className="h-4 w-4 shrink-0 text-muted" aria-hidden />
         <span className="min-w-0 flex-1 truncate">{value ? valueLabel(value) : placeholder}</span>
         {value && (
-          <span role="button" tabIndex={0} aria-label="Clear" onClick={(e) => { e.stopPropagation(); setDay(''); onChange(''); }} onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); setDay(''); onChange(''); } }} className="grid h-6 w-6 place-items-center rounded text-muted hover:bg-head hover:text-ink">
+          <span
+            role="button"
+            tabIndex={0}
+            aria-label="Clear"
+            onClick={(e) => {
+              e.stopPropagation();
+              setDay('');
+              onChange('');
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.stopPropagation();
+                setDay('');
+                onChange('');
+              }
+            }}
+            className="grid h-6 w-6 place-items-center rounded text-muted hover:bg-head hover:text-ink"
+          >
             <X className="h-3.5 w-3.5" aria-hidden />
           </span>
         )}
       </button>
 
       {open && (
-        <div role="dialog" aria-label="Choose date and time" className="absolute left-0 z-40 mt-1 w-[min(22rem,calc(100vw-2rem))] rounded-lg border border-line bg-surface p-3 shadow-lg">
+        <div
+          role="dialog"
+          aria-label="Choose date and time"
+          className="absolute left-0 z-40 mt-1 w-[min(22rem,calc(100vw-2rem))] rounded-lg border border-line bg-surface p-3 shadow-lg"
+        >
           <div className="flex flex-wrap gap-1.5">
             {quickChoices(new Date(), minDate ?? new Date()).map((q) => (
-              <button key={q.label} type="button" onClick={() => quick(q.value)} className={cx('rounded-full border px-2.5 py-1 text-xs font-medium', value === q.value ? 'border-brand bg-mint-soft text-brand' : 'border-line text-ink hover:bg-head')}>
+              <button
+                key={q.label}
+                type="button"
+                onClick={() => quick(q.value)}
+                className={cx(
+                  'rounded-full border px-2.5 py-1 text-xs font-medium',
+                  value === q.value
+                    ? 'border-brand bg-mint-soft text-brand'
+                    : 'border-line text-ink hover:bg-head',
+                )}
+              >
                 {q.label}
               </button>
             ))}
           </div>
 
           <div className="mt-3 flex items-center justify-between">
-            <button type="button" onClick={() => move(-1)} disabled={!canGoBack} aria-label="Previous month" className="grid h-7 w-7 place-items-center rounded text-muted hover:bg-head disabled:opacity-30"><ChevronLeft className="h-4 w-4" /></button>
+            <button
+              type="button"
+              onClick={() => move(-1)}
+              disabled={!canGoBack}
+              aria-label="Previous month"
+              className="grid h-7 w-7 place-items-center rounded text-muted hover:bg-head disabled:opacity-30"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
             <p className="text-sm font-semibold text-ink">{monthName}</p>
-            <button type="button" onClick={() => move(1)} aria-label="Next month" className="grid h-7 w-7 place-items-center rounded text-muted hover:bg-head"><ChevronRight className="h-4 w-4" /></button>
+            <button
+              type="button"
+              onClick={() => move(1)}
+              aria-label="Next month"
+              className="grid h-7 w-7 place-items-center rounded text-muted hover:bg-head"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
           </div>
           <div className="mt-1 grid grid-cols-7 text-center text-[11px] font-medium text-subtle">
-            {WEEKDAYS.map((w) => <span key={w} className="py-1">{w}</span>)}
+            {WEEKDAYS.map((w) => (
+              <span key={w} className="py-1">
+                {w}
+              </span>
+            ))}
           </div>
           <div className="grid grid-cols-7 gap-0.5">
             {grid.map((d) => {
@@ -119,10 +198,20 @@ export function DateTimePicker({ id, value, onChange, min, required, placeholder
                   disabled={!ok}
                   onClick={() => pickDay(d)}
                   aria-pressed={on}
-                  aria-label={d.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
+                  aria-label={d.toLocaleDateString('en-IN', {
+                    weekday: 'long',
+                    day: 'numeric',
+                    month: 'long',
+                  })}
                   className={cx(
                     'tabular h-8 rounded text-sm',
-                    on ? 'bg-brand font-semibold text-white' : k === today ? 'font-semibold text-brand ring-1 ring-inset ring-brand/40' : other ? 'text-subtle' : 'text-ink',
+                    on
+                      ? 'bg-brand font-semibold text-white'
+                      : k === today
+                        ? 'font-semibold text-brand ring-1 ring-inset ring-brand/40'
+                        : other
+                          ? 'text-subtle'
+                          : 'text-ink',
                     ok && !on && 'hover:bg-head',
                     !ok && 'cursor-not-allowed opacity-30',
                   )}
@@ -134,14 +223,29 @@ export function DateTimePicker({ id, value, onChange, min, required, placeholder
           </div>
 
           <p className="mt-3 text-xs font-medium text-muted">
-            Time on {new Date(`${dayForTimes}T00:00`).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}
+            Time on{' '}
+            {new Date(`${dayForTimes}T00:00`).toLocaleDateString('en-IN', {
+              weekday: 'short',
+              day: 'numeric',
+              month: 'short',
+            })}
           </p>
           <div className="mt-1 grid max-h-32 grid-cols-4 gap-1 overflow-y-auto pr-1">
             {TIME_SLOTS.map((t) => {
               const ok = timeAllowed(dayForTimes, t);
               const on = time === t && day === dayForTimes;
               return (
-                <button key={t} type="button" disabled={!ok} onClick={() => pickTime(t)} className={cx('tabular rounded border px-1 py-1 text-xs', on ? 'border-brand bg-brand text-white' : 'border-line text-ink hover:bg-head', !ok && 'cursor-not-allowed opacity-30')}>
+                <button
+                  key={t}
+                  type="button"
+                  disabled={!ok}
+                  onClick={() => pickTime(t)}
+                  className={cx(
+                    'tabular rounded border px-1 py-1 text-xs',
+                    on ? 'border-brand bg-brand text-white' : 'border-line text-ink hover:bg-head',
+                    !ok && 'cursor-not-allowed opacity-30',
+                  )}
+                >
                   {timeLabel(t)}
                 </button>
               );
@@ -149,7 +253,12 @@ export function DateTimePicker({ id, value, onChange, min, required, placeholder
           </div>
           <label className="mt-2 flex items-center gap-2 text-xs text-muted">
             Exact time
-            <input type="time" value={time} onChange={(e) => e.target.value && pickTimeExact(e.target.value)} className="h-8 rounded-md border border-line-strong bg-surface px-2 text-sm text-ink" />
+            <input
+              type="time"
+              value={time}
+              onChange={(e) => e.target.value && pickTimeExact(e.target.value)}
+              className="h-8 rounded-md border border-line-strong bg-surface px-2 text-sm text-ink"
+            />
           </label>
         </div>
       )}

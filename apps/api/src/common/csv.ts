@@ -14,7 +14,12 @@ export function neutralizeFormula(text: string): string {
 /** One value as it appears in a CSV cell. */
 export function csvCell(value: unknown): string {
   if (value === null || value === undefined) return '';
-  const text = value instanceof Date ? value.toISOString() : typeof value === 'number' || typeof value === 'bigint' || typeof value === 'boolean' ? String(value) : neutralizeFormula(String(value));
+  const text =
+    value instanceof Date
+      ? value.toISOString()
+      : typeof value === 'number' || typeof value === 'bigint' || typeof value === 'boolean'
+        ? String(value)
+        : neutralizeFormula(String(value));
   return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 

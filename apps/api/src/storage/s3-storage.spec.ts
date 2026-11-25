@@ -29,7 +29,11 @@ describe('S3Storage', () => {
     const got = await s.get(KEY);
     expect(got?.size).toBe(3);
     await s.delete(KEY);
-    expect(f.sent.map((c) => c.name)).toEqual(['PutObjectCommand', 'GetObjectCommand', 'DeleteObjectCommand']);
+    expect(f.sent.map((c) => c.name)).toEqual([
+      'PutObjectCommand',
+      'GetObjectCommand',
+      'DeleteObjectCommand',
+    ]);
     expect(f.sent.every((c) => c.input.Bucket === 'bkt' && c.input.Key === KEY)).toBe(true);
   });
 

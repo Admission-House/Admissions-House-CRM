@@ -20,8 +20,20 @@ import { ENV } from '../config/config.module.js';
 import type { Env } from '../config/env.js';
 import type { AuthContext } from './auth-context.js';
 import { AuthService, RequestMeta, SignedIn } from './auth.service.js';
-import { AllowMfaSetup, AllowPasswordChange, CurrentAuth, Public, RequirePermissions } from './decorators.js';
-import { ChangePasswordDto, ForgotPasswordDto, LoginDto, RefreshDto, ResetPasswordDto } from './dto/auth.dto.js';
+import {
+  AllowMfaSetup,
+  AllowPasswordChange,
+  CurrentAuth,
+  Public,
+  RequirePermissions,
+} from './decorators.js';
+import {
+  ChangePasswordDto,
+  ForgotPasswordDto,
+  LoginDto,
+  RefreshDto,
+  ResetPasswordDto,
+} from './dto/auth.dto.js';
 import { PasswordResetService } from './password-reset.service.js';
 
 const REFRESH_COOKIE = 'ah_rt';
@@ -69,7 +81,9 @@ export class AuthController {
     return {
       accessToken: result.accessToken,
       expiresIn: result.expiresIn,
-      ...(result.refreshToken ? this.deliverRefreshToken(reply, result.clientType, result.refreshToken) : {}),
+      ...(result.refreshToken
+        ? this.deliverRefreshToken(reply, result.clientType, result.refreshToken)
+        : {}),
     };
   }
 
@@ -78,7 +92,10 @@ export class AuthController {
   @AllowMfaSetup()
   @Post('logout')
   @HttpCode(204)
-  async logout(@CurrentAuth() auth: AuthContext, @Res({ passthrough: true }) reply: FastifyReply): Promise<void> {
+  async logout(
+    @CurrentAuth() auth: AuthContext,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<void> {
     await this.auth.logout(auth);
     void reply.clearCookie(REFRESH_COOKIE, { path: COOKIE_PATH });
   }
@@ -142,14 +159,21 @@ export class AuthController {
   @RequirePermissions('user.manage')
   @Get('sessions/all')
   allSessions(@CurrentAuth() auth: AuthContext, @Query('userId') userId?: string) {
-    return this.auth.listTenantSessions(auth, userId && /^[0-9a-f-]{36}$/i.test(userId) ? userId : undefined);
+    return this.auth.listTenantSessions(
+      auth,
+      userId && /^[0-9a-f-]{36}$/i.test(userId) ? userId : undefined,
+    );
   }
 
   @ApiBearerAuth()
   @Delete('sessions/:id')
   @HttpCode(204)
-  async revokeSession(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string): Promise<void> {
-    if (id === auth.sessionId) throw AppError.badRequest('USE_LOGOUT', 'Use sign out to end this session');
+  async revokeSession(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<void> {
+    if (id === auth.sessionId)
+      throw AppError.badRequest('USE_LOGOUT', 'Use sign out to end this session');
     await this.auth.revokeSession(auth, id);
   }
 

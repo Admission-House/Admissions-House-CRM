@@ -1,11 +1,29 @@
-import { Body, Controller, Get, HttpCode, Inject, Param, ParseUUIDPipe, Post, Put, Query, Req, Res } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Inject,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Put,
+  Query,
+  Req,
+  Res,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { createZodDto, ZodValidationException } from 'nestjs-zod';
 import { z } from 'zod';
 import type { AuthContext } from '../auth/auth-context.js';
 import { DownloadAlerts } from '../notifications/download-alerts.service.js';
-import { CurrentAuth, Heavy, RequireAnyPermission, RequirePermissions } from '../auth/decorators.js';
+import {
+  CurrentAuth,
+  Heavy,
+  RequireAnyPermission,
+  RequirePermissions,
+} from '../auth/decorators.js';
 import { AppError } from '../common/app-error.js';
 import { pageQuerySchema } from '../common/pagination.js';
 import { ENV } from '../config/config.module.js';
@@ -25,8 +43,21 @@ const salary = z.object({
 
 class SaveDto extends createZodDto(salary.extend({ month })) {}
 class BulkDto extends createZodDto(z.object({ month, rows: z.array(salary).min(1).max(500) })) {}
-class ListDto extends createZodDto(pageQuerySchema.extend({ month: month.optional(), userId: z.uuid().optional(), roleId: z.uuid().optional() })) {}
-class ReportDto extends createZodDto(z.object({ month: month.optional(), userId: z.uuid().optional(), roleId: z.uuid().optional(), format: z.enum(['csv', 'xlsx']).default('csv') })) {}
+class ListDto extends createZodDto(
+  pageQuerySchema.extend({
+    month: month.optional(),
+    userId: z.uuid().optional(),
+    roleId: z.uuid().optional(),
+  }),
+) {}
+class ReportDto extends createZodDto(
+  z.object({
+    month: month.optional(),
+    userId: z.uuid().optional(),
+    roleId: z.uuid().optional(),
+    format: z.enum(['csv', 'xlsx']).default('csv'),
+  }),
+) {}
 const importFields = z.object({ month });
 
 @ApiTags('payroll')
@@ -82,10 +113,18 @@ export class PayrollController {
   /** The monthly salary report as a CSV or Excel file. */
   @RequirePermissions('salary.read')
   @Get('report')
-  async report(@CurrentAuth() auth: AuthContext, @Query() query: ReportDto, @Res({ passthrough: true }) reply: FastifyReply) {
+  async report(
+    @CurrentAuth() auth: AuthContext,
+    @Query() query: ReportDto,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
     const file = await this.payroll.report(auth, query);
     await this.downloads.record(auth, 'salary_export', 'the monthly salary report', file.fileName);
-    reply.header('content-type', file.contentType).header('content-disposition', `attachment; filename="${file.fileName}"`).header('cache-control', 'private, no-store').header('x-content-type-options', 'nosniff');
+    reply
+      .header('content-type', file.contentType)
+      .header('content-disposition', `attachment; filename="${file.fileName}"`)
+      .header('cache-control', 'private, no-store')
+      .header('x-content-type-options', 'nosniff');
     return file.body;
   }
 
@@ -105,16 +144,27 @@ export class PayrollController {
   @RequireAnyPermission('salary.read', 'salary.read_own')
   @Heavy()
   @Get(':id/payslip.pdf')
-  async payslip(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Res({ passthrough: true }) reply: FastifyReply) {
+  async payslip(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
     const file = await this.payroll.payslip(auth, id);
     await this.downloads.record(auth, 'payslip', 'a payslip', file.fileName);
-    reply.header('content-type', 'application/pdf').header('content-disposition', `attachment; filename="${file.fileName}"`).header('cache-control', 'private, no-store').header('x-content-type-options', 'nosniff');
+    reply
+      .header('content-type', 'application/pdf')
+      .header('content-disposition', `attachment; filename="${file.fileName}"`)
+      .header('cache-control', 'private, no-store')
+      .header('x-content-type-options', 'nosniff');
     return file.pdf;
   }
 
   private async read(req: FastifyRequest) {
     const { fields, file } = await readForm(req, this.env.MAX_UPLOAD_BYTES);
-    if (!file) throw AppError.badRequest('NO_FILE', 'No file was sent', [{ field: 'file', message: 'Attach the file' }]);
+    if (!file)
+      throw AppError.badRequest('NO_FILE', 'No file was sent', [
+        { field: 'file', message: 'Attach the file' },
+      ]);
     const parsed = importFields.safeParse(fields);
     if (!parsed.success) throw new ZodValidationException(parsed.error);
     return { month: parsed.data.month, fileName: file.filename, data: file.data };

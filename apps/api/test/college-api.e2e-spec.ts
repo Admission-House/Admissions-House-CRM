@@ -21,7 +21,15 @@ let reply: { status: number; body: unknown } = { status: 200, body: {} };
 let seenKey: string | undefined;
 
 const items = (...rows: Array<{ name: string; course: string; fee: number }>) => ({
-  data: { items: rows.map((r) => ({ institute: { name: r.name }, course: r.course, level: 'UG', mode: 'regular', fees: { annual: r.fee } })) },
+  data: {
+    items: rows.map((r) => ({
+      institute: { name: r.name },
+      course: r.course,
+      level: 'UG',
+      mode: 'regular',
+      fees: { annual: r.fee },
+    })),
+  },
 });
 
 beforeAll(async () => {
@@ -58,14 +66,22 @@ afterAll(async () => {
   await owner?.end();
 });
 
-const count = async (table: string) => Number((await owner.query(`SELECT count(*) FROM ${table} WHERE tenant_id = $1`, [fx.tenantId])).rows[0].count);
+const count = async (table: string) =>
+  Number(
+    (await owner.query(`SELECT count(*) FROM ${table} WHERE tenant_id = $1`, [fx.tenantId])).rows[0]
+      .count,
+  );
 const errorCode = (res: { json: () => { error?: { code?: string } } }) => res.json().error?.code;
 
 describe('college data provider', () => {
   it('shows how it is connected without ever showing the key', async () => {
     const res = await api.call('GET', '/masters/college-api', t.sa!);
     expect(res.statusCode, res.body).toBe(200);
-    expect(res.json()).toMatchObject({ configured: true, itemsPath: 'data.items', fieldMap: { college: 'institute.name', annualFee: 'fees.annual' } });
+    expect(res.json()).toMatchObject({
+      configured: true,
+      itemsPath: 'data.items',
+      fieldMap: { college: 'institute.name', annualFee: 'fees.annual' },
+    });
     expect(res.json().host).toMatch(/^127\.0\.0\.1:\d+$/);
     expect(res.body).not.toContain(KEY);
   });
@@ -76,41 +92,94 @@ describe('college data provider', () => {
   });
 
   it('previews what it would load without saving, then loads it, then updates it on the next run', async () => {
-    reply = { status: 200, body: items({ name: `Orion ${run}`, course: `B.Sc ${run}`, fee: 90000 }, { name: `Orion ${run}`, course: `BBA ${run}`, fee: 80000 }) };
+    reply = {
+      status: 200,
+      body: items(
+        { name: `Orion ${run}`, course: `B.Sc ${run}`, fee: 90000 },
+        { name: `Orion ${run}`, course: `BBA ${run}`, fee: 80000 },
+      ),
+    };
     const before = [await count('colleges'), await count('college_courses')];
 
     const preview = await api.call('POST', '/masters/college-api/preview', t.sa!);
     expect(preview.statusCode, preview.body).toBe(200);
-    expect(preview.json()).toMatchObject({ applied: false, rows: 2, colleges: { new: 1 }, offers: { new: 2, updated: 0 }, problems: [] });
+    expect(preview.json()).toMatchObject({
+      applied: false,
+      rows: 2,
+      colleges: { new: 1 },
+      offers: { new: 2, updated: 0 },
+      problems: [],
+    });
     expect(seenKey).toBe(KEY);
     expect([await count('colleges'), await count('college_courses')]).toEqual(before);
 
     const sync = await api.call('POST', '/masters/college-api/sync', t.sa!);
     expect(sync.statusCode, sync.body).toBe(200);
     expect(sync.json()).toMatchObject({ applied: true, offers: { new: 2 } });
-    expect([await count('colleges'), await count('college_courses')]).toEqual([before[0]! + 1, before[1]! + 2]);
-    const fee = (await owner.query(`SELECT cc.annual_fee FROM college_courses cc JOIN courses c ON c.id = cc.course_id WHERE cc.tenant_id = $1 AND c.name = $2`, [fx.tenantId, `B.Sc ${run}`])).rows[0];
+    expect([await count('colleges'), await count('college_courses')]).toEqual([
+      before[0]! + 1,
+      before[1]! + 2,
+    ]);
+    const fee = (
+      await owner.query(
+        `SELECT cc.annual_fee FROM college_courses cc JOIN courses c ON c.id = cc.course_id WHERE cc.tenant_id = $1 AND c.name = $2`,
+        [fx.tenantId, `B.Sc ${run}`],
+      )
+    ).rows[0];
     expect(Number(fee.annual_fee)).toBe(90000);
 
-    reply = { status: 200, body: items({ name: `Orion ${run}`, course: `B.Sc ${run}`, fee: 95000 }) };
+    reply = {
+      status: 200,
+      body: items({ name: `Orion ${run}`, course: `B.Sc ${run}`, fee: 95000 }),
+    };
     const again = await api.call('POST', '/masters/college-api/sync', t.sa!);
-    expect(again.json()).toMatchObject({ colleges: { existing: 1 }, offers: { new: 0, updated: 1 } });
-    const changed = (await owner.query(`SELECT cc.annual_fee FROM college_courses cc JOIN courses c ON c.id = cc.course_id WHERE cc.tenant_id = $1 AND c.name = $2`, [fx.tenantId, `B.Sc ${run}`])).rows[0];
+    expect(again.json()).toMatchObject({
+      colleges: { existing: 1 },
+      offers: { new: 0, updated: 1 },
+    });
+    const changed = (
+      await owner.query(
+        `SELECT cc.annual_fee FROM college_courses cc JOIN courses c ON c.id = cc.course_id WHERE cc.tenant_id = $1 AND c.name = $2`,
+        [fx.tenantId, `B.Sc ${run}`],
+      )
+    ).rows[0];
     expect(Number(changed.annual_fee)).toBe(95000);
-    const audit = await owner.query(`SELECT 1 FROM audit_logs WHERE tenant_id = $1 AND action = 'master.import' AND after->>'file' = 'college-api'`, [fx.tenantId]);
+    const audit = await owner.query(
+      `SELECT 1 FROM audit_logs WHERE tenant_id = $1 AND action = 'master.import' AND after->>'file' = 'college-api'`,
+      [fx.tenantId],
+    );
     expect(audit.rowCount).toBe(2);
   });
 
   it('reports rows it cannot understand instead of guessing', async () => {
-    reply = { status: 200, body: { data: { items: [{ institute: { name: `Bad ${run}` }, course: `X ${run}`, level: 'UG', mode: 'sideways', fees: { annual: 1 } }] } } };
+    reply = {
+      status: 200,
+      body: {
+        data: {
+          items: [
+            {
+              institute: { name: `Bad ${run}` },
+              course: `X ${run}`,
+              level: 'UG',
+              mode: 'sideways',
+              fees: { annual: 1 },
+            },
+          ],
+        },
+      },
+    };
     const res = await api.call('POST', '/masters/college-api/preview', t.sa!);
     expect(res.json().problems[0].problem).toContain('mode');
   });
 
   it('says what went wrong when the provider answers badly', async () => {
     reply = { status: 500, body: {} };
-    expect(errorCode(await api.call('POST', '/masters/college-api/sync', t.sa!))).toBe('COLLEGE_API_FAILED');
+    expect(errorCode(await api.call('POST', '/masters/college-api/sync', t.sa!))).toBe(
+      'COLLEGE_API_FAILED',
+    );
     reply = { status: 200, body: { data: 'nothing here' } };
-    expect(errorCode(await api.call('POST', '/masters/college-api/sync', t.sa!))).toBe('COLLEGE_API_BAD_RESPONSE');
+    expect(errorCode(await api.call('POST', '/masters/college-api/sync', t.sa!))).toBe(
+      'COLLEGE_API_BAD_RESPONSE',
+    );
   });
 });

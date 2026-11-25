@@ -1,6 +1,15 @@
 'use client';
 
-import { ChevronDown, ChevronsLeft, ChevronsRight, KeyRound, LogOut, Menu, UserRound, X } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronsLeft,
+  ChevronsRight,
+  KeyRound,
+  LogOut,
+  Menu,
+  UserRound,
+  X,
+} from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useRef, useState, useSyncExternalStore } from 'react';
@@ -45,7 +54,19 @@ const setCollapsed = (narrow: boolean) => {
   window.dispatchEvent(new Event('ah-sidebar'));
 };
 
-function NavLink({ item, active, narrow, nested, onNavigate }: { item: NavItem; active: boolean; narrow: boolean; nested?: boolean; onNavigate?: () => void }) {
+function NavLink({
+  item,
+  active,
+  narrow,
+  nested,
+  onNavigate,
+}: {
+  item: NavItem;
+  active: boolean;
+  narrow: boolean;
+  nested?: boolean;
+  onNavigate?: () => void;
+}) {
   return (
     <Link
       href={item.href!}
@@ -56,16 +77,34 @@ function NavLink({ item, active, narrow, nested, onNavigate }: { item: NavItem; 
         'group flex items-center rounded-md text-sm font-medium transition-colors',
         nested ? 'h-8 gap-3 pl-[2.625rem] pr-3' : 'h-9 gap-3 px-3',
         narrow && 'justify-center px-0',
-        active ? 'bg-white/10 text-white shadow-[inset_3px_0_0_var(--color-teal)]' : 'text-white/70 hover:bg-white/6 hover:text-white',
+        active
+          ? 'bg-white/10 text-white shadow-[inset_3px_0_0_var(--color-teal)]'
+          : 'text-white/70 hover:bg-white/6 hover:text-white',
       )}
     >
-      {!nested && <item.icon className={cx('h-[18px] w-[18px] shrink-0', active ? 'text-teal' : 'text-mint/65 group-hover:text-mint')} aria-hidden />}
+      {!nested && (
+        <item.icon
+          className={cx(
+            'h-[18px] w-[18px] shrink-0',
+            active ? 'text-teal' : 'text-mint/65 group-hover:text-mint',
+          )}
+          aria-hidden
+        />
+      )}
       {!narrow && <span className="flex-1 truncate">{item.label}</span>}
     </Link>
   );
 }
 
-function Sidebar({ narrow, onNavigate, onToggle }: { narrow: boolean; onNavigate?: () => void; onToggle?: () => void }) {
+function Sidebar({
+  narrow,
+  onNavigate,
+  onToggle,
+}: {
+  narrow: boolean;
+  onNavigate?: () => void;
+  onToggle?: () => void;
+}) {
   const { me, canAny } = useAuth();
   const path = usePathname();
   const params = useSearchParams();
@@ -74,11 +113,17 @@ function Sidebar({ narrow, onNavigate, onToggle }: { narrow: boolean; onNavigate
   const [pick, setPick] = useState<{ at: string; label: string | null } | null>(null);
   const picked = pick && pick.at === current ? pick : null;
   const phoneReady = usePhoneReady();
-  const isActive = (href: string) => (href.includes('?') ? current === href : path === href && !params.get('queue'));
+  const isActive = (href: string) =>
+    href.includes('?') ? current === href : path === href && !params.get('queue');
 
   return (
     <nav aria-label="Main" className="glass-brand flex h-full flex-col text-white">
-      <div className={cx('flex h-14 shrink-0 items-center border-b border-white/10', narrow ? 'justify-center' : 'justify-between pl-5 pr-3')}>
+      <div
+        className={cx(
+          'flex h-14 shrink-0 items-center border-b border-white/10',
+          narrow ? 'justify-center' : 'justify-between pl-5 pr-3',
+        )}
+      >
         {!narrow && (
           <div className="flex min-w-0 items-center gap-2.5">
             <CompanyLogo size={28} />
@@ -86,7 +131,11 @@ function Sidebar({ narrow, onNavigate, onToggle }: { narrow: boolean; onNavigate
           </div>
         )}
         {onToggle && (
-          <button onClick={onToggle} aria-label={narrow ? 'Expand menu' : 'Collapse menu'} className="grid h-8 w-8 place-items-center rounded-md text-mint/70 hover:bg-white/10 hover:text-white">
+          <button
+            onClick={onToggle}
+            aria-label={narrow ? 'Expand menu' : 'Collapse menu'}
+            className="grid h-8 w-8 place-items-center rounded-md text-mint/70 hover:bg-white/10 hover:text-white"
+          >
             {narrow ? <ChevronsRight className="h-4 w-4" /> : <ChevronsLeft className="h-4 w-4" />}
           </button>
         )}
@@ -96,10 +145,25 @@ function Sidebar({ narrow, onNavigate, onToggle }: { narrow: boolean; onNavigate
         <SidebarSearch narrow={narrow} onExpand={() => onToggle?.()} onNavigate={onNavigate} />
       </div>
 
-      <div className={cx('flex-1 overflow-y-auto py-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden', narrow ? 'px-2.5' : 'px-3')}>
+      <div
+        className={cx(
+          'flex-1 overflow-y-auto py-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
+          narrow ? 'px-2.5' : 'px-3',
+        )}
+      >
         <ul className="space-y-0.5">
           {NAV.filter((i) => canAny(...i.any) && (!i.needsPhone || phoneReady)).map((item) => {
-            if (!item.children) return <li key={item.label}><NavLink item={item} active={isActive(item.href!)} narrow={narrow} onNavigate={onNavigate} /></li>;
+            if (!item.children)
+              return (
+                <li key={item.label}>
+                  <NavLink
+                    item={item}
+                    active={isActive(item.href!)}
+                    narrow={narrow}
+                    onNavigate={onNavigate}
+                  />
+                </li>
+              );
 
             const kids = item.children.filter((c) => canAny(...c.any));
             if (kids.length === 0) return null;
@@ -109,8 +173,24 @@ function Sidebar({ narrow, onNavigate, onToggle }: { narrow: boolean; onNavigate
             if (narrow) {
               return (
                 <li key={item.label}>
-                  <Link href={kids[0]!.href!} onClick={onNavigate} title={item.label} className={cx('grid h-9 place-items-center rounded-md transition-colors', holdsCurrent ? 'bg-white/12 shadow-[inset_2px_0_0_var(--color-teal)]' : 'hover:bg-white/8')}>
-                    <item.icon className={cx('h-[18px] w-[18px]', holdsCurrent ? 'text-teal' : 'text-mint/65')} aria-hidden />
+                  <Link
+                    href={kids[0]!.href!}
+                    onClick={onNavigate}
+                    title={item.label}
+                    className={cx(
+                      'grid h-9 place-items-center rounded-md transition-colors',
+                      holdsCurrent
+                        ? 'bg-white/12 shadow-[inset_2px_0_0_var(--color-teal)]'
+                        : 'hover:bg-white/8',
+                    )}
+                  >
+                    <item.icon
+                      className={cx(
+                        'h-[18px] w-[18px]',
+                        holdsCurrent ? 'text-teal' : 'text-mint/65',
+                      )}
+                      aria-hidden
+                    />
                   </Link>
                 </li>
               );
@@ -121,15 +201,42 @@ function Sidebar({ narrow, onNavigate, onToggle }: { narrow: boolean; onNavigate
                   type="button"
                   onClick={() => setPick({ at: current, label: open ? null : item.label })}
                   aria-expanded={open}
-                  className={cx('group flex h-9 w-full items-center gap-3 rounded-md px-3 text-sm font-medium transition-colors', holdsCurrent && !open ? 'bg-white/10 text-white' : 'text-mint/75 hover:bg-white/8 hover:text-white')}
+                  className={cx(
+                    'group flex h-9 w-full items-center gap-3 rounded-md px-3 text-sm font-medium transition-colors',
+                    holdsCurrent && !open
+                      ? 'bg-white/10 text-white'
+                      : 'text-mint/75 hover:bg-white/8 hover:text-white',
+                  )}
                 >
-                  <item.icon className={cx('h-[18px] w-[18px] shrink-0', holdsCurrent ? 'text-teal' : 'text-mint/65 group-hover:text-mint')} aria-hidden />
+                  <item.icon
+                    className={cx(
+                      'h-[18px] w-[18px] shrink-0',
+                      holdsCurrent ? 'text-teal' : 'text-mint/65 group-hover:text-mint',
+                    )}
+                    aria-hidden
+                  />
                   <span className="flex-1 truncate text-left">{item.label}</span>
-                  <ChevronDown className={cx('h-4 w-4 shrink-0 text-mint/60 transition-transform', open && 'rotate-180')} aria-hidden />
+                  <ChevronDown
+                    className={cx(
+                      'h-4 w-4 shrink-0 text-mint/60 transition-transform',
+                      open && 'rotate-180',
+                    )}
+                    aria-hidden
+                  />
                 </button>
                 {open && (
                   <ul className="mt-0.5 space-y-0.5">
-                    {kids.map((c) => <li key={c.href}><NavLink item={c} nested active={isActive(c.href!)} narrow={false} onNavigate={onNavigate} /></li>)}
+                    {kids.map((c) => (
+                      <li key={c.href}>
+                        <NavLink
+                          item={c}
+                          nested
+                          active={isActive(c.href!)}
+                          narrow={false}
+                          onNavigate={onNavigate}
+                        />
+                      </li>
+                    ))}
                   </ul>
                 )}
               </li>
@@ -152,8 +259,14 @@ function Clock() {
   }, []);
   if (!now) return <span className="h-4 w-40" />;
   const d = now.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-  const t = now.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true }).toUpperCase();
-  return <span className="tabular hidden text-sm text-muted md:block">{d} {t}</span>;
+  const t = now
+    .toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true })
+    .toUpperCase();
+  return (
+    <span className="tabular hidden text-sm text-muted md:block">
+      {d} {t}
+    </span>
+  );
 }
 
 function UserMenu() {
@@ -178,27 +291,59 @@ function UserMenu() {
   if (!me) return null;
   return (
     <div ref={ref} className="relative">
-      <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-haspopup="menu" className="flex items-center gap-2.5 rounded-lg py-1 pl-1 pr-2 hover:bg-head">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        className="flex items-center gap-2.5 rounded-lg py-1 pl-1 pr-2 hover:bg-head"
+      >
         <Avatar name={me.user.name} size={32} photo={photo} />
         <span className="hidden text-left leading-tight sm:block">
           <span className="block text-sm font-semibold text-ink">{me.user.name}</span>
-          <span className="block text-xs capitalize text-muted">{me.user.role.key?.replace(/_/g, ' ')}</span>
+          <span className="block text-xs capitalize text-muted">
+            {me.user.role.key?.replace(/_/g, ' ')}
+          </span>
         </span>
         <ChevronDown className="h-4 w-4 text-subtle" aria-hidden />
       </button>
       {open && (
-        <div role="menu" className="absolute right-0 z-30 mt-2 w-60 overflow-hidden rounded-xl border border-line bg-surface py-1 shadow-lg">
+        <div
+          role="menu"
+          className="absolute right-0 z-30 mt-2 w-60 overflow-hidden rounded-xl border border-line bg-surface py-1 shadow-lg"
+        >
           <div className="border-b border-line px-4 py-3">
             <p className="truncate text-sm font-semibold">{me.user.name}</p>
             <p className="truncate text-xs text-muted">{me.user.email}</p>
           </div>
-          <button type="button" role="menuitem" onClick={() => { setOpen(false); router.push('/account'); }} className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm hover:bg-head">
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              router.push('/account');
+            }}
+            className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm hover:bg-head"
+          >
             <UserRound className="h-4 w-4 text-muted" aria-hidden /> My account
           </button>
-          <button type="button" role="menuitem" onClick={() => router.push('/change-password')} className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm hover:bg-head">
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => router.push('/change-password')}
+            className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm hover:bg-head"
+          >
             <KeyRound className="h-4 w-4 text-muted" aria-hidden /> Change password
           </button>
-          <button type="button" role="menuitem" onClick={() => { const to = loginPath(); void logout().then(() => router.replace(to)); }} className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-bad hover:bg-bad-50">
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              const to = loginPath();
+              void logout().then(() => router.replace(to));
+            }}
+            className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-bad hover:bg-bad-50"
+          >
             <LogOut className="h-4 w-4" aria-hidden /> Sign out
           </button>
         </div>
@@ -219,63 +364,112 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (status === 'anonymous') router.replace(loginPath());
-    else if (status === 'authenticated' && me?.user.mustChangePassword) router.replace('/change-password');
-    else if (status === 'authenticated' && me?.user.mfaSetupRequired) router.replace('/two-step-setup');
+    else if (status === 'authenticated' && me?.user.mustChangePassword)
+      router.replace('/change-password');
+    else if (status === 'authenticated' && me?.user.mfaSetupRequired)
+      router.replace('/two-step-setup');
   }, [status, me, router]);
 
   if (status !== 'authenticated' || !me || me.user.mustChangePassword || me.user.mfaSetupRequired) {
-    return <div className="grid min-h-dvh place-items-center"><Spinner label="Opening your workspace" /></div>;
+    return (
+      <div className="grid min-h-dvh place-items-center">
+        <Spinner label="Opening your workspace" />
+      </div>
+    );
   }
 
   return (
     <RealtimeProvider>
-    <div style={themeStyle(me.company)} className={cx('min-h-dvh lg:grid', narrow ? 'lg:grid-cols-[4.5rem_minmax(0,1fr)]' : 'lg:grid-cols-[16rem_minmax(0,1fr)]')}>
-      <aside className="sticky top-0 z-30 hidden h-dvh lg:block">
-        <Suspense><Sidebar narrow={narrow} onToggle={() => setCollapsed(!narrow)} /></Suspense>
-      </aside>
+      <div
+        style={themeStyle(me.company)}
+        className={cx(
+          'min-h-dvh lg:grid',
+          narrow ? 'lg:grid-cols-[4.5rem_minmax(0,1fr)]' : 'lg:grid-cols-[16rem_minmax(0,1fr)]',
+        )}
+      >
+        <aside className="sticky top-0 z-30 hidden h-dvh lg:block">
+          <Suspense>
+            <Sidebar narrow={narrow} onToggle={() => setCollapsed(!narrow)} />
+          </Suspense>
+        </aside>
 
-      {drawer && (
-        <div className="fixed inset-0 z-40 lg:hidden">
-          <button aria-label="Close menu" className="absolute inset-0 bg-ink/50" onClick={() => setDrawer(false)} />
-          <div className="absolute inset-y-0 left-0 w-72 max-w-[85vw] shadow-2xl">
-            <button aria-label="Close menu" onClick={() => setDrawer(false)} className="absolute right-3 top-4 z-10 grid h-8 w-8 place-items-center rounded-md text-mint hover:bg-white/10"><X className="h-4 w-4" /></button>
-            <Suspense><Sidebar narrow={false} onNavigate={() => setDrawer(false)} /></Suspense>
-          </div>
-        </div>
-      )}
-
-      <div className="flex min-w-0 flex-col">
-        <header className="sticky top-0 z-20 glass-bar flex h-14 items-center justify-between gap-3 px-3 sm:px-6">
-          <div className="flex items-center gap-2">
-            <button type="button" aria-label="Open menu" onClick={() => setDrawer(true)} className="grid h-9 w-9 place-items-center rounded-md text-muted hover:bg-head lg:hidden"><Menu className="h-5 w-5" /></button>
-            <Clock />
-          </div>
-          <div className="flex items-center justify-end gap-1.5">
-            <WorkStatus />
-            <NotificationBell />
-            <span className="mx-1 hidden h-6 w-px bg-line sm:block" aria-hidden />
-            <UserMenu />
-          </div>
-        </header>
-        <main id="content" className="mx-auto w-full max-w-[1500px] flex-1 px-4 py-6 sm:px-8">
-          {allowed ? children : (
-            <div role="alert" className="mx-auto mt-16 max-w-md rounded-xl border border-line bg-surface p-8 text-center shadow-sm">
-              <h1 className="text-lg font-semibold text-ink">You do not have access to this page</h1>
-              <p className="mt-2 text-sm text-muted">Your role does not include it. If you need it, ask your Super Admin.</p>
-              <Link href="/dashboard" className="mt-5 inline-flex h-9 items-center rounded-md bg-brand px-4 text-sm font-medium text-white hover:opacity-90">Go to the dashboard</Link>
+        {drawer && (
+          <div className="fixed inset-0 z-40 lg:hidden">
+            <button
+              aria-label="Close menu"
+              className="absolute inset-0 bg-ink/50"
+              onClick={() => setDrawer(false)}
+            />
+            <div className="absolute inset-y-0 left-0 w-72 max-w-[85vw] shadow-2xl">
+              <button
+                aria-label="Close menu"
+                onClick={() => setDrawer(false)}
+                className="absolute right-3 top-4 z-10 grid h-8 w-8 place-items-center rounded-md text-mint hover:bg-white/10"
+              >
+                <X className="h-4 w-4" />
+              </button>
+              <Suspense>
+                <Sidebar narrow={false} onNavigate={() => setDrawer(false)} />
+              </Suspense>
             </div>
-          )}
-        </main>
-        <footer className="glass-bar px-6 py-3 text-center text-xs text-muted">
-          © {new Date().getFullYear()} <span className="font-semibold text-ink">{me.company.name}</span>{VERSION && <> · Version {VERSION}</>}
-        </footer>
-      </div>
+          </div>
+        )}
 
-      <IncomingCalls />
-      <WinCelebration />
-      <NewVersionNotice />
-      <ActivityHeartbeat />
-    </div>
+        <div className="flex min-w-0 flex-col">
+          <header className="sticky top-0 z-20 glass-bar flex h-14 items-center justify-between gap-3 px-3 sm:px-6">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                aria-label="Open menu"
+                onClick={() => setDrawer(true)}
+                className="grid h-9 w-9 place-items-center rounded-md text-muted hover:bg-head lg:hidden"
+              >
+                <Menu className="h-5 w-5" />
+              </button>
+              <Clock />
+            </div>
+            <div className="flex items-center justify-end gap-1.5">
+              <WorkStatus />
+              <NotificationBell />
+              <span className="mx-1 hidden h-6 w-px bg-line sm:block" aria-hidden />
+              <UserMenu />
+            </div>
+          </header>
+          <main id="content" className="mx-auto w-full max-w-[1500px] flex-1 px-4 py-6 sm:px-8">
+            {allowed ? (
+              children
+            ) : (
+              <div
+                role="alert"
+                className="mx-auto mt-16 max-w-md rounded-xl border border-line bg-surface p-8 text-center shadow-sm"
+              >
+                <h1 className="text-lg font-semibold text-ink">
+                  You do not have access to this page
+                </h1>
+                <p className="mt-2 text-sm text-muted">
+                  Your role does not include it. If you need it, ask your Super Admin.
+                </p>
+                <Link
+                  href="/dashboard"
+                  className="mt-5 inline-flex h-9 items-center rounded-md bg-brand px-4 text-sm font-medium text-white hover:opacity-90"
+                >
+                  Go to the dashboard
+                </Link>
+              </div>
+            )}
+          </main>
+          <footer className="glass-bar px-6 py-3 text-center text-xs text-muted">
+            © {new Date().getFullYear()}{' '}
+            <span className="font-semibold text-ink">{me.company.name}</span>
+            {VERSION && <> · Version {VERSION}</>}
+          </footer>
+        </div>
+
+        <IncomingCalls />
+        <WinCelebration />
+        <NewVersionNotice />
+        <ActivityHeartbeat />
+      </div>
     </RealtimeProvider>
   );
 }

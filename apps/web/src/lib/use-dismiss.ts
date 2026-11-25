@@ -3,7 +3,11 @@
 import { useEffect, useRef, type RefObject } from 'react';
 
 /** Closes a popup when the person presses outside it or presses Escape. Listens only while the popup is open. */
-export function useDismiss(open: boolean, box: RefObject<HTMLElement | null>, onDismiss: () => void): void {
+export function useDismiss(
+  open: boolean,
+  box: RefObject<HTMLElement | null>,
+  onDismiss: () => void,
+): void {
   // The latest callback, so the listeners are not set up again on every render.
   const latest = useRef(onDismiss);
   useEffect(() => {

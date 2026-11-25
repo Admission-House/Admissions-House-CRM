@@ -55,7 +55,11 @@ export function spacedPhone(phone: string): string {
 }
 
 export function toCsv(rows: readonly ExportRow[]): string {
-  return CSV_BOM + csvRow(COLUMNS.map((c) => c.header)) + rows.map((r) => csvRow(COLUMNS.map((c) => c.value(r)))).join('');
+  return (
+    CSV_BOM +
+    csvRow(COLUMNS.map((c) => c.header)) +
+    rows.map((r) => csvRow(COLUMNS.map((c) => c.value(r)))).join('')
+  );
 }
 
 export function toXlsx(rows: readonly ExportRow[]): Promise<Buffer> {

@@ -16,5 +16,7 @@ export function leadVisibility(
 ): Expression<SqlBool> | undefined {
   const scoped = scopeCondition(auth, column);
   if (!scoped) return undefined;
-  return auth.permissions.has('lead.assign') ? sql<SqlBool>`(${scoped} OR ${sql.ref(column)} IS NULL)` : scoped;
+  return auth.permissions.has('lead.assign')
+    ? sql<SqlBool>`(${scoped} OR ${sql.ref(column)} IS NULL)`
+    : scoped;
 }

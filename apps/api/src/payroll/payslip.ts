@@ -7,10 +7,19 @@ const font = (pkg: string, file: string): string => require.resolve(`${pkg}/file
 // The font files are looked up when a payslip is made, not when the app starts: a font that cannot be found must
 // fail that one payslip, never the whole API.
 const sets = {
-  latin: () => ({ regular: font('@fontsource/noto-sans', 'noto-sans-latin-400-normal.woff'), bold: font('@fontsource/noto-sans', 'noto-sans-latin-700-normal.woff') }),
+  latin: () => ({
+    regular: font('@fontsource/noto-sans', 'noto-sans-latin-400-normal.woff'),
+    bold: font('@fontsource/noto-sans', 'noto-sans-latin-700-normal.woff'),
+  }),
   devanagari: () => ({
-    regular: font('@fontsource/noto-sans-devanagari', 'noto-sans-devanagari-devanagari-400-normal.woff'),
-    bold: font('@fontsource/noto-sans-devanagari', 'noto-sans-devanagari-devanagari-700-normal.woff'),
+    regular: font(
+      '@fontsource/noto-sans-devanagari',
+      'noto-sans-devanagari-devanagari-400-normal.woff',
+    ),
+    bold: font(
+      '@fontsource/noto-sans-devanagari',
+      'noto-sans-devanagari-devanagari-700-normal.woff',
+    ),
   }),
 };
 
@@ -28,8 +37,14 @@ export interface PayslipData {
   lines?: { kind: 'earning' | 'deduction'; label: string; amount: number; note?: string | null }[];
 }
 
-const inr = (n: number) => `Rs. ${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const monthName = (m: string) => new Date(`${m}-01T00:00:00Z`).toLocaleString('en-IN', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+const inr = (n: number) =>
+  `Rs. ${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const monthName = (m: string) =>
+  new Date(`${m}-01T00:00:00Z`).toLocaleString('en-IN', {
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
 const hasDevanagari = (s: string) => /[ऀ-ॿ]/.test(s);
 
 export type PayslipRow =
@@ -44,19 +59,37 @@ export function payslipRows(d: PayslipData): PayslipRow[] {
   if (d.lines) {
     for (const kind of ['earning', 'deduction'] as const) {
       out.push({ kind: 'heading', label: kind === 'earning' ? 'Earnings' : 'Deductions' });
-      for (const l of d.lines.filter((x) => x.kind === kind)) out.push({ kind: 'row', label: l.label, value: `${kind === 'deduction' ? '- ' : ''}${inr(l.amount)}`, note: l.note });
+      for (const l of d.lines.filter((x) => x.kind === kind))
+        out.push({
+          kind: 'row',
+          label: l.label,
+          value: `${kind === 'deduction' ? '- ' : ''}${inr(l.amount)}`,
+          note: l.note,
+        });
       out.push({ kind: 'gap' });
     }
   } else {
-    out.push({ kind: 'row', label: 'Base pay', value: inr(d.basePay) }, { kind: 'row', label: 'Allowances', value: inr(d.allowances) }, { kind: 'row', label: 'Deductions', value: `- ${inr(d.deductions)}` });
+    out.push(
+      { kind: 'row', label: 'Base pay', value: inr(d.basePay) },
+      { kind: 'row', label: 'Allowances', value: inr(d.allowances) },
+      { kind: 'row', label: 'Deductions', value: `- ${inr(d.deductions)}` },
+    );
   }
-  out.push({ kind: 'rule' }, { kind: 'row', label: 'Net pay', value: inr(d.netPay), bold: true }, { kind: 'rule' });
+  out.push(
+    { kind: 'rule' },
+    { kind: 'row', label: 'Net pay', value: inr(d.netPay), bold: true },
+    { kind: 'rule' },
+  );
   return out;
 }
 
 /** A one-page payslip. Names in Hindi are drawn with a Devanagari font; everything else with Noto Sans. */
 export function buildPayslip(d: PayslipData): Promise<Buffer> {
-  const doc = new PDFDocument({ size: 'A4', margin: 50, info: { Title: `Payslip ${d.month}`, Author: d.company } });
+  const doc = new PDFDocument({
+    size: 'A4',
+    margin: 50,
+    info: { Title: `Payslip ${d.month}`, Author: d.company },
+  });
   const chunks: Buffer[] = [];
   doc.on('data', (c: Buffer) => chunks.push(c));
   const done = new Promise<Buffer>((resolve, reject) => {
@@ -64,10 +97,21 @@ export function buildPayslip(d: PayslipData): Promise<Buffer> {
     doc.on('error', reject);
   });
 
-  const text = (s: string, opts: { bold?: boolean; size?: number; x?: number; y?: number; width?: number; align?: 'left' | 'right' | 'center' } = {}) => {
+  const text = (
+    s: string,
+    opts: {
+      bold?: boolean;
+      size?: number;
+      x?: number;
+      y?: number;
+      width?: number;
+      align?: 'left' | 'right' | 'center';
+    } = {},
+  ) => {
     const set = hasDevanagari(s) ? sets.devanagari() : sets.latin();
     doc.font(opts.bold ? set.bold : set.regular).fontSize(opts.size ?? 11);
-    if (opts.x !== undefined && opts.y !== undefined) doc.text(s, opts.x, opts.y, { width: opts.width, align: opts.align });
+    if (opts.x !== undefined && opts.y !== undefined)
+      doc.text(s, opts.x, opts.y, { width: opts.width, align: opts.align });
     else doc.text(s, { align: opts.align });
   };
 
@@ -116,7 +160,12 @@ export function buildPayslip(d: PayslipData): Promise<Buffer> {
     text(d.notes, { x: left, y: y + 18, width: right - left });
   }
   // Kept inside the page margin: text that starts too low makes the PDF library open a second page.
-  text(d.lines ? "Calculated by the CRM from the month's attendance and the salary structure, under the company's payroll policy." : 'Generated by the CRM from the salary record entered by the company.', { size: 8, x: left, y: 750, width: right - left });
+  text(
+    d.lines
+      ? "Calculated by the CRM from the month's attendance and the salary structure, under the company's payroll policy."
+      : 'Generated by the CRM from the salary record entered by the company.',
+    { size: 8, x: left, y: 750, width: right - left },
+  );
   doc.end();
   return done;
 }

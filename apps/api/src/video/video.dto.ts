@@ -33,13 +33,18 @@ export const meetingSchema = z.object({
   leadId: z.uuid().optional(),
   record: z.boolean().optional(),
   staffIds: z.array(z.uuid()).max(100).default([]),
-  guests: z.array(z.object({ name: z.string().trim().min(1).max(80) })).max(100).default([]),
+  guests: z
+    .array(z.object({ name: z.string().trim().min(1).max(80) }))
+    .max(100)
+    .default([]),
 });
 
 /** One more person in a meeting: a colleague, or an outside guest. */
 export const inviteSchema = z
   .object({ userId: z.uuid().optional(), guestName: z.string().trim().min(1).max(80).optional() })
-  .refine((v) => (v.userId === undefined) !== (v.guestName === undefined), { message: 'Give either a colleague (userId) or a guest name, not both' });
+  .refine((v) => (v.userId === undefined) !== (v.guestName === undefined), {
+    message: 'Give either a colleague (userId) or a guest name, not both',
+  });
 
 /** A staff member joining: whether they agreed to the recording notice, when the session is recorded. */
 export const staffJoinSchema = z.object({ consent: z.boolean().optional() }).default({});
@@ -52,7 +57,10 @@ export const presenceSchema = z.object({ event: z.enum(['joined', 'ping', 'left'
 /** The guest's side. The device id is a random value the browser made for this invitation and keeps. */
 export const guestJoinSchema = z.object({
   token: z.string().trim().min(40).max(200),
-  deviceId: z.string().trim().regex(/^[A-Za-z0-9_-]{24,64}$/, 'not a valid device id'),
+  deviceId: z
+    .string()
+    .trim()
+    .regex(/^[A-Za-z0-9_-]{24,64}$/, 'not a valid device id'),
   /** The guest may correct how their name is shown. */
   name: z.string().trim().min(1).max(80).optional(),
   /** The guest agreed to the recording notice. Required when the session is recorded. */
@@ -62,7 +70,10 @@ export const guestJoinSchema = z.object({
 export const guestInfoSchema = z.object({ token: z.string().trim().min(40).max(200) });
 export const guestPresenceSchema = z.object({
   token: z.string().trim().min(40).max(200),
-  deviceId: z.string().trim().regex(/^[A-Za-z0-9_-]{24,64}$/),
+  deviceId: z
+    .string()
+    .trim()
+    .regex(/^[A-Za-z0-9_-]{24,64}$/),
   event: presenceSchema.shape.event,
 });
 
@@ -70,7 +81,9 @@ export const historyQuerySchema = z.object({
   type: z.enum(['call', 'meeting']).optional(),
   kind: kind.optional(),
   /** What became of it. `open` is everything planned, ringing or running. */
-  outcome: z.enum(['completed', 'missed', 'declined', 'busy', 'cancelled', 'failed', 'open']).optional(),
+  outcome: z
+    .enum(['completed', 'missed', 'declined', 'busy', 'cancelled', 'failed', 'open'])
+    .optional(),
   leadId: z.uuid().optional(),
   /** Sessions this person was invited to. */
   userId: z.uuid().optional(),

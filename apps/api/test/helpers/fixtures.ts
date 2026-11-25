@@ -32,7 +32,12 @@ export interface Fixture {
   roleId(key: RoleKey): string;
   user(name: string): TestUser;
   /** Adds a user straight into the database, for tests that need a special role. */
-  addUser(spec: { name: string; roleId: string; managerName?: string; branch?: boolean }): Promise<TestUser>;
+  addUser(spec: {
+    name: string;
+    roleId: string;
+    managerName?: string;
+    branch?: boolean;
+  }): Promise<TestUser>;
   /** Plain API keys for the two lead sources. */
   keys: { website: string; ads: string };
   sourceId(name: 'Website' | 'Meta Ads'): string;
@@ -100,10 +105,16 @@ export const DEFAULT_USERS: UserSpec[] = [
 ];
 
 /** The standard roles get exactly what a new company gets, so the tests cannot drift from what runs in production. */
-const STANDARD_PERMISSIONS: Record<Exclude<RoleKey, 'super_admin'>, readonly string[]> = { admin: ADMIN, counsellor: COUNSELLOR };
+const STANDARD_PERMISSIONS: Record<Exclude<RoleKey, 'super_admin'>, readonly string[]> = {
+  admin: ADMIN,
+  counsellor: COUNSELLOR,
+};
 
 /** A company with the three standard roles, an office, and users, in the real database. */
-export async function createFixture(owner: pg.Client, specs: UserSpec[] = DEFAULT_USERS): Promise<Fixture> {
+export async function createFixture(
+  owner: pg.Client,
+  specs: UserSpec[] = DEFAULT_USERS,
+): Promise<Fixture> {
   const run = randomUUID().slice(0, 8);
   const slug = `t-${run}`;
   const hash = await new PasswordService().hash(PASSWORD);
@@ -165,22 +176,66 @@ export async function createFixture(owner: pg.Client, specs: UserSpec[] = DEFAUL
     [tenantId],
   );
   const sourceIds = {} as Record<string, string>;
-  const keys = { website: `ahk_${randomBytes(32).toString('base64url')}`, ads: `ahk_${randomBytes(32).toString('base64url')}` };
-  for (const [name, channel, key] of [['Website', 'website', keys.website], ['Meta Ads', 'ads', keys.ads]] as const) {
-    sourceIds[name] = (await q(`INSERT INTO lead_sources (tenant_id, name, channel_type) VALUES ($1, $2, $3) RETURNING id`, [tenantId, name, channel])).rows[0].id;
-    await q(`INSERT INTO api_keys (tenant_id, source_id, name, key_prefix, key_hash) VALUES ($1, $2, $3, $4, $5)`, [tenantId, sourceIds[name], `${name} key`, key.slice(0, 8), createHash('sha256').update(key).digest('hex')]);
+  const keys = {
+    website: `ahk_${randomBytes(32).toString('base64url')}`,
+    ads: `ahk_${randomBytes(32).toString('base64url')}`,
+  };
+  for (const [name, channel, key] of [
+    ['Website', 'website', keys.website],
+    ['Meta Ads', 'ads', keys.ads],
+  ] as const) {
+    sourceIds[name] = (
+      await q(
+        `INSERT INTO lead_sources (tenant_id, name, channel_type) VALUES ($1, $2, $3) RETURNING id`,
+        [tenantId, name, channel],
+      )
+    ).rows[0].id;
+    await q(
+      `INSERT INTO api_keys (tenant_id, source_id, name, key_prefix, key_hash) VALUES ($1, $2, $3, $4, $5)`,
+      [
+        tenantId,
+        sourceIds[name],
+        `${name} key`,
+        key.slice(0, 8),
+        createHash('sha256').update(key).digest('hex'),
+      ],
+    );
   }
   await q(`INSERT INTO streams (tenant_id, name) VALUES ($1, 'Engineering')`, [tenantId]);
 
-  for (const [name, paid, quota] of [['Casual Leave', true, 12], ['Sick Leave', true, 6], ['Unpaid Leave', false, 0]] as const) {
-    await q(`INSERT INTO leave_types (tenant_id, name, is_paid, yearly_quota) VALUES ($1, $2, $3, $4)`, [tenantId, name, paid, quota]);
+  for (const [name, paid, quota] of [
+    ['Casual Leave', true, 12],
+    ['Sick Leave', true, 6],
+    ['Unpaid Leave', false, 0],
+  ] as const) {
+    await q(
+      `INSERT INTO leave_types (tenant_id, name, is_paid, yearly_quota) VALUES ($1, $2, $3, $4)`,
+      [tenantId, name, paid, quota],
+    );
   }
-  for (const [name, minutes] of [['Lunch', 45], ['Tea', 15]] as const) {
-    await q(`INSERT INTO break_types (tenant_id, name, allowed_minutes) VALUES ($1, $2, $3)`, [tenantId, name, minutes]);
+  for (const [name, minutes] of [
+    ['Lunch', 45],
+    ['Tea', 15],
+  ] as const) {
+    await q(`INSERT INTO break_types (tenant_id, name, allowed_minutes) VALUES ($1, $2, $3)`, [
+      tenantId,
+      name,
+      minutes,
+    ]);
   }
 
   const users = new Map<string, TestUser>();
-  const insert = async (name: string, roleId: string, opts: { role?: RoleKey; manager?: string; status?: string; mustChange?: boolean; branch: boolean }) => {
+  const insert = async (
+    name: string,
+    roleId: string,
+    opts: {
+      role?: RoleKey;
+      manager?: string;
+      status?: string;
+      mustChange?: boolean;
+      branch: boolean;
+    },
+  ) => {
     const email = `${name}-${run}@test.example`;
     const id = (
       await q(
@@ -225,19 +280,87 @@ export async function createFixture(owner: pg.Client, specs: UserSpec[] = DEFAUL
       if (!found) throw new Error(`no test user "${name}"`);
       return found;
     },
-    addUser: (spec) => insert(spec.name, spec.roleId, { manager: spec.managerName, branch: spec.branch ?? false }),
+    addUser: (spec) =>
+      insert(spec.name, spec.roleId, { manager: spec.managerName, branch: spec.branch ?? false }),
     async cleanup() {
       const tables = [
-        'recording_webhook_events', 'session_recording_files', 'session_recordings', 'recording_policies', 'video_session_events', 'video_session_invites', 'video_sessions', 'audit_logs', 'login_attempts', 'notifications', 'lead_enquiries', 'lead_activities', 'lead_profiles', 'lead_phones',
-        'remote_signin_requests', 'password_reset_tokens', 'custom_field_values', 'custom_field_options', 'custom_field_defs', 'salary_records', 'payslip_lines', 'payslips', 'payroll_runs', 'salary_structure_lines', 'salary_structures', 'payroll_policies', 'salary_import_batches', 'call_recordings', 'calls', 'dialer_session_leads', 'dialer_sessions', 'telephony_connections', 'lead_import_batches', 'lead_partner_submissions', 'lead_documents', 'lead_shortlist_courses', 'lead_shortlists', 'lead_recommendations', 'followups', 'leads', 'inbound_events', 'api_keys', 'assignment_rule_users', 'assignment_rules', 'lead_policies', 'lead_statuses',
-        'lead_sources', 'college_courses', 'colleges', 'courses', 'streams', 'tenant_counters',
-        'break_logs', 'attendance_exceptions', 'attendance_records',
-        'leave_requests', 'holidays', 'leave_balances', 'leave_types',
-        'office_computers', 'user_sessions', 'user_devices', 'leave_balances', 'user_profiles', 'role_permissions', 'users',
-        'branch_networks', 'branches', 'attendance_settings', 'break_types', 'roles',
+        'recording_webhook_events',
+        'session_recording_files',
+        'session_recordings',
+        'recording_policies',
+        'video_session_events',
+        'video_session_invites',
+        'video_sessions',
+        'audit_logs',
+        'login_attempts',
+        'notifications',
+        'lead_enquiries',
+        'lead_activities',
+        'lead_profiles',
+        'lead_phones',
+        'remote_signin_requests',
+        'password_reset_tokens',
+        'custom_field_values',
+        'custom_field_options',
+        'custom_field_defs',
+        'salary_records',
+        'payslip_lines',
+        'payslips',
+        'payroll_runs',
+        'salary_structure_lines',
+        'salary_structures',
+        'payroll_policies',
+        'salary_import_batches',
+        'call_recordings',
+        'calls',
+        'dialer_session_leads',
+        'dialer_sessions',
+        'telephony_connections',
+        'lead_import_batches',
+        'lead_partner_submissions',
+        'lead_documents',
+        'lead_shortlist_courses',
+        'lead_shortlists',
+        'lead_recommendations',
+        'followups',
+        'leads',
+        'inbound_events',
+        'api_keys',
+        'assignment_rule_users',
+        'assignment_rules',
+        'lead_policies',
+        'lead_statuses',
+        'lead_sources',
+        'college_courses',
+        'colleges',
+        'courses',
+        'streams',
+        'tenant_counters',
+        'break_logs',
+        'attendance_exceptions',
+        'attendance_records',
+        'leave_requests',
+        'holidays',
+        'leave_balances',
+        'leave_types',
+        'office_computers',
+        'user_sessions',
+        'user_devices',
+        'leave_balances',
+        'user_profiles',
+        'role_permissions',
+        'users',
+        'branch_networks',
+        'branches',
+        'attendance_settings',
+        'break_types',
+        'roles',
       ];
       // An approved run locks its payslips (the database refuses to change them), so a test company is reopened before it is removed.
-      await q(`UPDATE payroll_runs SET status = 'draft', approved_by = NULL, approved_at = NULL WHERE tenant_id = $1`, [tenantId]);
+      await q(
+        `UPDATE payroll_runs SET status = 'draft', approved_by = NULL, approved_at = NULL WHERE tenant_id = $1`,
+        [tenantId],
+      );
       for (const table of tables) await q(`DELETE FROM ${table} WHERE tenant_id = $1`, [tenantId]);
       await q(`DELETE FROM tenants WHERE id = $1`, [tenantId]);
     },

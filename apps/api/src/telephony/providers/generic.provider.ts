@@ -16,9 +16,16 @@ const batchSchema = z.object({ events: z.array(callEventSchema).min(1).max(50) }
 export class GenericProvider implements TelephonyProvider {
   readonly name = 'generic';
 
-  placeCall(config: Record<string, unknown>, _request: PlaceCallRequest): Promise<{ providerCallId: string }> {
+  placeCall(
+    config: Record<string, unknown>,
+    _request: PlaceCallRequest,
+  ): Promise<{ providerCallId: string }> {
     if (config.simulate !== true) {
-      throw new AppError('DIALING_NOT_AVAILABLE', 'This telephony connection can receive call events but cannot place calls yet', 501);
+      throw new AppError(
+        'DIALING_NOT_AVAILABLE',
+        'This telephony connection can receive call events but cannot place calls yet',
+        501,
+      );
     }
     return Promise.resolve({ providerCallId: `sim-${randomUUID()}` });
   }
@@ -27,7 +34,9 @@ export class GenericProvider implements TelephonyProvider {
     const isBatch = typeof body === 'object' && body !== null && 'events' in body;
     const parsed = isBatch ? batchSchema.safeParse(body) : callEventSchema.safeParse(body);
     if (!parsed.success) {
-      throw new ProviderPayloadError(parsed.error.issues.map((i) => `${i.path.join('.') || '(body)'}: ${i.message}`).join('; '));
+      throw new ProviderPayloadError(
+        parsed.error.issues.map((i) => `${i.path.join('.') || '(body)'}: ${i.message}`).join('; '),
+      );
     }
     return 'events' in parsed.data ? parsed.data.events : [parsed.data];
   }

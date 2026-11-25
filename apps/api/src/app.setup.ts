@@ -46,35 +46,54 @@ export async function configureApp(app: NestFastifyApplication, env: Env): Promi
   app.setGlobalPrefix('api/v1');
   app.enableShutdownHooks();
 
-  app.getHttpAdapter().getInstance().addHook('onSend', async (request, reply) => {
-    void reply.header('x-request-id', request.id);
-    // Nothing from the API may be kept by a browser cache, proxy or CDN unless the endpoint says so
-    // itself (the company logo does). Otherwise one person's lead list could be served to another.
-    if (request.url.startsWith('/api/v1/') && !reply.hasHeader('cache-control')) void reply.header('cache-control', 'private, no-store');
-  });
+  app
+    .getHttpAdapter()
+    .getInstance()
+    .addHook('onSend', async (request, reply) => {
+      void reply.header('x-request-id', request.id);
+      // Nothing from the API may be kept by a browser cache, proxy or CDN unless the endpoint says so
+      // itself (the company logo does). Otherwise one person's lead list could be served to another.
+      if (request.url.startsWith('/api/v1/') && !reply.hasHeader('cache-control'))
+        void reply.header('cache-control', 'private, no-store');
+    });
 
   // Text the database cannot store (a NUL character, half of a surrogate pair) is refused at the door with a plain
   // answer, instead of failing deep inside whichever screen happened to save it.
-  app.getHttpAdapter().getInstance().addHook('preValidation', async (request, reply) => {
-    if (!request.url.startsWith('/api/v1/')) return;
-    const found = findBadText(request.body) ?? findBadText(request.query);
-    if (found) {
-      return reply.status(400).send({
-        error: { code: 'INVALID_TEXT', message: 'Some of the text contains characters that cannot be saved. Remove them and try again.', fieldErrors: [{ field: found, message: 'Contains a character that cannot be saved' }], requestId: request.id },
-      });
-    }
-  });
+  app
+    .getHttpAdapter()
+    .getInstance()
+    .addHook('preValidation', async (request, reply) => {
+      if (!request.url.startsWith('/api/v1/')) return;
+      const found = findBadText(request.body) ?? findBadText(request.query);
+      if (found) {
+        return reply.status(400).send({
+          error: {
+            code: 'INVALID_TEXT',
+            message:
+              'Some of the text contains characters that cannot be saved. Remove them and try again.',
+            fieldErrors: [{ field: found, message: 'Contains a character that cannot be saved' }],
+            requestId: request.id,
+          },
+        });
+      }
+    });
 
   // Time every request for the monitoring numbers. The route is the pattern, not the real address.
   const metrics = app.get(MetricsService);
-  app.getHttpAdapter().getInstance().addHook('onResponse', async (request, reply) => {
-    const route = request.routeOptions?.url ?? 'unmatched';
-    if (route !== '/api/v1/metrics') metrics.observe(request.method, route, reply.statusCode, reply.elapsedTime / 1000);
-  });
+  app
+    .getHttpAdapter()
+    .getInstance()
+    .addHook('onResponse', async (request, reply) => {
+      const route = request.routeOptions?.url ?? 'unmatched';
+      if (route !== '/api/v1/metrics')
+        metrics.observe(request.method, route, reply.statusCode, reply.elapsedTime / 1000);
+    });
 
   await app.register(cookie);
   // One file per request, no larger than the agreed limit; the server stops reading beyond it.
-  await app.register(multipart, { limits: { fileSize: env.MAX_UPLOAD_BYTES, files: 1, fields: 5, parts: 8, headerPairs: 40 } });
+  await app.register(multipart, {
+    limits: { fileSize: env.MAX_UPLOAD_BYTES, files: 1, fields: 5, parts: 8, headerPairs: 40 },
+  });
   await app.register(helmet, { contentSecurityPolicy: !env.ENABLE_API_DOCS });
   app.enableCors({
     origin: env.CORS_ORIGINS,
@@ -91,6 +110,10 @@ export async function configureApp(app: NestFastifyApplication, env: Env): Promi
       .setVersion('1')
       .addBearerAuth()
       .build();
-    SwaggerModule.setup('api/docs', app, cleanupOpenApiDoc(SwaggerModule.createDocument(app, config)));
+    SwaggerModule.setup(
+      'api/docs',
+      app,
+      cleanupOpenApiDoc(SwaggerModule.createDocument(app, config)),
+    );
   }
 }

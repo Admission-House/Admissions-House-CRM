@@ -1,8 +1,25 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Put } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Put,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { AuthContext } from '../auth/auth-context.js';
 import { CurrentAuth, RequireAnyPermission, RequirePermissions } from '../auth/decorators.js';
-import { CreateRuleDto, CreateSourceDto, PolicyDto, UpdateRuleDto, UpdateSourceDto } from './lead-config.dto.js';
+import {
+  CreateRuleDto,
+  CreateSourceDto,
+  PolicyDto,
+  UpdateRuleDto,
+  UpdateSourceDto,
+} from './lead-config.dto.js';
 import { LeadConfigService } from './lead-config.service.js';
 
 @ApiTags('lead settings')
@@ -28,7 +45,11 @@ export class LeadConfigController {
 
   @RequirePermissions('settings.manage')
   @Patch('lead-sources/:id')
-  updateSource(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: UpdateSourceDto) {
+  updateSource(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: UpdateSourceDto,
+  ) {
     return this.config.updateSource(auth, id, body);
   }
 
@@ -48,14 +69,21 @@ export class LeadConfigController {
 
   @RequirePermissions('settings.manage')
   @Patch('assignment-rules/:id')
-  updateRule(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: UpdateRuleDto) {
+  updateRule(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: UpdateRuleDto,
+  ) {
     return this.config.updateRule(auth, id, body);
   }
 
   @RequirePermissions('settings.manage')
   @Delete('assignment-rules/:id')
   @HttpCode(204)
-  removeRule(@CurrentAuth() auth: AuthContext, @Param('id', ParseUUIDPipe) id: string): Promise<void> {
+  removeRule(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<void> {
     return this.config.removeRule(auth, id);
   }
 

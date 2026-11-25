@@ -5,9 +5,25 @@ import { api, ApiError, onSessionLost, refreshSession, setAccessToken } from './
 import { homePath } from './start-page';
 
 export interface Me {
-  user: { id: string; name: string; email: string; role: { key: string | null; dataScope: 'all' | 'team' | 'own' }; mustChangePassword: boolean; mfaSetupRequired: boolean; startPage: string | null; avatarVersion: number | null };
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    role: { key: string | null; dataScope: 'all' | 'team' | 'own' };
+    mustChangePassword: boolean;
+    mfaSetupRequired: boolean;
+    startPage: string | null;
+    avatarVersion: number | null;
+  };
   permissions: string[];
-  company: { name: string; productName: string; contactEmail: string | null; brandColor: string | null; accentColor: string | null; hasLogo: boolean };
+  company: {
+    name: string;
+    productName: string;
+    contactEmail: string | null;
+    brandColor: string | null;
+    accentColor: string | null;
+    hasLogo: boolean;
+  };
 }
 
 type Status = 'loading' | 'anonymous' | 'authenticated';
@@ -18,7 +34,13 @@ interface AuthState {
   can: (...permissions: string[]) => boolean;
   canAny: (...permissions: string[]) => boolean;
   /** With `remoteReason`, office staff outside the office ask for approval to sign in today (see the login page). */
-  login: (input: { tenant: string; email: string; password: string; mfaCode?: string; remoteReason?: string }) => Promise<{ mustChangePassword: boolean; home: string }>;
+  login: (input: {
+    tenant: string;
+    email: string;
+    password: string;
+    mfaCode?: string;
+    remoteReason?: string;
+  }) => Promise<{ mustChangePassword: boolean; home: string }>;
   logout: () => Promise<void>;
   reload: () => Promise<Me>;
 }
@@ -30,7 +52,8 @@ function position(): Promise<{ lat: number; lng: number; accuracy: number } | un
   if (typeof navigator === 'undefined' || !navigator.geolocation) return Promise.resolve(undefined);
   return new Promise((resolve) =>
     navigator.geolocation.getCurrentPosition(
-      (p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy }),
+      (p) =>
+        resolve({ lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy }),
       () => resolve(undefined),
       { enableHighAccuracy: true, timeout: 10_000, maximumAge: 0 },
     ),
@@ -42,7 +65,10 @@ function markSignedIn(on: boolean, startPage?: string | null): void {
   if (typeof document === 'undefined') return;
   const secure = location.protocol === 'https:' ? '; secure' : '';
   const set = (name: string, value: string | null) => {
-    document.cookie = value === null ? `${name}=; path=/; max-age=0; samesite=lax` : `${name}=${value}; path=/; max-age=${7 * 24 * 3600}; samesite=lax${secure}`;
+    document.cookie =
+      value === null
+        ? `${name}=; path=/; max-age=0; samesite=lax`
+        : `${name}=${value}; path=/; max-age=${7 * 24 * 3600}; samesite=lax${secure}`;
   };
   set('ah_in', on ? '1' : null);
   // The page they chose to open first. Only a hint for the web server; the app still checks what they may see.
@@ -85,7 +111,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     async (input) => {
       const attempt = (location?: { lat: number; lng: number; accuracy: number }) =>
         api<{ accessToken: string; mustChangePassword: boolean }>('/auth/login', {
-          method: 'POST', anonymous: true, body: { ...input, clientType: 'web', ...(location && { location }) },
+          method: 'POST',
+          anonymous: true,
+          body: { ...input, clientType: 'web', ...(location && { location }) },
         });
       let res;
       try {
@@ -93,7 +121,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           // A request for approval shows the approvers where the person is: ask for the position first, and say so if there is none.
           const location = await position();
           res = await api<{ accessToken: string; mustChangePassword: boolean }>('/auth/login', {
-            method: 'POST', anonymous: true, body: { ...input, clientType: 'web', ...(location ? { location } : { locationUnavailable: true }) },
+            method: 'POST',
+            anonymous: true,
+            body: {
+              ...input,
+              clientType: 'web',
+              ...(location ? { location } : { locationUnavailable: true }),
+            },
           });
         } else {
           res = await attempt();
@@ -101,7 +135,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch (e) {
         // Office staff must also prove where they are. Ask the browser for the position only then, so
         // everyone else is not asked.
-        if (e instanceof ApiError && e.code === 'OUTSIDE_OFFICE' && e.details?.reason === 'gps_missing') {
+        if (
+          e instanceof ApiError &&
+          e.code === 'OUTSIDE_OFFICE' &&
+          e.details?.reason === 'gps_missing'
+        ) {
           const location = await position();
           if (!location) throw e;
           res = await attempt(location);
@@ -131,7 +169,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<AuthState>(() => {
     const set = new Set(me?.permissions ?? []);
     return {
-      status, me, login, logout, reload: load,
+      status,
+      me,
+      login,
+      logout,
+      reload: load,
       can: (...p) => p.every((x) => set.has(x)),
       canAny: (...p) => p.some((x) => set.has(x)),
     };

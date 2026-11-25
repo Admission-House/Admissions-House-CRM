@@ -6,7 +6,8 @@ import { decodeCursor, Page, toPage } from '../common/pagination.js';
 import { DatabaseService, Trx } from '../database/database.service.js';
 import { kindOfAlert } from '../preferences/preferences-rules.js';
 
-export type NotificationType = 'followup_due' | 'assignment' | 'approval' | 'security' | 'lead_new' | 'system' | 'communication';
+export type NotificationType =
+  'followup_due' | 'assignment' | 'approval' | 'security' | 'lead_new' | 'system' | 'communication';
 
 export interface NotificationView {
   id: string;
@@ -28,7 +29,12 @@ export class NotificationsService {
    */
   async notify(
     trx: Trx,
-    n: { tenantId: string; userIds: readonly string[]; type: NotificationType; payload: Record<string, unknown> },
+    n: {
+      tenantId: string;
+      userIds: readonly string[];
+      type: NotificationType;
+      payload: Record<string, unknown>;
+    },
   ): Promise<number> {
     let userIds = [...new Set(n.userIds)];
     if (userIds.length === 0) return 0;
@@ -37,7 +43,9 @@ export class NotificationsService {
     const kind = kindOfAlert(n.type);
     if (kind) {
       const { rows } = await sql<{ user_id: string }>`
-        SELECT user_id FROM user_preferences WHERE user_id = ANY(${userIds}::uuid[]) AND notify->>${kind} = 'false'`.execute(trx);
+        SELECT user_id FROM user_preferences WHERE user_id = ANY(${userIds}::uuid[]) AND notify->>${kind} = 'false'`.execute(
+        trx,
+      );
       if (rows.length > 0) {
         const off = new Set(rows.map((r) => r.user_id));
         userIds = userIds.filter((id) => !off.has(id));
@@ -46,7 +54,14 @@ export class NotificationsService {
     }
     await trx
       .insertInto('notifications')
-      .values(userIds.map((user_id) => ({ tenant_id: n.tenantId, user_id, type: n.type, payload: JSON.stringify(n.payload) })))
+      .values(
+        userIds.map((user_id) => ({
+          tenant_id: n.tenantId,
+          user_id,
+          type: n.type,
+          payload: JSON.stringify(n.payload),
+        })),
+      )
       .execute();
     return userIds.length;
   }
@@ -59,7 +74,12 @@ export class NotificationsService {
    */
   async notifyOversight(
     trx: Trx,
-    n: { tenantId: string; payload: { event: string; userId?: string } & Record<string, unknown>; exceptUserId?: string; quietMinutes?: number },
+    n: {
+      tenantId: string;
+      payload: { event: string; userId?: string } & Record<string, unknown>;
+      exceptUserId?: string;
+      quietMinutes?: number;
+    },
   ): Promise<number> {
     if (n.quietMinutes && n.payload.userId) {
       const { rows } = await sql<{ one: number }>`
@@ -76,14 +96,24 @@ export class NotificationsService {
       JOIN roles mr ON mr.id = m.role_id AND mr.system_key IN ('admin', 'super_admin')
       WHERE u.id = ${n.payload.userId ?? null}::uuid`.execute(trx);
     const skip = new Set([n.exceptUserId, n.payload.userId]);
-    return this.notify(trx, { tenantId: n.tenantId, userIds: overseers.map((o) => o.id).filter((id) => !skip.has(id)), type: 'security', payload: n.payload });
+    return this.notify(trx, {
+      tenantId: n.tenantId,
+      userIds: overseers.map((o) => o.id).filter((id) => !skip.has(id)),
+      type: 'security',
+      payload: n.payload,
+    });
   }
 
   /** Work email addresses of active users, for the few events that are also sent by email. */
-  async emailsOf(trx: Trx, userIds: string[]): Promise<{ id: string; name: string; email: string }[]> {
+  async emailsOf(
+    trx: Trx,
+    userIds: string[],
+  ): Promise<{ id: string; name: string; email: string }[]> {
     if (userIds.length === 0) return [];
     const { rows } = await sql<{ id: string; name: string; email: string }>`
-      SELECT id, name, email::text AS email FROM users WHERE id = ANY(${userIds}::uuid[]) AND status = 'active'`.execute(trx);
+      SELECT id, name, email::text AS email FROM users WHERE id = ANY(${userIds}::uuid[]) AND status = 'active'`.execute(
+      trx,
+    );
     return rows;
   }
 
@@ -97,14 +127,27 @@ export class NotificationsService {
     return rows.map((r) => r.id).filter((id) => id !== userId);
   }
 
-  list(auth: AuthContext, query: { limit: number; cursor?: string; unreadOnly: boolean }): Promise<Page<NotificationView>> {
+  list(
+    auth: AuthContext,
+    query: { limit: number; cursor?: string; unreadOnly: boolean },
+  ): Promise<Page<NotificationView>> {
     return this.db.withTenant(auth.tenantId, async (trx) => {
       const after = decodeCursor(query.cursor, cursorShape);
       const conditions = [sql<SqlBool>`user_id = ${auth.userId}::uuid`];
       if (query.unreadOnly) conditions.push(sql<SqlBool>`read_at IS NULL`);
-      if (after) conditions.push(sql<SqlBool>`(created_at, id) < (${after.t}::timestamptz, ${after.i}::bigint)`);
+      if (after)
+        conditions.push(
+          sql<SqlBool>`(created_at, id) < (${after.t}::timestamptz, ${after.i}::bigint)`,
+        );
 
-      const { rows } = await sql<{ id: string; type: string; payload: unknown; read_at: Date | null; created_at: Date; created_text: string }>`
+      const { rows } = await sql<{
+        id: string;
+        type: string;
+        payload: unknown;
+        read_at: Date | null;
+        created_at: Date;
+        created_text: string;
+      }>`
         SELECT id::text AS id, type, payload, read_at, created_at, created_at::text AS created_text
         FROM notifications
         WHERE ${sql.join(conditions, sql` AND `)}
@@ -112,7 +155,13 @@ export class NotificationsService {
         LIMIT ${query.limit + 1}`.execute(trx);
       const page = toPage(rows, query.limit, (last) => ({ t: last.created_text, i: last.id }));
       return {
-        items: page.items.map((r) => ({ id: r.id, type: r.type, payload: forPerson(auth, r.payload), readAt: r.read_at, createdAt: r.created_at })),
+        items: page.items.map((r) => ({
+          id: r.id,
+          type: r.type,
+          payload: forPerson(auth, r.payload),
+          readAt: r.read_at,
+          createdAt: r.created_at,
+        })),
         nextCursor: page.nextCursor,
       };
     });
@@ -121,13 +170,18 @@ export class NotificationsService {
   unreadCount(auth: AuthContext): Promise<{ unread: number }> {
     return this.db.withTenant(auth.tenantId, async (trx) => {
       const { rows } = await sql<{ n: string }>`
-        SELECT count(*) AS n FROM notifications WHERE user_id = ${auth.userId} AND read_at IS NULL`.execute(trx);
+        SELECT count(*) AS n FROM notifications WHERE user_id = ${auth.userId} AND read_at IS NULL`.execute(
+        trx,
+      );
       return { unread: Number(rows[0]!.n) };
     });
   }
 
   /** Marks the person's own notifications as read: the ones listed, or all of them. */
-  markRead(auth: AuthContext, target: { ids?: string[]; all?: boolean }): Promise<{ marked: number }> {
+  markRead(
+    auth: AuthContext,
+    target: { ids?: string[]; all?: boolean },
+  ): Promise<{ marked: number }> {
     return this.db.withTenant(auth.tenantId, async (trx) => {
       const which = target.all ? sql`true` : sql`id = ANY(${target.ids ?? []}::bigint[])`;
       const result = await sql`
@@ -140,7 +194,13 @@ export class NotificationsService {
 
 /** A notice as this person may read it: the lead's source is left out for someone who may not see where leads come from. */
 function forPerson(auth: AuthContext, payload: unknown): unknown {
-  if (auth.permissions.has('lead.source') || typeof payload !== 'object' || payload === null || !('source' in payload)) return payload;
+  if (
+    auth.permissions.has('lead.source') ||
+    typeof payload !== 'object' ||
+    payload === null ||
+    !('source' in payload)
+  )
+    return payload;
   const rest = { ...(payload as Record<string, unknown>) };
   delete rest.source;
   return rest;

@@ -16,7 +16,12 @@ import {
   assertNotLastSuperAdmin,
   assertPlacement,
 } from './user-rules.js';
-import type { CreateUserDto, ListUsersDto, UpdateOwnAccountDto, UpdateUserDto } from './users.dto.js';
+import type {
+  CreateUserDto,
+  ListUsersDto,
+  UpdateOwnAccountDto,
+  UpdateUserDto,
+} from './users.dto.js';
 
 export interface UserView {
   id: string;
@@ -59,15 +64,33 @@ export class UsersService {
    * A person changes their own name, mobile number or sign-in email. Works the same for every role. The email is
    * what they sign in with, so changing it needs the current password, and it must not belong to anyone else.
    */
-  updateOwnAccount(auth: AuthContext, dto: UpdateOwnAccountDto): Promise<{ name: string; email: string; phone: string | null }> {
+  updateOwnAccount(
+    auth: AuthContext,
+    dto: UpdateOwnAccountDto,
+  ): Promise<{ name: string; email: string; phone: string | null }> {
     return this.db.withTenant(auth.tenantId, async (trx) => {
-      const me = await trx.selectFrom('users').select(['id', 'name', 'email', 'phone', 'password_hash']).where('id', '=', auth.userId).executeTakeFirstOrThrow();
+      const me = await trx
+        .selectFrom('users')
+        .select(['id', 'name', 'email', 'phone', 'password_hash'])
+        .where('id', '=', auth.userId)
+        .executeTakeFirstOrThrow();
       const emailChanges = dto.email !== undefined && dto.email !== me.email;
       if (emailChanges) {
-        if (!dto.currentPassword || !(await this.passwords.verify(me.password_hash, dto.currentPassword))) {
-          throw AppError.forbidden('PASSWORD_REQUIRED', 'Enter your current password to change your email');
+        if (
+          !dto.currentPassword ||
+          !(await this.passwords.verify(me.password_hash, dto.currentPassword))
+        ) {
+          throw AppError.forbidden(
+            'PASSWORD_REQUIRED',
+            'Enter your current password to change your email',
+          );
         }
-        const taken = await trx.selectFrom('users').select('id').where('email', '=', dto.email!).where('id', '<>', me.id).executeTakeFirst();
+        const taken = await trx
+          .selectFrom('users')
+          .select('id')
+          .where('email', '=', dto.email!)
+          .where('id', '<>', me.id)
+          .executeTakeFirst();
         if (taken) throw AppError.conflict('EMAIL_TAKEN', 'Someone already has this email address');
       }
       await trx
@@ -79,10 +102,21 @@ export class UsersService {
         })
         .where('id', '=', me.id)
         .execute();
-      const next = { name: dto.name ?? me.name, email: emailChanges ? dto.email! : me.email, phone: dto.phone !== undefined ? dto.phone : me.phone };
+      const next = {
+        name: dto.name ?? me.name,
+        email: emailChanges ? dto.email! : me.email,
+        phone: dto.phone !== undefined ? dto.phone : me.phone,
+      };
       await this.audit.write(trx, {
-        tenantId: auth.tenantId, actorId: auth.userId, action: 'user.update_self', entity: 'user', entityId: me.id,
-        before: { name: me.name, email: me.email, phone: me.phone }, after: next, ip: auth.ip, requestId: auth.requestId,
+        tenantId: auth.tenantId,
+        actorId: auth.userId,
+        action: 'user.update_self',
+        entity: 'user',
+        entityId: me.id,
+        before: { name: me.name, email: me.email, phone: me.phone },
+        after: next,
+        ip: auth.ip,
+        requestId: auth.requestId,
       });
       return next;
     });
@@ -103,23 +137,39 @@ export class UsersService {
       if (query.managerId) qb = qb.where('u.manager_id', '=', query.managerId);
       if (query.q) {
         const like = `%${query.q.replace(/[\\%_]/g, '\\$&')}%`;
-        qb = qb.where((eb) => eb.or([eb('u.name', 'ilike', like), eb('u.email', 'ilike', like), eb('u.phone', 'like', like)]));
+        qb = qb.where((eb) =>
+          eb.or([
+            eb('u.name', 'ilike', like),
+            eb('u.email', 'ilike', like),
+            eb('u.phone', 'like', like),
+          ]),
+        );
       }
-      if (after) qb = qb.where(sql<SqlBool>`(lower(u.name), u.id) > (${after.n}, ${after.i}::uuid)`);
+      if (after)
+        qb = qb.where(sql<SqlBool>`(lower(u.name), u.id) > (${after.n}, ${after.i}::uuid)`);
 
-      const rows = await qb.orderBy(sql`lower(u.name)`).orderBy('u.id').limit(query.limit + 1).execute();
+      const rows = await qb
+        .orderBy(sql`lower(u.name)`)
+        .orderBy('u.id')
+        .limit(query.limit + 1)
+        .execute();
       const page = toPage(rows, query.limit, (last) => ({ n: last.sort_key, i: last.id }));
       return { items: page.items.map(toView), nextCursor: page.nextCursor };
     });
   }
 
   get(auth: AuthContext, id: string): Promise<UserView> {
-    return this.db.withTenant(auth.tenantId, async (trx) => toView(await this.loadScoped(trx, auth, id)));
+    return this.db.withTenant(auth.tenantId, async (trx) =>
+      toView(await this.loadScoped(trx, auth, id)),
+    );
   }
 
   // ----------------------------------------------------------------- writes
 
-  async create(auth: AuthContext, dto: CreateUserDto): Promise<{ user: UserView; temporaryPassword: string }> {
+  async create(
+    auth: AuthContext,
+    dto: CreateUserDto,
+  ): Promise<{ user: UserView; temporaryPassword: string }> {
     const temporaryPassword = this.passwords.generateTemporary();
     const passwordHash = await this.passwords.hash(temporaryPassword);
 
@@ -133,11 +183,17 @@ export class UsersService {
       const manager = managerId ? await this.requireManager(trx, managerId) : null;
       assertPlacement({
         role: { systemKey: role.system_key, requiresOffice: role.requires_office, name: role.name },
-        branchId, managerId, managerRoleKey: manager?.system_key,
+        branchId,
+        managerId,
+        managerRoleKey: manager?.system_key,
       });
       assertManagerWithinScope(auth, managerId);
 
-      const taken = await trx.selectFrom('users').select('id').where('email', '=', dto.email).executeTakeFirst();
+      const taken = await trx
+        .selectFrom('users')
+        .select('id')
+        .where('email', '=', dto.email)
+        .executeTakeFirst();
       if (taken) throw AppError.conflict('EMAIL_TAKEN', 'Someone already has this email address');
 
       const created = await trx
@@ -157,7 +213,14 @@ export class UsersService {
         .returning('id')
         .executeTakeFirstOrThrow();
 
-      await trx.insertInto('user_profiles').values({ tenant_id: auth.tenantId, user_id: created.id, designation: dto.designation ?? null }).execute();
+      await trx
+        .insertInto('user_profiles')
+        .values({
+          tenant_id: auth.tenantId,
+          user_id: created.id,
+          designation: dto.designation ?? null,
+        })
+        .execute();
       // Leave balances for the current year, one per leave type.
       await sql`
         INSERT INTO leave_balances (tenant_id, user_id, leave_type_id, year, balance)
@@ -166,9 +229,14 @@ export class UsersService {
         FROM leave_types lt`.execute(trx);
 
       await this.audit.write(trx, {
-        tenantId: auth.tenantId, actorId: auth.userId, action: 'user.create', entity: 'user', entityId: created.id,
+        tenantId: auth.tenantId,
+        actorId: auth.userId,
+        action: 'user.create',
+        entity: 'user',
+        entityId: created.id,
         after: { name: dto.name, email: dto.email, roleId: role.id, branchId, managerId },
-        ip: auth.ip, requestId: auth.requestId,
+        ip: auth.ip,
+        requestId: auth.requestId,
       });
       return toView(await this.loadScoped(trx, auth, created.id));
     });
@@ -178,14 +246,27 @@ export class UsersService {
   update(auth: AuthContext, id: string, dto: UpdateUserDto): Promise<UserView> {
     return this.db.withTenant(auth.tenantId, async (trx) => {
       const target = await this.loadScoped(trx, auth, id);
-      const targetRole = (await this.requireRole(trx, target.role_id));
+      const targetRole = await this.requireRole(trx, target.role_id);
       assertCanManage(auth.permissions, targetRole.permissions);
 
-      if (id === auth.userId && (dto.roleId !== undefined || dto.status !== undefined || dto.managerId !== undefined || dto.branchId !== undefined)) {
-        throw new AppError('SELF_CHANGE_NOT_ALLOWED', 'You cannot change your own role, office, manager or status', 403);
+      if (
+        id === auth.userId &&
+        (dto.roleId !== undefined ||
+          dto.status !== undefined ||
+          dto.managerId !== undefined ||
+          dto.branchId !== undefined)
+      ) {
+        throw new AppError(
+          'SELF_CHANGE_NOT_ALLOWED',
+          'You cannot change your own role, office, manager or status',
+          403,
+        );
       }
 
-      const role = dto.roleId && dto.roleId !== target.role_id ? await this.requireRole(trx, dto.roleId) : targetRole;
+      const role =
+        dto.roleId && dto.roleId !== target.role_id
+          ? await this.requireRole(trx, dto.roleId)
+          : targetRole;
       if (role.id !== targetRole.id) assertCanGrant(auth.permissions, role.permissions);
 
       const branchId = dto.branchId !== undefined ? dto.branchId : target.branch_id;
@@ -194,19 +275,33 @@ export class UsersService {
       const manager = managerId ? await this.requireManager(trx, managerId) : null;
       assertPlacement({
         role: { systemKey: role.system_key, requiresOffice: role.requires_office, name: role.name },
-        branchId, managerId, managerRoleKey: manager?.system_key, userId: id,
+        branchId,
+        managerId,
+        managerRoleKey: manager?.system_key,
+        userId: id,
       });
       if (dto.managerId !== undefined) assertManagerWithinScope(auth, managerId);
 
       const status = dto.status ?? target.status;
       const wasActive = target.status === 'active';
-      if (wasActive && targetRole.system_key === 'super_admin' && (status === 'inactive' || role.system_key !== 'super_admin')) {
+      if (
+        wasActive &&
+        targetRole.system_key === 'super_admin' &&
+        (status === 'inactive' || role.system_key !== 'super_admin')
+      ) {
         assertNotLastSuperAdmin(await this.countOtherActiveSuperAdmins(trx, id));
       }
-      if (wasActive && targetRole.system_key === 'admin' && (status === 'inactive' || role.system_key !== 'admin')) {
+      if (
+        wasActive &&
+        targetRole.system_key === 'admin' &&
+        (status === 'inactive' || role.system_key !== 'admin')
+      ) {
         const reports = await this.countActiveReports(trx, id);
         if (reports > 0) {
-          throw AppError.conflict('HAS_ACTIVE_TEAM', `${reports} active people report to this Admin. Move them to another Admin first.`);
+          throw AppError.conflict(
+            'HAS_ACTIVE_TEAM',
+            `${reports} active people report to this Admin. Move them to another Admin first.`,
+          );
         }
       }
 
@@ -230,12 +325,20 @@ export class UsersService {
           .onConflict((oc) => oc.column('user_id').doUpdateSet({ designation: dto.designation }))
           .execute();
       }
-      if (wasActive && status === 'inactive') await this.authRepo.endAllSessions(trx, id, 'revoked');
+      if (wasActive && status === 'inactive')
+        await this.authRepo.endAllSessions(trx, id, 'revoked');
 
       const updated = await this.loadScoped(trx, auth, id);
       await this.audit.write(trx, {
-        tenantId: auth.tenantId, actorId: auth.userId, action: 'user.update', entity: 'user', entityId: id,
-        before: auditShape(target), after: auditShape(updated), ip: auth.ip, requestId: auth.requestId,
+        tenantId: auth.tenantId,
+        actorId: auth.userId,
+        action: 'user.update',
+        entity: 'user',
+        entityId: id,
+        before: auditShape(target),
+        after: auditShape(updated),
+        ip: auth.ip,
+        requestId: auth.requestId,
       });
       return toView(updated);
     });
@@ -247,26 +350,44 @@ export class UsersService {
    * refuses the delete when anything refers to them, and that is reported as such).
    */
   async remove(auth: AuthContext, id: string): Promise<void> {
-    if (id === auth.userId) throw new AppError('SELF_CHANGE_NOT_ALLOWED', 'You cannot delete your own account', 403);
+    if (id === auth.userId)
+      throw new AppError('SELF_CHANGE_NOT_ALLOWED', 'You cannot delete your own account', 403);
     await this.db.withTenant(auth.tenantId, async (trx) => {
       const target = await this.loadScoped(trx, auth, id);
       const role = await this.requireRole(trx, target.role_id);
       assertCanManage(auth.permissions, role.permissions);
 
-      const history = AppError.conflict('USER_HAS_HISTORY', 'This person has signed in or has records, so they cannot be deleted. Deactivate them instead; their history stays.');
+      const history = AppError.conflict(
+        'USER_HAS_HISTORY',
+        'This person has signed in or has records, so they cannot be deleted. Deactivate them instead; their history stays.',
+      );
       if (target.last_login_at) throw history;
       if (target.status === 'active' && role.system_key === 'super_admin') {
         assertNotLastSuperAdmin(await this.countOtherActiveSuperAdmins(trx, id));
       }
-      const { rows: team } = await sql<{ n: string }>`SELECT count(*) AS n FROM users WHERE manager_id = ${id}::uuid`.execute(trx);
-      if (Number(team[0]!.n) > 0) throw AppError.conflict('HAS_TEAM', 'People still report to this person. Move them to another manager first.');
+      const { rows: team } = await sql<{
+        n: string;
+      }>`SELECT count(*) AS n FROM users WHERE manager_id = ${id}::uuid`.execute(trx);
+      if (Number(team[0]!.n) > 0)
+        throw AppError.conflict(
+          'HAS_TEAM',
+          'People still report to this person. Move them to another manager first.',
+        );
 
       // The database function deletes only an account with no history, and undoes itself otherwise.
-      const { rows } = await sql<{ done: boolean }>`SELECT delete_unused_user(${id}::uuid) AS done`.execute(trx);
+      const { rows } = await sql<{
+        done: boolean;
+      }>`SELECT delete_unused_user(${id}::uuid) AS done`.execute(trx);
       if (!rows[0]?.done) throw history;
       await this.audit.write(trx, {
-        tenantId: auth.tenantId, actorId: auth.userId, action: 'user.delete', entity: 'user', entityId: id,
-        before: auditShape(target), ip: auth.ip, requestId: auth.requestId,
+        tenantId: auth.tenantId,
+        actorId: auth.userId,
+        action: 'user.delete',
+        entity: 'user',
+        entityId: id,
+        before: auditShape(target),
+        ip: auth.ip,
+        requestId: auth.requestId,
       });
     });
   }
@@ -280,10 +401,19 @@ export class UsersService {
     return this.db.withTenant(auth.tenantId, async (trx) => {
       const before = await this.loadScoped(trx, auth, id);
       if (before.receives_auto_leads !== enabled) {
-        await sql`UPDATE users SET receives_auto_leads = ${enabled} WHERE id = ${id}::uuid`.execute(trx);
+        await sql`UPDATE users SET receives_auto_leads = ${enabled} WHERE id = ${id}::uuid`.execute(
+          trx,
+        );
         await this.audit.write(trx, {
-          tenantId: auth.tenantId, actorId: auth.userId, action: 'user.lead_automation', entity: 'user', entityId: id,
-          before: { receivesAutoLeads: before.receives_auto_leads }, after: { receivesAutoLeads: enabled }, ip: auth.ip, requestId: auth.requestId,
+          tenantId: auth.tenantId,
+          actorId: auth.userId,
+          action: 'user.lead_automation',
+          entity: 'user',
+          entityId: id,
+          before: { receivesAutoLeads: before.receives_auto_leads },
+          after: { receivesAutoLeads: enabled },
+          ip: auth.ip,
+          requestId: auth.requestId,
         });
       }
       return toView(await this.loadScoped(trx, auth, id));
@@ -293,7 +423,10 @@ export class UsersService {
   /** Gives the person a new one-time password and signs them out everywhere. */
   async resetPassword(auth: AuthContext, id: string): Promise<{ temporaryPassword: string }> {
     if (id === auth.userId) {
-      throw AppError.badRequest('USE_CHANGE_PASSWORD', 'Use "change password" for your own account');
+      throw AppError.badRequest(
+        'USE_CHANGE_PASSWORD',
+        'Use "change password" for your own account',
+      );
     }
     const temporaryPassword = this.passwords.generateTemporary();
     const passwordHash = await this.passwords.hash(temporaryPassword);
@@ -304,13 +437,25 @@ export class UsersService {
 
       await trx
         .updateTable('users')
-        .set({ password_hash: passwordHash, must_change_password: true, failed_logins: 0, locked_until: null, password_changed_at: sql`now()` })
+        .set({
+          password_hash: passwordHash,
+          must_change_password: true,
+          failed_logins: 0,
+          locked_until: null,
+          password_changed_at: sql`now()`,
+        })
         .where('id', '=', id)
         .execute();
       const ended = await this.authRepo.endAllSessions(trx, id, 'revoked');
       await this.audit.write(trx, {
-        tenantId: auth.tenantId, actorId: auth.userId, action: 'user.password_reset', entity: 'user', entityId: id,
-        after: { sessionsEnded: ended }, ip: auth.ip, requestId: auth.requestId,
+        tenantId: auth.tenantId,
+        actorId: auth.userId,
+        action: 'user.password_reset',
+        entity: 'user',
+        entityId: id,
+        after: { sessionsEnded: ended },
+        ip: auth.ip,
+        requestId: auth.requestId,
       });
     });
     return { temporaryPassword };
@@ -326,9 +471,24 @@ export class UsersService {
       .leftJoin('users as m', 'm.id', 'u.manager_id')
       .leftJoin('user_profiles as p', 'p.user_id', 'u.id')
       .select([
-        'u.id', 'u.name', 'u.email', 'u.phone', 'u.status', 'u.joined_on', 'u.last_login_at', 'u.receives_auto_leads',
-        'u.must_change_password', 'u.created_at', 'u.role_id', 'u.branch_id', 'u.manager_id', 'p.designation',
-        'r.name as role_name', 'r.system_key as role_key', 'b.name as branch_name', 'm.name as manager_name',
+        'u.id',
+        'u.name',
+        'u.email',
+        'u.phone',
+        'u.status',
+        'u.joined_on',
+        'u.last_login_at',
+        'u.receives_auto_leads',
+        'u.must_change_password',
+        'u.created_at',
+        'u.role_id',
+        'u.branch_id',
+        'u.manager_id',
+        'p.designation',
+        'r.name as role_name',
+        'r.system_key as role_key',
+        'b.name as branch_name',
+        'm.name as manager_name',
       ]);
   }
 
@@ -349,16 +509,30 @@ export class UsersService {
                        JOIN permissions p ON p.id = rp.permission_id WHERE rp.role_id = r.id), '{}') AS permissions
       FROM roles r WHERE r.id = ${roleId}`.execute(trx);
     const role = rows[0];
-    if (!role) throw AppError.badRequest('ROLE_NOT_FOUND', 'That role does not exist', [{ field: 'roleId', message: 'That role does not exist' }]);
+    if (!role)
+      throw AppError.badRequest('ROLE_NOT_FOUND', 'That role does not exist', [
+        { field: 'roleId', message: 'That role does not exist' },
+      ]);
     return role;
   }
 
   private async requireBranch(trx: Trx, branchId: string): Promise<void> {
-    const branch = await trx.selectFrom('branches').select('id').where('id', '=', branchId).where('is_active', '=', true).executeTakeFirst();
-    if (!branch) throw AppError.badRequest('BRANCH_NOT_FOUND', 'That office does not exist or is closed', [{ field: 'branchId', message: 'Choose an active office' }]);
+    const branch = await trx
+      .selectFrom('branches')
+      .select('id')
+      .where('id', '=', branchId)
+      .where('is_active', '=', true)
+      .executeTakeFirst();
+    if (!branch)
+      throw AppError.badRequest('BRANCH_NOT_FOUND', 'That office does not exist or is closed', [
+        { field: 'branchId', message: 'Choose an active office' },
+      ]);
   }
 
-  private async requireManager(trx: Trx, managerId: string): Promise<{ id: string; system_key: string | null }> {
+  private async requireManager(
+    trx: Trx,
+    managerId: string,
+  ): Promise<{ id: string; system_key: string | null }> {
     const manager = await trx
       .selectFrom('users as u')
       .innerJoin('roles as r', 'r.id', 'u.role_id')
@@ -366,7 +540,10 @@ export class UsersService {
       .where('u.id', '=', managerId)
       .where('u.status', '=', 'active')
       .executeTakeFirst();
-    if (!manager) throw AppError.badRequest('MANAGER_INVALID', 'That manager does not exist or is not active', [{ field: 'managerId', message: 'Choose an active manager' }]);
+    if (!manager)
+      throw AppError.badRequest('MANAGER_INVALID', 'That manager does not exist or is not active', [
+        { field: 'managerId', message: 'Choose an active manager' },
+      ]);
     return manager;
   }
 
@@ -438,7 +615,13 @@ function toView(r: Row): UserView {
 /** What is worth keeping in the audit log about a person: never the password or tokens. */
 function auditShape(r: Row) {
   return {
-    name: r.name, phone: r.phone, status: r.status, roleId: r.role_id, branchId: r.branch_id,
-    managerId: r.manager_id, joinedOn: r.joined_on, designation: r.designation,
+    name: r.name,
+    phone: r.phone,
+    status: r.status,
+    roleId: r.role_id,
+    branchId: r.branch_id,
+    managerId: r.manager_id,
+    joinedOn: r.joined_on,
+    designation: r.designation,
   };
 }

@@ -41,7 +41,11 @@ export class DatabaseService implements OnModuleDestroy {
 
   /** How busy the connection pool is, for monitoring. */
   poolStats(): { total: number; idle: number; waiting: number } {
-    return { total: this.pool.totalCount, idle: this.pool.idleCount, waiting: this.pool.waitingCount };
+    return {
+      total: this.pool.totalCount,
+      idle: this.pool.idleCount,
+      waiting: this.pool.waitingCount,
+    };
   }
 
   /**

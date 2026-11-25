@@ -15,18 +15,25 @@ export default function TwoStepSetupPage() {
 
   useEffect(() => {
     if (status === 'anonymous') router.replace(loginPath());
-    else if (status === 'authenticated' && me && !me.user.mfaSetupRequired) router.replace('/dashboard');
+    else if (status === 'authenticated' && me && !me.user.mfaSetupRequired)
+      router.replace('/dashboard');
   }, [status, me, router]);
 
   if (status !== 'authenticated' || !me) return <Spinner />;
 
   return (
     <div>
-      <AuthHeading title="Set up two-step sign-in" subtitle="Your company requires a code from an authenticator app, as well as your password. It takes about a minute." />
+      <AuthHeading
+        title="Set up two-step sign-in"
+        subtitle="Your company requires a code from an authenticator app, as well as your password. It takes about a minute."
+      />
       <div className="mt-8">
         <Setup
           cancelLabel="Sign out"
-          onCancel={() => { const to = loginPath(); void logout().then(() => router.replace(to)); }}
+          onCancel={() => {
+            const to = loginPath();
+            void logout().then(() => router.replace(to));
+          }}
           onFinished={() => void reload().then(() => router.replace('/dashboard'))}
         />
       </div>

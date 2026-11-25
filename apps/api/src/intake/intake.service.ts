@@ -39,7 +39,11 @@ export class IntakeService {
     private readonly ingest: LeadIngestService,
   ) {}
 
-  async receive(ctx: IntakeContext, raw: unknown, idempotencyKey: string | undefined): Promise<IntakeOutcome> {
+  async receive(
+    ctx: IntakeContext,
+    raw: unknown,
+    idempotencyKey: string | undefined,
+  ): Promise<IntakeOutcome> {
     if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
       throw AppError.badRequest('BAD_PAYLOAD', 'Send the lead as a JSON object');
     }
@@ -53,7 +57,9 @@ export class IntakeService {
         RETURNING id`.execute(trx);
       if (inserted.rows[0]) return inserted.rows[0].id;
       const existing = await sql<{ id: string }>`
-        SELECT id FROM inbound_events WHERE provider = ${`intake:${ctx.sourceId}`} AND external_id = ${externalId}`.execute(trx);
+        SELECT id FROM inbound_events WHERE provider = ${`intake:${ctx.sourceId}`} AND external_id = ${externalId}`.execute(
+        trx,
+      );
       return existing.rows[0]!.id;
     });
     return this.process(ctx.tenantId, eventId);
@@ -70,22 +76,32 @@ export class IntakeService {
         const event = rows[0];
         if (!event) return { kind: 'queued', eventId };
 
-        if (event.status === 'processed' && event.result) return { kind: 'done', result: event.result, replay: true };
+        if (event.status === 'processed' && event.result)
+          return { kind: 'done', result: event.result, replay: true };
         if (event.status === 'ignored') return { kind: 'invalid', errors: readErrors(event.error) };
 
         const parsed = parseIntake(event.payload);
         if (!parsed.ok) {
           await sql`
             UPDATE inbound_events SET status = 'ignored', error = ${JSON.stringify(parsed.errors)},
-                   attempts = attempts + 1, last_attempt_at = now() WHERE id = ${eventId}`.execute(trx);
+                   attempts = attempts + 1, last_attempt_at = now() WHERE id = ${eventId}`.execute(
+            trx,
+          );
           return { kind: 'invalid', errors: parsed.errors };
         }
         if (!event.source_id) throw new Error('the event has no lead source');
 
-        const result = await this.ingest.ingest(trx, { tenantId, sourceId: event.source_id, eventId, lead: parsed.lead });
+        const result = await this.ingest.ingest(trx, {
+          tenantId,
+          sourceId: event.source_id,
+          eventId,
+          lead: parsed.lead,
+        });
         await sql`
           UPDATE inbound_events SET status = 'processed', processed_at = now(), last_attempt_at = now(),
-                 attempts = attempts + 1, error = NULL, result = ${JSON.stringify(result)}::jsonb WHERE id = ${eventId}`.execute(trx);
+                 attempts = attempts + 1, error = NULL, result = ${JSON.stringify(result)}::jsonb WHERE id = ${eventId}`.execute(
+          trx,
+        );
         return { kind: 'done', result, replay: false };
       });
     } catch (err) {
@@ -96,7 +112,9 @@ export class IntakeService {
       await this.db.withTenant(tenantId, async (trx) => {
         await sql`
           UPDATE inbound_events SET status = 'failed', attempts = attempts + 1, last_attempt_at = now(),
-                 error = ${message.slice(0, 500)} WHERE id = ${eventId} AND status <> 'processed'`.execute(trx);
+                 error = ${message.slice(0, 500)} WHERE id = ${eventId} AND status <> 'processed'`.execute(
+          trx,
+        );
       });
       return { kind: 'queued', eventId };
     }
@@ -107,7 +125,9 @@ export class IntakeService {
    * (about 1, 4, 9 minutes and so on), so a problem on our side is not hammered.
    */
   async retryDue(): Promise<number> {
-    const { rows: tenants } = await sql<{ id: string }>`SELECT list_active_tenant_ids() AS id`.execute(this.db.unscoped());
+    const { rows: tenants } = await sql<{
+      id: string;
+    }>`SELECT list_active_tenant_ids() AS id`.execute(this.db.unscoped());
     let tried = 0;
     for (const { id: tenantId } of tenants) {
       const due = await this.db.withTenant(tenantId, async (trx) => {
