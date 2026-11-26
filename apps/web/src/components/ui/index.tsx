@@ -161,7 +161,7 @@ export function Panel({
   return (
     <Card className={className}>
       {(title || actions) && (
-        <div className="flex min-h-11 items-center justify-between gap-3 border-b border-line px-4 py-2">
+        <div className="flex min-h-11 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-line px-4 py-2">
           <h2 className="text-sm font-semibold text-ink">{title}</h2>
           {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
         </div>

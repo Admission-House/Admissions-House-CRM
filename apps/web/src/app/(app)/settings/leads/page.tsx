@@ -347,7 +347,7 @@ function StatusesTab() {
                     {!s.isActive && <Badge tone="warn">Not in use</Badge>}
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
                   <label className="flex items-center gap-1.5 text-xs text-muted">
                     <input
                       type="checkbox"

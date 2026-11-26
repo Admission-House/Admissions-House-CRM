@@ -52,7 +52,7 @@ export default function DevicesPage() {
             aria-label="Show"
             value={status}
             onChange={(e) => setStatus(e.target.value as typeof status)}
-            className="w-60"
+            className="w-full sm:w-60"
           >
             <option value="pending">Waiting for approval</option>
             <option value="approved">Approved</option>

@@ -269,7 +269,7 @@ function Workspace() {
       </Card>
 
       {tab === 'activity' && (
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_21rem]">
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_21rem]">
           <div className="space-y-4">
             {/* Disposing is the main work on a lead, so it comes first; follow-up dates are set there. */}
             <StatusPanel key={`s${l.status.id}${version}`} lead={l} onChanged={changed} />

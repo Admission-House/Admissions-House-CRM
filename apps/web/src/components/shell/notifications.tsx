@@ -403,7 +403,8 @@ export function NotificationBell() {
         )}
       </button>
       {open && (
-        <div className="absolute right-0 z-30 mt-2 w-96 max-w-[92vw] overflow-hidden rounded-lg border border-line bg-surface shadow-lg">
+        // On a phone the box spans the screen (8px in from each side) under the top bar; from a tablet up it hangs under the bell.
+        <div className="fixed inset-x-2 top-14 z-30 overflow-hidden rounded-lg border border-line bg-surface shadow-lg sm:absolute sm:inset-x-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-96">
           <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
             <p className="text-sm font-semibold">Notifications</p>
             <div className="flex items-center gap-3">
@@ -434,7 +435,7 @@ export function NotificationBell() {
               )}
             </div>
           </div>
-          <div className="max-h-96 overflow-y-auto">
+          <div className="max-h-[calc(100dvh-11rem)] overflow-y-auto sm:max-h-96">
             {list.loading && !list.data ? (
               <Spinner />
             ) : (list.data?.items.length ?? 0) === 0 ? (
