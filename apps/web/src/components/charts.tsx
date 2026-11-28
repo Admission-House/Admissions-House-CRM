@@ -176,7 +176,7 @@ export function BarsChart({
         <BarChart
           data={data}
           layout={horizontal ? 'vertical' : 'horizontal'}
-          margin={{ top: 8, right: 12, left: horizontal ? 8 : -8, bottom: 0 }}
+          margin={{ top: 8, right: 12, left: horizontal ? 8 : 0, bottom: 0 }}
           barCategoryGap={horizontal ? 8 : '24%'}
         >
           <CartesianGrid stroke={GRID} vertical={!!horizontal} horizontal={!horizontal} />
@@ -212,7 +212,8 @@ export function BarsChart({
                 axisLine={false}
                 tickLine={false}
                 allowDecimals={false}
-                width={44}
+                width={52}
+                tickFormatter={compactTick}
                 label={
                   yLabel
                     ? { value: yLabel, angle: -90, position: 'insideLeft', style: AXIS }
@@ -265,7 +266,7 @@ export function TrendChart({
       aria-label={`Trend of ${series.map((s) => s.label).join(', ')} over time`}
     >
       <ResponsiveContainer>
-        <AreaChart data={data} margin={{ top: 8, right: 12, left: -8, bottom: 0 }}>
+        <AreaChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
           <defs>
             {series.map((s, i) => (
               <linearGradient key={s.key} id={`g-${s.key}`} x1="0" y1="0" x2="0" y2="1">
@@ -283,7 +284,7 @@ export function TrendChart({
             interval="preserveStartEnd"
             minTickGap={24}
           />
-          <YAxis tick={AXIS} axisLine={false} tickLine={false} allowDecimals={false} width={44} />
+          <YAxis tick={AXIS} axisLine={false} tickLine={false} allowDecimals={false} width={52} tickFormatter={compactTick} />
           <Tooltip contentStyle={tooltipStyle} />
           {series.length > 1 && !hideLegend && (
             <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12, paddingTop: 6 }} />
@@ -441,4 +442,12 @@ export function ChartCard({
       </div>
     </section>
   );
+}
+
+/** Short axis numbers (50k, 1.2M) so five-digit counts are not cut off at the edge. */
+function compactTick(v: number): string {
+  const n = Math.abs(v);
+  if (n >= 1_000_000) return `${+(v / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${+(v / 1_000).toFixed(1)}k`;
+  return String(v);
 }

@@ -255,6 +255,7 @@ export class ReportsService {
     q: Range & { groupBy: 'source' | 'status' | 'assignee' | 'day' },
   ): Promise<Report> {
     if (q.groupBy === 'source') assertMaySeeSources(auth);
+    const isSuper = auth.roleKey === 'super_admin';
     return this.db.withTenant(auth.tenantId, async (trx) => {
       const r = await this.range(trx, q);
       const v = leadVisibility(auth);
@@ -270,9 +271,11 @@ export class ReportsService {
         open: string;
         closed: string;
         unassigned: string;
+        worked: string;
       }>`
         SELECT ${key} AS name, count(*) AS leads, count(*) FILTER (WHERE s.is_open) AS open, count(*) FILTER (WHERE NOT s.is_open) AS closed,
-               count(*) FILTER (WHERE l.assigned_to IS NULL) AS unassigned
+               count(*) FILTER (WHERE l.assigned_to IS NULL) AS unassigned,
+               count(*) FILTER (WHERE s.queue <> 'fresh') AS worked
         FROM leads l JOIN lead_statuses s ON s.id = l.status_id JOIN lead_sources src ON src.id = l.source_id LEFT JOIN users u ON u.id = l.assigned_to
         WHERE l.deleted_at IS NULL AND l.created_at >= ${r.fromTs}::timestamptz AND l.created_at < ${r.toTs}::timestamptz ${andIf(v)}
         GROUP BY 1 ORDER BY ${q.groupBy === 'day' ? sql`1 DESC` : sql`count(*) DESC, 1`}`.execute(
@@ -287,18 +290,37 @@ export class ReportsService {
         to: r.to,
         columns: [
           { key: 'name', label },
-          { key: 'leads', label: 'Leads' },
+          { key: 'leads', label: isSuper ? 'Total leads' : 'Leads' },
+          ...(isSuper
+            ? [
+                { key: 'worked', label: 'Worked on' },
+                { key: 'notWorked', label: 'Not worked yet' },
+                { key: 'workedPct', label: 'Worked %' },
+              ]
+            : []),
           { key: 'open', label: 'Open' },
           { key: 'closed', label: 'Closed' },
           { key: 'unassigned', label: 'Unassigned' },
         ],
-        rows: rows.map((x) => ({
-          name: x.name,
-          leads: Number(x.leads),
-          open: Number(x.open),
-          closed: Number(x.closed),
-          unassigned: Number(x.unassigned),
-        })),
+        rows: rows.map((x) => {
+          const leads = Number(x.leads);
+          const worked = Number(x.worked);
+          return {
+            name: x.name,
+            leads,
+            // How much of the work is done is for the Super Admin only.
+            ...(isSuper
+              ? {
+                  worked,
+                  notWorked: leads - worked,
+                  workedPct: leads ? Math.round((worked / leads) * 1000) / 10 : 0,
+                }
+              : {}),
+            open: Number(x.open),
+            closed: Number(x.closed),
+            unassigned: Number(x.unassigned),
+          };
+        }),
       };
     });
   }
